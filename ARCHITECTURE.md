@@ -291,6 +291,16 @@ jieba 切词后，专名仍可能整词未命中。补一层字符 2-gram 能改
 每个 chunk 带 `last_revision` / `last_revision_ts`，检索时可按时间戳过滤。
 这是应对游戏版本更新的显式设计，不是把 wiki 当静态语料。
 
+过滤条件走 `RetrievalConfig → store.build_where()`，两个 store 实现必须给出
+**逐字相同**的 where 结构（`test_store_parity.py` 盯着），否则换 `VECTOR_BACKEND`
+会静默改变召回结果 —— 而所有量化结论都建立在"换后端不影响指标"这个前提上。
+
+入口有三处，缺一不可：`RetrieveRequest` 的字段、检索调试面板的「修订于」控件、
+以及 `RetrievalConfig.as_dict()` —— 最后这个最容易漏。它同时喂给
+`/api/retrieve` 的响应和 `run_eval.py` 落库的 config 快照，
+手写白名单漏一个字段就意味着"这轮评测带没带版本过滤"在结果里看不出来。
+所以它用 `dataclasses.asdict` 自动派生，并有断言强制与 dataclass 字段集相等。
+
 ---
 
 ## 五、存储层 —— 为什么是两个库

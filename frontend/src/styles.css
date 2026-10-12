@@ -783,6 +783,27 @@ body {
   outline: none;
   border-color: var(--accent);
 }
+/* 版本感知检索：修订日期筛选 */
+.controls input[type='date'] {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 7px 8px;
+  font: inherit;
+}
+.controls .link-clear {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1;
+}
+.controls .link-clear:hover {
+  color: var(--text);
+}
 .controls label {
   font-size: 12px;
   color: var(--muted);

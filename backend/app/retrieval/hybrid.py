@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -56,19 +57,18 @@ class RetrievalConfig:
         return "A0"
 
     def as_dict(self) -> dict:
-        return {
-            "game": self.game,
-            "embed_model": self.embed_model,
-            "variant": self.variant,
-            "use_bm25": self.use_bm25,
-            "use_vector": self.use_vector,
-            "use_rerank": self.use_rerank,
-            "bm25_top": self.bm25_top,
-            "vector_top": self.vector_top,
-            "final_top_k": self.final_top_k,
-            "rrf_k": self.rrf_k,
-            "rerank_candidates": self.rerank_candidates,
-        }
+        """**必须自动派生，不要手写字段清单。**
+
+        这个方法有两个消费者，都靠它保证可复现：
+        - `main.py` 的 `/api/retrieve` 响应（前端据此显示实际生效的过滤条件）
+        - `run_eval.py` 落库的 `config` 快照（实验结果的可复现凭据）
+
+        之前这里是手写字典，加 `min_revision_ts` / `page_titles` 时忘了同步 ——
+        结果是"带版本过滤跑的评测"落库后看不出带过滤，
+        而类注释里那句「所有字段都会随评测结果落库」就成了假承诺。
+        `dataclasses.asdict` 直接从字段声明派生，新增字段自动跟上。
+        """
+        return dataclasses.asdict(self)
 
 
 @dataclass

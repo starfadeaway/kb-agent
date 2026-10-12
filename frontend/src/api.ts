@@ -26,6 +26,10 @@ export const retrieve = (body: {
   use_bm25: boolean
   use_vector: boolean
   use_rerank: boolean
+  /** 版本感知：只要这个日期之后修订过的内容（YYYY-MM-DD）。留空 = 不过滤 */
+  min_revision_ts?: string
+  /** 只在这些页面里检索；留空 = 全库 */
+  page_titles?: string[]
 }) => json<RetrieveResponse>('/retrieve', { method: 'POST', body: JSON.stringify(body) })
 
 /**

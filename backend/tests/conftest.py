@@ -36,6 +36,57 @@ def covered(settings) -> dict[str, str]:
 def raw_corpus() -> Path:
     """本地已抓语料目录；没有就 skip，而不是让 CI 变红。"""
     d = PROJECT_ROOT / "data" / "raw"
-    if not d.is_dir() or not any(d.iterdir()):
+    if not d.is_dir() or not(any(d.iterdir())):
         pytest.skip("本地没有语料（data/raw 为空），先跑 scripts/crawl_all.py")
     return d
+
+
+@pytest.fixture()
+def stores_probe():
+    """一套**互相隔离**的 (numpy_store, lance_store)，指向临时目录。
+
+    两个坑都在这里挡掉，新写测试的人不用再踩：
+    1. `Settings` 是 frozen dataclass，只能用 dataclasses.replace 改字段；
+    2. **数据根是 `chroma_path.parent`，不是 `chroma_path` 本身**
+       （两个 store 都是 `chroma_abs_path.parent / "vectors"|"lance"`）。
+       把 chroma_path 直接指向 mkdtemp 会让所有测试共用系统 Temp 目录，
+       数据互相污染 —— 表现为条数莫名变大、schema 被上一个测试写死。
+    """
+    import dataclasses
+    import shutil
+    import tempfile
+
+    from app.core.config import get_settings
+    from app.store.lance_store import LanceVectorStore
+    from app.store.vector_store import VectorStore
+
+    tmp = Path(tempfile.mkdtemp(prefix="kb_store_"))
+    s = dataclasses.replace(get_settings(), chroma_path=str(tmp / "data" / "chroma"))
+    try:
+        yield VectorStore(s), LanceVectorStore(s)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+@pytest.fixture()
+def chunk_meta():
+    """生产实际产出的 metadata 键集（`ingest_pages` 里那一组）。
+
+    不能随手写 `{"page_title": ...}`：Lance 表的列名由**首批 upsert 的键**决定，
+    少写一个 game 就会让后续 `query(game=...)` 直接报 schema error。
+    """
+    def _meta(page_title: str, **extra) -> dict:
+        return {
+            "game": "sr",
+            "page_id": 1,
+            "page_title": page_title,
+            "section": "",
+            "chunk_index": 0,
+            "last_revision": 1,
+            "last_revision_ts": "2025-01-01T00:00:00Z",
+            "source_url": "https://example.invalid/p",
+            "truncated": 0,
+            **extra,
+        }
+
+    return _meta

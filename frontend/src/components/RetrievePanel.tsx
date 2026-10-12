@@ -26,6 +26,7 @@ export function RetrievePanel({ health, onOpenSettings }: Props) {
   const [useBm25, setUseBm25] = useState(true)
   const [useVector, setUseVector] = useState(true)
   const [useRerank, setUseRerank] = useState(true)
+  const [sinceDate, setSinceDate] = useState('')
   const [result, setResult] = useState<Result | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +50,7 @@ export function RetrievePanel({ health, onOpenSettings }: Props) {
         use_bm25: useBm25,
         use_vector: useVector,
         use_rerank: useRerank,
+        min_revision_ts: sinceDate || undefined,
       })
       setResult({ ...r, ms: Math.round(performance.now() - t0) })
     } catch (e) {
@@ -107,6 +109,22 @@ export function RetrievePanel({ health, onOpenSettings }: Props) {
           <input type="checkbox" checked={useRerank} onChange={(e) => setUseRerank(e.target.checked)} />
           重排
         </label>
+        <label
+          className="since"
+          title="版本感知检索：只保留在这个日期之后被修订过的页面。wiki 每次改动都是新版本，这个开关能直接看到某个结论是不是最近才改的。"
+        >
+          修订于
+          <input
+            type="date"
+            value={sinceDate}
+            onChange={(e) => setSinceDate(e.target.value)}
+          />
+          {sinceDate && (
+            <button className="link-clear" onClick={() => setSinceDate('')} title="清除版本过滤">
+              ✕
+            </button>
+          )}
+        </label>
         <button onClick={run} disabled={busy}>
           {busy ? '检索中…' : '检索'}
         </button>
@@ -126,6 +144,9 @@ export function RetrievePanel({ health, onOpenSettings }: Props) {
         <>
           <div className="summary">
             配置 <code>{result.label}</code> · 命中 {result.hits.length} 条 · 端到端 {result.ms}ms
+            {sinceDate && (
+              <span className="muted"> · 仅看 {sinceDate} 之后修订的内容</span>
+            )}
             <span className="muted">
               {' '}
               （{useBm25 && !useVector && '仅BM25'}

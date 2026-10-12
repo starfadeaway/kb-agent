@@ -125,6 +125,13 @@ class RetrieveRequest(BaseModel):
     variant: str = "base"
     # 0 = 不裁剪（全量送重排），用于和优化前做 A/B 对照
     rerank_candidates: int = 20
+    # 版本感知检索：只保留 last_revision_ts >= 该值的 chunk。
+    # 之前这个能力在检索层是通的（RetrievalConfig → build_where → 两个 store 都实现了），
+    # 但**没有任何入口能设置它** —— 只能写 Python 才能演示，文档里却当卖点写着。
+    # 接受 `YYYY-MM-DD` 或完整 ISO8601，统一补成 ISO 字符串再比大小。
+    min_revision_ts: str | None = None
+    # 只在指定页面里检索（用于验证"某页是不是唯一来源"）
+    page_titles: list[str] | None = None
 
 
 class IngestRequest(BaseModel):
@@ -174,6 +181,24 @@ async def health() -> dict:
     }
 
 
+def _normalize_ts(raw: str | None) -> str | None:
+    """把用户输入的时间戳归一成能直接做字符串比较的 ISO 形式。
+
+    为什么必须归一：`last_revision_ts` 在库里长这样 `2026-02-01T16:53:50Z`，
+    而前端传的自然是一个很顺手的 `2026-02-01`。直接拿去比会得到
+    `"2026-02-01" >= "2026-02-01T16:53:50Z"` 为 True —— 恰好把当天所有内容
+    都排除掉，**结果是错的但不报错**。纯日期补成当天 00:00:00Z 才是"从这天起"。
+    """
+    if not raw:
+        return None
+    s = raw.strip()
+    if not s:
+        return None
+    if len(s) == 10 and s[4] == "-" and s[7] == "-":
+        return f"{s}T00:00:00Z"
+    return s
+
+
 @api_router.post("/retrieve")
 async def retrieve(req: RetrieveRequest) -> dict:
     retriever = get_retriever(_settings)
@@ -186,6 +211,8 @@ async def retrieve(req: RetrieveRequest) -> dict:
         use_rerank=req.use_rerank,
         final_top_k=req.top_k,
         rerank_candidates=req.rerank_candidates,
+        min_revision_ts=_normalize_ts(req.min_revision_ts),
+        page_titles=req.page_titles or None,
     )
     async with _semaphore:
         try:
