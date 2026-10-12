@@ -43,7 +43,7 @@ class Page(Base):
 
 
 class ChunkMeta(Base):
-    """chunk 元数据（正文与向量在 ChromaDB，这里只放可过滤的结构化字段）。
+    """chunk 元数据（正文与向量在向量库里，这里只放可过滤的结构化字段）。
 
     独立于 Page 存 chunk，是为了让"按版本/按章节过滤"成为一次索引扫描而不是 join。
     """

@@ -73,6 +73,14 @@ class Settings:
     mysql_required: bool = field(default_factory=lambda: _env_bool("MYSQL_REQUIRED", False))
 
     # --- 向量库 ---
+    # 这三个名字里的 "chroma" 是**历史遗留**，不是指 ChromaDB：
+    # chromadb 早已弃用（1.5.9 索引不落盘、换进程必崩），包也从 .venv 里卸掉了，
+    # 现在真实向量库是 LanceDB（默认）/ NumPy 精确索引（fallback）。
+    # 保留原名是为了不破坏已发布的 `CHROMA_PATH` / `CHROMA_COLLECTION_PREFIX`
+    # env var —— 改名属于破坏性变更，得连同 .env.example、conftest、
+    # 两个 store 一起动，收益是纯美观，暂不做。
+    # 注意它的**语义**：数据根是 `chroma_abs_path.parent`（即项目根 data/），
+    # `chroma_path` 自己（./data/chroma）这个目录并不存在、也不使用。
     chroma_path: str = field(default_factory=lambda: _env("CHROMA_PATH", "./data/chroma"))
     chroma_collection_prefix: str = field(default_factory=lambda: _env("CHROMA_COLLECTION_PREFIX", "kb"))
     # lancedb（真实向量库）| numpy（零依赖精确索引）| sqlite（最小演示后端）

@@ -209,8 +209,13 @@ async def retrieve(req: RetrieveRequest) -> dict:
     retriever = get_retriever(_settings)
     # 只把**请求里真的给了**的字段传下去（None 的一律丢掉），
     # 其余交给 from_settings() 用 .env 兜底。
+    #
+    # 注意 `game` 不在这份 dict 里：它下面已经单独算好了
+    # （req.game or .env 的主库），放两遍会直接
+    # "got multiple values for keyword argument 'game'" —— 500。
+    # 这个 bug 已经犯过一次：验收脚本只测了不带 game 的请求，
+    # 而前端**每次都带 game**，于是检索面板整个是坏的。
     given = {k: v for k, v in {
-        "game": req.game,
         "embed_model": req.embed_model,
         "final_top_k": req.top_k,
         "rerank_candidates": req.rerank_candidates,

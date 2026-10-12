@@ -332,7 +332,7 @@ class Ingestor:
             for c in all_chunks
         ]
 
-        # 分批 upsert：一次几千条会把 Chroma 的 WAL 顶到内存峰值
+        # 分批 upsert：一次几千条会把底层存储的写入缓冲顶到内存峰值
         for i in range(0, len(all_chunks), 256):
             sl = slice(i, i + 256)
             self.store.upsert(

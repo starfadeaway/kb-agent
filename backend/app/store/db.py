@@ -2,7 +2,7 @@
 
 降级策略：MySQL 服务默认停止且本机无管理员权限启动，
 所以连接失败不能抛到业务层——统一由 `db_status()` 暴露，
-向量检索链路在 MySQL 缺席时仍可完整运行（纯 ChromaDB 模式）。
+向量检索链路在 MySQL 缺席时仍可完整运行（纯向量库模式，不依赖 SQL 侧）。
 """
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ async def init_db(settings: Settings | None = None) -> bool:
         _status.update(state="unavailable", detail=msg)
         if s.mysql_required:
             raise MySQLUnavailable(f"MySQL 不可用且 MYSQL_REQUIRED=true: {msg}") from exc
-        logger.warning("MySQL 不可用，降级为纯 ChromaDB 模式：%s", msg)
+        logger.warning("MySQL 不可用，降级为纯向量库模式：%s", msg)
         return False
 
 

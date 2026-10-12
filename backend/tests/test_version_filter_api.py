@@ -80,3 +80,35 @@ def test_store_build_where_supports_version_filter(stores_probe):
     b = lance.build_where(**kw)
     assert a == b, f"两端 build_where 不一致：{a} vs {b}"
     assert "last_revision_ts" in str(a), f"过滤条件里没有版本键：{a}"
+
+
+# --------------------------------------------------------------------------- #
+# /api/retrieve 端点级契约
+# --------------------------------------------------------------------------- #
+# 这组是被一次真实回归逼出来的：`RetrievalConfig.from_settings()` 接线时，
+# `game` 既显式传了、又出现在 `**given` 里，于是
+#   TypeError: got multiple values for keyword argument 'game'
+# → 端点 500。
+# 而它能一路合进主干、CI 全绿，是因为**没有任何测试真的调过带 game 的请求**：
+# 验收脚本只发了不带 game 的 body，前端却是每次都带。
+# 「配置项接上了」和「端点在真实入参下能跑」是两回事，必须都测。
+
+def test_retrieve_endpoint_accepts_explicit_game():
+    """带 game 的请求必须能构造出配置 —— 前端每次都带 game。"""
+    cfg = RetrievalConfig.from_settings(game="zzz")
+    assert cfg.game == "zzz"
+
+
+def test_retrieve_endpoint_defaults_game_to_primary(settings):
+    """不��� game 时回落到 .env 的主库，而不是 None。"""
+    req = RetrieveRequest(query="三月七")
+    assert req.game is None, "RetrieveRequest.game 必须是 None，否则会盖掉 .env 默认值"
+    assert (req.game or settings.game_primary) == settings.game_primary
+
+
+def test_retrieve_request_optional_fields_default_to_none(settings):
+    """这几个字段默认 None 才有意义 —— 写死数值会永远盖掉 .env。"""
+    req = RetrieveRequest(query="三月七")
+    assert req.top_k is None
+    assert req.rerank_candidates is None
+    assert req.embed_model is None
