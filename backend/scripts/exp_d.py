@@ -31,6 +31,11 @@ PY = ROOT / ".venv" / "Scripts" / "python.exe"
 if not PY.is_file():
     PY = Path(sys.executable)
 
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
+
+from app.core.config import get_settings  # noqa: E402
+
 
 def sh(cmd: list[str], label: str) -> int:
     print(f"\n{'=' * 70}\n>>> {label}\n{'=' * 70}", flush=True)
@@ -40,9 +45,15 @@ def sh(cmd: list[str], label: str) -> int:
 
 
 def main() -> None:
+    s = get_settings()
     ap = argparse.ArgumentParser()
     ap.add_argument("--game", default="sr")
-    ap.add_argument("--models", default="BAAI/bge-m3,embo-01")
+    # 默认的对照组模型名取自 .env，而不是写死字符串 ——
+    # 之前这里硬编码 "BAAI/bge-m3,embo-01"，于是 EMBED_MODEL_MAIN /
+    # EMBED_MODEL_ALT / MINIMAX_EMBED_MODEL 改了都不影响这个实验跑哪两个模型。
+    ap.add_argument("--models",
+                    default=f"{s.embed_model_main},{s.embed_model_alt}",
+                    help="逗号分隔；默认取 .env 的 EMBED_MODEL_MAIN / EMBED_MODEL_ALT")
     ap.add_argument("--variant", default="d")
     ap.add_argument("--top-k", type=int, default=3)
     ap.add_argument("--labels", default="A0,A1,A2",
@@ -54,6 +65,9 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     models = [m.strip() for m in args.models.split(",") if m.strip()]
+    print(f"对比模型：{models}")
+    print(f"参考维度：{s.minimax_embed_model} 的向量维度为 {s.minimax_embed_dim} "
+          f"（换向量模型时务必确认维度一致，否则查询侧会维度不匹配）")
     for model in models:
         slug = model.replace("/", "_")
         variant = f"{args.variant}_{slug}"

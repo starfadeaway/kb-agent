@@ -389,7 +389,16 @@ cd kb-agent\backend
 # 用真实语料验收页面过滤器 / .env.example 覆盖率
 .venv\Scripts\python.exe backend\scripts\check_page_filter.py
 .venv\Scripts\python.exe backend\scripts\check_env_example.py
+
+# 验收 /api/retrieve 是否真的听 .env 的话（改完配置跑一次）
+.venv\Scripts\python.exe backend\scripts\check_config_wiring.py
 ```
+
+> `check_config_wiring.py` 存在的理由：`.env` 里的检索参数曾经**改了完全不生效**——
+> `RETRIEVE_TOP_K` / `RETRIEVE_CANDIDATE` / `RRF_K` 在 `config.py` 定义了、
+> `.env.example` 也列了，但 `main.py` 构造 `RetrievalConfig` 时压根没传，
+> **且不报任何错**。做单变量消融的人会白跑一整轮才发现参数没变。
+> 这个脚本的断言全部从 `Settings` 动态取值，所以把 `.env` 改成非默认值也能验。
 
 ### 降级能力：外部 API 挂掉也能演示
 

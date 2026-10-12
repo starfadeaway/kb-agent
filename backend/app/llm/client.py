@@ -177,6 +177,7 @@ class LLMClient:
             "deepseek": None, "minimax": None,
         }
         self._silicon: AsyncOpenAI | None = None
+        self._judge: AsyncOpenAI | None = None
         self._rerank_http = httpx.AsyncClient(timeout=30.0)
         # embedding / rerank 都是确定性函数，同输入必然同输出，缓存不影响正确性。
         # 主要收益场景：评测重跑、Agent 连续几步问同一个 query、用户重复提问。
@@ -215,6 +216,26 @@ class LLMClient:
                 api_key=self.s.siliconflow_api_key, base_url=self.s.siliconflow_base_url
             )
         return self._silicon
+
+    @property
+    def judge_client(self) -> AsyncOpenAI:
+        """Judge 专用客户端 —— 走 `JUDGE_BASE_URL`，而不是 SiliconFlow。
+
+        之前 `judge()` 直接用 `self.silicon`，于是 `JUDGE_BASE_URL` 这个
+        env var 定义了却**永远读不到**：想把 Judge 挪到独立基座（避免和被测
+        模型共用一个供应商、或换推理服务）时，改 .env 没有任何效果，
+        而且不报任何错。
+
+        默认值仍然回落到 SiliconFlow，所以不配 `JUDGE_BASE_URL` 的行为不变。
+        """
+        if self._judge is None:
+            if not self.s.siliconflow_api_key:
+                raise RuntimeError("Judge 需要 SILICONFLOW_API_KEY")
+            self._judge = AsyncOpenAI(
+                api_key=self.s.siliconflow_api_key,
+                base_url=self.s.judge_base_url or self.s.siliconflow_base_url,
+            )
+        return self._judge
 
     async def aclose(self) -> None:
         await self._rerank_http.aclose()
@@ -503,7 +524,7 @@ class LLMClient:
     async def judge(self, prompt: str, *, model: str | None = None, max_tokens: int = 512) -> str:
         """Judge 走独立基座（Qwen），严禁用被测模型自评。"""
         model_name = model or self.s.judge_model
-        resp = await self.silicon.chat.completions.create(
+        resp = await self.judge_client.chat.completions.create(
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,

@@ -47,6 +47,33 @@ class RetrievalConfig:
     # 设为 0 表示不裁剪（还原优化前的行为，供 A/B 对照）。
     rerank_candidates: int = 20
 
+    @classmethod
+    def from_settings(cls, *, settings=None, **over) -> RetrievalConfig:
+        """**从 `.env` 派生默认值**，显式传入的 `over` 优先。
+
+        为什么必须有这个入口 —— 这是本项目第三次栽在同一类问题上：
+        字段「声明了默认值」不等于「那个默认值真的被用」。
+        之前 `RETRIEVE_TOP_K` / `RETRIEVE_CANDIDATE` / `RRF_K` 三个 env var
+        在 `config.py` 里定义得整整齐齐，`.env.example` 也列了，
+        但 `main.py` 构造 `RetrievalConfig` 时压根没传这三个值，
+        于是 `.env` 里怎么改都不生效，而检索照常跑、**不报任何错**。
+
+        复制 `IngestConfig.from_settings()` 的既定范式，不要再各写一套推导方式。
+        """
+        s = settings or get_settings()
+        base = {
+            "embed_model": s.embed_model_main,
+            # top_k 与候选池共用一个旋钮：候选池必须 >= top_k，
+            # 否则用户把 top_k 调大到超过候选池就会静默拿不满结果。
+            "final_top_k": s.retrieve_top_k,
+            "bm25_top": s.retrieve_candidate,
+            "vector_top": s.retrieve_candidate,
+            "rerank_candidates": s.retrieve_candidate,
+            "rrf_k": s.rrf_k,
+        }
+        base.update(over)   # 显式传入的实验参数必须覆盖 .env，否则调参调不动
+        return cls(**base)
+
     def label(self) -> str:
         if self.use_bm25 and self.use_vector and self.use_rerank:
             return "A3"

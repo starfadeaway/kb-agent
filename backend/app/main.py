@@ -116,15 +116,20 @@ class ChatRequest(BaseModel):
 
 class RetrieveRequest(BaseModel):
     query: str = Field(min_length=1, max_length=500)
-    game: str = "sr"
-    top_k: int = 5
+
+    # 以下几项默认 **None 而非写死数值**：写死的话 Pydantic 每次都会把默认值
+    # 传给下游，于是 `.env` 里的 RETRIEVE_TOP_K / RETRIEVE_CANDIDATE / RRF_K
+    # 永远被覆盖 —— 改配置不生效，而且不报任何错。
+    # None = "没指定"，由 RetrievalConfig.from_settings() 用 .env 兜底。
+    game: str | None = None
+    top_k: int | None = None
     use_bm25: bool = True
     use_vector: bool = True
     use_rerank: bool = True
     embed_model: str | None = None
     variant: str = "base"
     # 0 = 不裁剪（全量送重排），用于和优化前做 A/B 对照
-    rerank_candidates: int = 20
+    rerank_candidates: int | None = None
     # 版本感知检索：只保留 last_revision_ts >= 该值的 chunk。
     # 之前这个能力在检索层是通的（RetrievalConfig → build_where → 两个 store 都实现了），
     # 但**没有任何入口能设置它** —— 只能写 Python 才能演示，文档里却当卖点写着。
@@ -202,17 +207,24 @@ def _normalize_ts(raw: str | None) -> str | None:
 @api_router.post("/retrieve")
 async def retrieve(req: RetrieveRequest) -> dict:
     retriever = get_retriever(_settings)
-    cfg = RetrievalConfig(
-        game=req.game,
-        embed_model=req.embed_model,
+    # 只把**请求里真的给了**的字段传下去（None 的一律丢掉），
+    # 其余交给 from_settings() 用 .env 兜底。
+    given = {k: v for k, v in {
+        "game": req.game,
+        "embed_model": req.embed_model,
+        "final_top_k": req.top_k,
+        "rerank_candidates": req.rerank_candidates,
+    }.items() if v is not None}
+    cfg = RetrievalConfig.from_settings(
+        settings=_settings,
+        game=req.game or _settings.game_primary,
         variant=req.variant,
         use_bm25=req.use_bm25,
         use_vector=req.use_vector,
         use_rerank=req.use_rerank,
-        final_top_k=req.top_k,
-        rerank_candidates=req.rerank_candidates,
         min_revision_ts=_normalize_ts(req.min_revision_ts),
         page_titles=req.page_titles or None,
+        **given,
     )
     async with _semaphore:
         try:
