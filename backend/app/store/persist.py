@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 
 from app.core.config import Settings, get_settings
@@ -195,6 +195,15 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
     """把本地缓存的页面 / chunk / infobox 事实全量写入 MySQL。
 
     走 upsert（ON DUPLICATE KEY UPDATE），可以反复执行不产生重复。
+    末尾还会**剪掉本轮语料不再产生的残留**，所以它是「以当前语料为准的全量替换」
+    而不是「往里塞」。
+
+    **必须复用入库时的同一套页面过滤器**，否则两个库对"收录哪些页"各说各话：
+    `pipeline.Ingestor` 用 `should_index` 跳过模板定义页（`模板:邦布图鉴` 这种），
+    而这里原先对每个缓存页都直接切 chunk —— 于是 MySQL 里会出现
+    `sr-1273-*`（模板:遗器套装的分片）和一堆 `entity_type='#set:'` 的垃圾 fact，
+    而这些页面在向量库里**根本不存在**。
+    一边查 SQL 一边查向量，对不上时根本不知道该信哪个。
 
     注意：on_duplicate_key_update 里必须用 ORM 属性（如 Page.title），
     不能用 sqlalchemy.column("title") —— 后者没有表上下文，
@@ -205,16 +214,27 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
         return {"ok": False, "reason": "MySQL 不可用"}
 
     cfg = IngestConfig.from_settings(game)
+    from app.ingest.page_filter import should_index
     from app.ingest.pipeline import page_to_chunks, page_to_facts
 
     pages_w = chunks_w = facts_w = 0
     errors: list[str] = []
+    skipped: list[str] = []
+    # 本轮**实际产生**的 key 集合，剪枝时用它们当"应该存在的全集"。
+    keep_chunk_ids: set[str] = set()
+    keep_fact_keys: set[tuple] = set()
+    keep_page_ids: set[int] = set()
 
     async with session_scope(s) as session:
         for pid in cached_page_ids(game):
             page = load_cached_page(pid, game)
             if page is None:
                 errors.append(f"page {pid} 无法复原")
+                continue
+            # 与入库管线同一套判据：被过滤的模板页在 MySQL 里也不该有分片。
+            keep, why = should_index(page.title)
+            if not keep:
+                skipped.append(f"{page.title}（{why}）")
                 continue
             url = f"{s.wiki_base}/{game}/{page.title}"
             chunks = page_to_chunks(page, cfg, url)
@@ -245,6 +265,7 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
                 )
             )
             pages_w += 1
+            keep_page_ids.add(page.page_id)
 
             if chunks:
                 ins = mysql_insert(ChunkMeta).values(
@@ -270,6 +291,7 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
                     )
                 )
                 chunks_w += len(chunks)
+                keep_chunk_ids.update(c.chunk_id for c in chunks)
 
             if facts:
                 ins = mysql_insert(Fact).values(facts)
@@ -282,12 +304,67 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
                     )
                 )
                 facts_w += len(facts)
+                keep_fact_keys.update(
+                    (f["entity_type"], f["entity_name"], f["attr"]) for f in facts
+                )
+
+        # ---------------- 剪掉本轮语料不再产生的残留 ----------------
+        # upsert 天然**不会删除**。改了 page_filter 或 chunk_size 再回填，
+        # 旧行会永久留在库里：实测 sr 多出 26 个 chunk、3688 条 fact，
+        # 样本是 `sr-1273-*` —— page 1273 是「模板:遗器套装」，
+        # 向量库里早就没有它了，MySQL 里却还留着它的分片。
+        #
+        # 后果不只是"数字虚高"：MySQL 里会出现向量库里**根本不存在**的 chunk_id。
+        # 一边查 SQL 一边查向量，对不上时根本不知道该信哪个。
+        # 所以回填必须是"以当前语料为准的全量替换"，而不是"往里塞"。
+        #
+        # **必须留在这个 async with 里面**：`session_scope` 在块退出时就 commit
+        # 并关闭 session，写在外面的话这些 DELETE 永远不会被提交 ——
+        # 表现为"剪枝逻辑明明跑了、库里一行没少"，比不写还难查。
+        stale_chunks = await session.execute(
+            select(ChunkMeta.chunk_id).where(ChunkMeta.game == game)
+        )
+        drop_chunks = [cid for cid in stale_chunks.scalars() if cid not in keep_chunk_ids]
+        if drop_chunks:
+            await session.execute(
+                delete(ChunkMeta).where(
+                    ChunkMeta.game == game, ChunkMeta.chunk_id.in_(drop_chunks)
+                )
+            )
+
+        stale_facts = (await session.execute(
+            select(Fact.entity_type, Fact.entity_name, Fact.attr).where(Fact.game == game)
+        )).all()
+        drop_facts = [tuple(r) for r in stale_facts if tuple(r) not in keep_fact_keys]
+        for et, en, at in drop_facts:
+            await session.execute(
+                delete(Fact).where(Fact.game == game, Fact.entity_type == et,
+                                  Fact.entity_name == en, Fact.attr == at)
+            )
+
+        # 页级剪枝要放在 chunk/fact 之后：它们都带 page_id，
+        # 先删页会让上面的比对失据（虽然这里没有外键约束，
+        # 但顺序表达了"先删细节、再删主体"的意图）。
+        stale_pages = (await session.execute(
+            select(Page.page_id).where(Page.game == game)
+        )).scalars().all()
+        drop_pages = [pid for pid in stale_pages if pid not in keep_page_ids]
+        if drop_pages:
+            await session.execute(
+                delete(Page).where(Page.game == game, Page.page_id.in_(drop_pages))
+            )
 
     return {
         "ok": True,
         "pages": pages_w,
         "chunks": chunks_w,
         "facts": facts_w,
+        "pruned_pages": len(drop_pages),
+        "pruned_chunks": len(drop_chunks),
+        "pruned_facts": len(drop_facts),
+        # 不静默丢弃：跳过/错误都列出来，被过滤的模板页是预期行为，
+        # 静默丢掉反而让人以为"回填漏了页面"。
+        "skipped_pages": skipped[:10],
         "errors": errors[:10],
     }
 

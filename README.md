@@ -373,8 +373,9 @@ cd kb-agent\backend
 | 多库路由 | 三态（库内/越界/未提及）；越界走无工具单轮，实测 0 步 / 1.1s，库内 3–5 步 / 5–8s |
 | 后端 | FastAPI，`/api/health` `/api/retrieve` `/api/chat` `/api/chat/stream` `/api/runs` `/api/ingest` `/api/stats` |
 | 前端 | React + Vite + TS，SSE 流式、工具时间线、引用、检索调试面板、双主题、背景图、移动端抽屉 |
-| 存储 | MySQL 9 张表全部非空：pages 778 / chunks 3866 / facts 14788 / runs / tool_calls / eval_cases 32 / eval_results / sessions / messages |
+| 存储 | MySQL 语料三表与向量库**逐条一致**（`backfill_mysql.py` 剪枝后核对，0 多出 0 缺失）：pages 1034（sr 517 / zzz 260 / ys 257）/ chunks 5097（2306 / 1498 / 1293）/ facts 16690（8900 / 4976 / 2814）；另有 runs 34 / tool_calls 47 / eval_cases / eval_results / sessions / messages |
 | 评测 | 评测集 **56 条三库全覆盖**（星铁 32 / 绝区零 12 / 原神 12）；实验 A/B/C/D/E 均已出真实数据 |
+| 已知偏差 | `eval_cases` 表仍是 32 条，评测集已扩到 56 条，重跑一次评测即可同步 |
 | 工程 | pytest **73 项**全绿 + smoke 自检 41 项；ruff 全清；GitHub Actions 跑 pytest + ruff + 前端构建 + 密钥卫生 |
 
 一条命令自检：

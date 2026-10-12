@@ -144,3 +144,57 @@ def test_search_kb_is_the_only_tool_enabled_by_default():
     但 token 多 22.6%。生产默认因此只挂 search_kb，
     别被"功能更全"说服改回去。其余工具仍在注册表里，需要时手动开。"""
     assert set(REGISTRY) == {"search_kb", "get_page", "calculator", "list_games"}
+
+
+# --------------------------------------------------------------------------- #
+# entity_type 清洗
+# --------------------------------------------------------------------------- #
+# 这组是原神 MySQL 回填崩溃的直接原因：ys 语料里有页面写成
+#   {{多重系列任务<!-- 森林书等…可将模板名改为多重系列任务 -->|…}}
+# 模板名后面拖着给人看的 HTML 注释。原样入库会：
+#   1. 撑爆 facts.entity_type VARCHAR(32)，整条 INSERT 失败 → MySQL 1406，
+#      表现为"原神整库回填崩掉"，而且崩在最后一步、前两个库已经写进去了；
+#   2. 就算列够宽，存进去的也是没法当类型查的值，
+#      而 facts 是给"精确匹配数值"用的，类型字段脏了等于表废了一半。
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # 真实语料里出现过的那个
+        ("多重系列任务<!-- 森林书等嵌套系列任务可将模板名改为多重系列任务 -->", "多重系列任务"),
+        ("角色<!--注释-->", "角色"),
+        # 没管道参数的模板：正则只能成对吃掉 }}，会剩一个孤儿 }
+        ("{{某某模板}}", "某某模板"),
+        ("{{a|{{b}}}}", "ab"),
+        ("[[链接|文字]]", "文字"),
+        ("位面饰品", "位面饰品"),
+        ("  光锥  ", "光锥"),
+        ("", ""),
+    ],
+)
+def test_clean_entity_type(raw, expected):
+    from app.ingest.pipeline import _clean_entity_type
+
+    assert _clean_entity_type(raw) == expected
+
+
+def test_clean_entity_type_never_exceeds_column_width():
+    """**任何输入都不能超出列宽** —— 超了就是整批 INSERT 失败，不是丢一条。
+
+    列宽从 ORM 模型读，不在这里写死 32：改了模型这里会跟着变，
+    抄一份的话两边迟早对不上。
+    """
+    from app.ingest.pipeline import _clean_entity_type, _fact_col_len
+
+    limit = _fact_col_len("entity_type", 32)
+    for raw in ("模板名<!-- " + "注释" * 200 + " -->", "角色" * 500, "{{" * 100 + "名}}"):
+        assert len(_clean_entity_type(raw)) <= limit, f"超长：{raw[:40]!r}"
+
+
+def test_fact_col_widths_come_from_the_model():
+    """列宽必须真的取自 ORM，而不是藏在代码里的魔数。"""
+    from app.ingest.pipeline import _fact_col_len
+
+    assert _fact_col_len("entity_type", 999) == 32
+    assert _fact_col_len("entity_name", 999) == 128
+    assert _fact_col_len("attr", 999) == 64

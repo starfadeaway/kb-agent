@@ -165,6 +165,58 @@ def page_to_chunks(page: PageContent, cfg: IngestConfig, source_url: str) -> lis
     )
 
 
+#: facts 表各列的容量，直接从 ORM 模型读，不在这里另抄一份 ——
+#: 抄一份的话，改了模型宽度这里不会跟着变，超长又是一次
+#: "Data too long" 崩溃 + 半个库回填失败。
+_FACT_COL_LEN: dict[str, int] = {}
+
+
+def _fact_col_len(field: str, fallback: int) -> int:
+    if not _FACT_COL_LEN:
+        from app.store.models import Fact
+        for c in Fact.__table__.c:
+            length = getattr(c.type, "length", None)
+            if isinstance(length, int):
+                _FACT_COL_LEN[c.name] = length
+    return _FACT_COL_LEN.get(field, fallback)
+
+
+#: MediaWiki 模板名里夹带的注释。原神语料实测出现过：
+#:   `多重系列任务<!-- 森林书等嵌套系列任务可将模板名改为多重系列任务 -->`
+#: 这是编辑者写给人看的说明，不是类型名。原样入库有两个问题：
+#: 1. 撑爆 `entity_type VARCHAR(32)`，整条 INSERT 失败 —— 已经因为它
+#:    让原神整库回填崩过一次（MySQL 1406 Data too long）；
+#: 2. 就算列够宽，存进去的也是「模板名+注释」这种没法当类型查的值。
+_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+
+
+def _clean_entity_type(name: str) -> str:
+    """模板名 → 可入库、可当类型查的实体类型。"""
+    s = _COMMENT_RE.sub("", name or "")
+    s = _flatten_template_name(s)
+    s = s.strip().strip("|").strip()
+    limit = _fact_col_len("entity_type", 32)
+    return s[:limit] if s else ""
+
+
+def _flatten_template_name(s: str) -> str:
+    """`{{a|b}}` / `[[链接|文字]]` 取可读部分。
+
+    注释剥掉之后偶尔还剩模板或链接语法 —— 实体类型应该是纯名字，
+    留着 `{{...}}` 只会让唯一键 `uq_fact_key` 带上噪声。
+    """
+    for _ in range(3):          # 最多剥 3 层，够应付真实语料
+        new = re.sub(r"\{\{[^{}]*\|([^{}|]*)}}\}", r"\1", s)
+        new = re.sub(r"\[\[[^[\]|]*\|([^\[\]]*)]]", r"\1", new)
+        new = re.sub(r"\{\{([^{}|]*)[|}\n]", r"\1", new)
+        if new == s:
+            break
+        s = new
+    # 正则只能成对吃掉 `}}`；`{{某某模板}}` 这种没管道参数的会剩一个孤儿 `}`。
+    # 实体类型应该是纯名字，把残留的成对符号一并去掉。
+    return s.replace("{", "").replace("}", "").replace("[", "").replace("]", "")
+
+
 def page_to_facts(page: PageContent, cfg: IngestConfig, source_url: str) -> list[dict]:
     """从 infobox 抽结构化数值。抽不出来就返回空，不硬凑。
 
@@ -178,8 +230,9 @@ def page_to_facts(page: PageContent, cfg: IngestConfig, source_url: str) -> list
     tpl = find_infobox(page.wikitext)
     if tpl is None or not tpl.named:
         return []
-    entity_name = tpl.get("名称") or page.title
-    entity_type = tpl.name or "未知"
+    entity_name = (tpl.get("名称") or page.title).strip()
+    entity_name = entity_name[:_fact_col_len("entity_name", 128)]
+    entity_type = _clean_entity_type(tpl.name) or "未知"
     facts: list[dict] = []
     for attr, raw_val in tpl.named.items():
         val = _flatten_value(str(raw_val), 0).strip()
@@ -190,7 +243,7 @@ def page_to_facts(page: PageContent, cfg: IngestConfig, source_url: str) -> list
                 "game": cfg.game,
                 "entity_type": entity_type,
                 "entity_name": entity_name,
-                "attr": attr,
+                "attr": attr.strip()[:_fact_col_len("attr", 64)],
                 "value": val,
                 "value_num": _extract_number(val),
                 "page_id": page.page_id,
