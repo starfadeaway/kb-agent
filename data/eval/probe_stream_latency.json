@@ -1,0 +1,29 @@
+{
+  "question": "太空封印站的两件套效果是什么？",
+  "model": "deepseek-chat",
+  "llm_only_ms": 1155.2,
+  "completion_tokens": 8,
+  "retrieval_ms": {
+    "A3 完整": 763.2,
+    "A2 无重排": 37.3,
+    "A0 纯本地": 12.7
+  },
+  "chat_non_stream_ms": 3410.3,
+  "chat_stream": {
+    "ttft_ms": 860,
+    "total_ms": 3147,
+    "n_events": 22
+  },
+  "_meta": {
+    "script": "probe_stream_latency.py",
+    "generated_at_utc": "2026-10-12T15:56:21+00:00",
+    "git_commit": "fd18a4e",
+    "python": "3.13.5",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "context": {
+      "model": "deepseek-chat",
+      "endpoint": "http://127.0.0.1:8000/api",
+      "note": "TTFT 为单次测量，波动大，结论请看多次重跑的中位数"
+    }
+  }
+}

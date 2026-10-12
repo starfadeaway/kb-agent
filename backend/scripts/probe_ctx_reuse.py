@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -83,13 +84,37 @@ async def main() -> None:
         out["D_reuse_ctx"].append(round(ms))
         print(f"  第 {i + 1} 次: {ms:>8.0f} ms")
 
-    print("\n  → 若 B/C 的第 2、3 次仍然很慢，说明每次请求都在重建索引（bug）。")
-    print("    若 A/C 快而 B/C 慢，那就确认了 ToolContext.build 的复用缺陷。")
+    # 判读必须由数据给出，不能只丢一句"若…则…"让读者自己推：
+    # C 的第 1 次慢、第 2/3 次快，说明 ToolContext.build 已经在复用 retriever；
+    # 只看 B（每次 new）会误判成"每个请求都在重建索引"。
+    c_first, c_rest = out["C_tool_path"][0], out["C_tool_path"][1:]
+    c_steady = statistics.median(c_rest)
+    b_steady = statistics.median(out["B_new_instance"])
+    reuse_effective = c_steady < c_first / 3
+
+    print("\n  C 的第 1 次 {c_first:.0f}ms，第 2/3 次中位 {c_steady:.0f}ms "
+          f"（{b_steady:.0f}ms 若不复用的代价）".format(
+              c_first=c_first, c_steady=c_steady, b_steady=b_steady))
+    if reuse_effective:
+        print(f"  → 复用有效：ToolContext.build 只在首次构建 retriever，"
+              f"稳态 {c_steady:.0f}ms 比不复用的 {b_steady:.0f}ms 快约 "
+              f"{b_steady / max(c_steady, 1e-9):.0f} 倍。")
+        print("    不存在「每个请求重建 BM25 索引」的缺陷 —— B 组慢是因为它故意不复用。")
+    else:
+        print("  → 复用无效：第 2/3 次仍然接近首次，"
+              "说明每个请求都在重建索引，这是一个真实缺陷。")
 
     save_probe(
         "probe_ctx_reuse",
         {"timings_ms": out, "query": "太空封印站的两件套效果",
-         "final_top_k": cfg.final_top_k},
+         "final_top_k": cfg.final_top_k,
+         "verdict": {
+             "ctx_reuse_effective": reuse_effective,
+             "c_first_ms": round(c_first, 1),
+             "c_steady_median_ms": round(c_steady, 1),
+             "b_no_reuse_median_ms": round(b_steady, 1),
+             "reuse_speedup_x": round(b_steady / max(c_steady, 1e-9), 1),
+         }},
         context={"game": "sr", "repeats": 3,
                  "note": "每组只有 3 次采样，方差大；用于看趋势而非精确值"},
     )

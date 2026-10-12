@@ -1,0 +1,45 @@
+{
+  "timings_ms": {
+    "A_reuse_instance": [
+      3797,
+      17,
+      17
+    ],
+    "B_new_instance": [
+      1817,
+      1912,
+      1875
+    ],
+    "C_tool_path": [
+      1835,
+      16,
+      16
+    ],
+    "D_reuse_ctx": [
+      17,
+      17,
+      18
+    ]
+  },
+  "query": "太空封印站的两件套效果",
+  "final_top_k": 3,
+  "verdict": {
+    "ctx_reuse_effective": true,
+    "c_first_ms": 1835,
+    "c_steady_median_ms": 16.0,
+    "b_no_reuse_median_ms": 1875,
+    "reuse_speedup_x": 117.2
+  },
+  "_meta": {
+    "script": "probe_ctx_reuse.py",
+    "generated_at_utc": "2026-10-12T15:57:29+00:00",
+    "git_commit": "fd18a4e",
+    "python": "3.13.5",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "context": {
+      "game": "sr",
+      "repeats": 3,
+      "note": "每组只有 3 次采样，方差大；用于看趋势而非精确值"
+    }
+  }
+}

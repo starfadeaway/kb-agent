@@ -1,0 +1,86 @@
+{
+  "prefix_stability": [
+    {
+      "turn": 1,
+      "prompt_tokens": 914,
+      "cache_hit_tokens": 768,
+      "cache_miss_tokens": 146,
+      "hit_rate_pct": 84.0,
+      "wall_ms": 1108
+    },
+    {
+      "turn": 2,
+      "prompt_tokens": 977,
+      "cache_hit_tokens": 768,
+      "cache_miss_tokens": 209,
+      "hit_rate_pct": 78.6,
+      "wall_ms": 1053
+    },
+    {
+      "turn": 3,
+      "prompt_tokens": 1040,
+      "cache_hit_tokens": 896,
+      "cache_miss_tokens": 144,
+      "hit_rate_pct": 86.2,
+      "wall_ms": 825
+    },
+    {
+      "turn": 4,
+      "prompt_tokens": 1103,
+      "cache_hit_tokens": 896,
+      "cache_miss_tokens": 207,
+      "hit_rate_pct": 81.2,
+      "wall_ms": 651
+    },
+    {
+      "turn": 5,
+      "prompt_tokens": 1166,
+      "cache_hit_tokens": 1024,
+      "cache_miss_tokens": 142,
+      "hit_rate_pct": 87.8,
+      "wall_ms": 1191
+    }
+  ],
+  "latency_vs_length": [
+    {
+      "filler_lines": 5,
+      "prompt_tokens_est": 82,
+      "first_token_ms": 94,
+      "total_ms": 708,
+      "n_chunks": 10
+    },
+    {
+      "filler_lines": 30,
+      "prompt_tokens_est": 345,
+      "first_token_ms": 185,
+      "total_ms": 1346,
+      "n_chunks": 19
+    },
+    {
+      "filler_lines": 60,
+      "prompt_tokens_est": 660,
+      "first_token_ms": 139,
+      "total_ms": 653,
+      "n_chunks": 19
+    },
+    {
+      "filler_lines": 120,
+      "prompt_tokens_est": 1290,
+      "first_token_ms": 290,
+      "total_ms": 799,
+      "n_chunks": 18
+    }
+  ],
+  "_meta": {
+    "script": "probe_kv_cache.py",
+    "generated_at_utc": "2026-10-12T15:56:34+00:00",
+    "git_commit": "fd18a4e",
+    "python": "3.13.5",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "context": {
+      "model": "deepseek-chat",
+      "endpoint": "https://api.deepseek.com",
+      "note": "prompt_tokens 在场景 2 是按字符数粗估的，不是 usage 实测值"
+    }
+  }
+}
