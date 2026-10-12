@@ -15,20 +15,15 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from exp_common import paired_scores
+from exp_common import EVAL_DIR, aggregate_rows, paired_scores, print_category_matrix
 
 
 def load(name: str) -> list[dict]:
-    p = Path(r"C:\Users\Liu\Desktop\ai实验\MiniMax\AI项目\kb-agent\data\eval") / name
+    # 曾经这里写死本机绝对路径（C:\Users\Liu\...），换台机器就找不到文件 ——
+    # 而这个脚本的产物是要写进简历的量化数字，不能只在作者本机跑得通。
+    # 复用 exp_common 的 EVAL_DIR，和 save 落盘的那份永远是同一个目录。
+    p = EVAL_DIR / name
     return json.loads(p.read_text(encoding="utf-8"))
-
-
-def by_type(rows: list[dict]) -> dict[str, list[float]]:
-    # eval row 里题型字段叫 category（不是 qtype/type —— 名字对不上会静默全归到 "?"）
-    out: dict[str, list[float]] = {}
-    for r in rows:
-        out.setdefault(r.get("category", "?"), []).append(r["judge_score"])
-    return out
 
 
 def is_infra_failure(row: dict) -> bool:
@@ -96,29 +91,25 @@ def main() -> None:
     print("\n" + "=" * 78)
     print("  各档均值（已剔除基础设施失败）")
     print("=" * 78)
+    # 均值改走 exp_common.aggregate_rows —— 以前这里是手写的 4 行 sum/len，
+    # 和 aggregate_rows 的"只统计未报错 case"口径是两份独立实现。
+    # 两份实现一旦漂移，同一份 exp_C.json 会算出两个 judge 均值，
+    # 而且没人会发现 —— 这个数字是要写进简历的。
     for lab, d in clean_by_label.items():
         rows = d["rows"]
         if not rows:
             continue
-        mean = sum(r["judge_score"] for r in rows) / len(rows)
-        lat = sum(r.get("latency_ms") or 0 for r in rows) / len(rows)
-        tok = sum(r.get("prompt_tokens") or 0 for r in rows) / len(rows)
-        steps = sum(r.get("steps") or 0 for r in rows) / len(rows)
-        print(f"  {lab:<4} judge={mean:.2f}  n={len(rows)}  步数={steps:.1f}  "
-              f"prompt tok={tok:.0f}  延迟={lat:.0f}ms")
+        a = aggregate_rows(rows, exclude=lambda r: not is_infra_failure(r))
+        print(f"  {lab:<4} judge={a['judge_score']:.2f}  n={a['n_ok']}  步数={a['avg_steps']:.1f}  "
+              f"prompt tok={a['avg_prompt_tokens']}  延迟={a['avg_latency_ms']}ms")
 
     print("\n" + "=" * 78)
     print("  按题型")
     print("=" * 78)
-    types = sorted({t for d in clean_by_label.values() for t in by_type(d["rows"])})
-    labels = [d["label"] for d in data]
-    print(f"  {'题型':<14}" + "".join(f"{lab:>10}" for lab in labels))
-    for t in types:
-        cells = []
-        for lab in labels:
-            vals = by_type(clean_by_label[lab]["rows"]).get(t, [])
-            cells.append(f"{sum(vals)/len(vals):>10.2f}" if vals else f"{'-':>10}")
-        print(f"  {t:<14}" + "".join(cells))
+    # 按题型矩阵同样改调 exp_common 里的实现（列宽 10 是这里的历史版式）
+    print_category_matrix(
+        list(clean_by_label.values()), exclude=lambda r: not is_infra_failure(r), width=10
+    )
 
 
 if __name__ == "__main__":

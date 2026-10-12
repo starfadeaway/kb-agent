@@ -141,10 +141,21 @@ class Collection:
                 self.documents = list(documents)
                 self.metadatas = [dict(m) for m in metadatas]
             else:
-                existing = [self._index[cid] for cid in ids if cid in self._index]
-                if existing:
-                    self._emb[existing] = new[[cid in self._index for cid in ids]]
-                fresh = [i for i, cid in enumerate(ids) if cid not in self._index]
+                # 已存在的 id：**三个字段都要刷新**。
+                # 原来这里只覆盖 embedding，正文和元数据走 fresh 分支永不更新 ——
+                # 于是"改了 chunk_size / embed_mode 后重跑入库"在这个后端下
+                # 变成"只换了向量、没换内容"，检索返回的是**新向量配旧正文**。
+                # 实验 B / D 的单变量前提直接被破坏，而且不报任何错。
+                # Lance 后端一直是 delete+add 整体刷新，这里对齐它。
+                fresh = []
+                for i, cid in enumerate(ids):
+                    pos = self._index.get(cid)
+                    if pos is None:
+                        fresh.append(i)
+                    else:
+                        self._emb[pos] = new[i]
+                        self.documents[pos] = documents[i]
+                        self.metadatas[pos] = dict(metadatas[i])
                 if fresh:
                     self._emb = np.vstack([self._emb, new[fresh]])
                     self.documents.extend(documents[i] for i in fresh)

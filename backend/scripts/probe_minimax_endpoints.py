@@ -17,17 +17,20 @@ token 额度是独立的硬上限。
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.core.config import PROJECT_ROOT
-from dotenv import load_dotenv
+from app.core.config import get_settings
 
-load_dotenv(PROJECT_ROOT / ".env", override=False)
-KEY = os.getenv("MINIMAX_API_KEY", "")
+# 这个探针存在的意义就是排查"端点/模型名配错导致 429"，
+# 所以它必须读**和线上走的那份完全一样的配置**。
+# 原来这里自己 load_dotenv + os.getenv 绕过了配置层：一旦 .env 里同时存在
+# 国际站/国内站两个键、或键名和 config.py 不一致，这个探针给出的结论就是错的 ——
+# 而它恰恰是排查 429 时最该被信任的那个脚本。
+_s = get_settings()
+KEY = _s.minimax_api_key
 
 # 国际站 vs 国内站是两套账号体系，套餐额度不互通
 ENDPOINTS = [
@@ -96,4 +99,7 @@ async def main() -> None:
         print("看哪一项没动，或者套餐里列的模型名是什么。")
 
 
-asyncio.run(main())
+# 同 probe_ctx_reuse：模块顶层 asyncio.run 会让 `import` 触发
+# 2 端点 × 5 模型 = 10 次真实 API 请求，排查 429 时最不该被误触发的脚本。
+if __name__ == "__main__":
+    asyncio.run(main())

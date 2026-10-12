@@ -72,4 +72,8 @@ async def main() -> None:
     print("    若 A/C 快而 B/C 慢，那就确认了 ToolContext.build 的复用缺陷。")
 
 
-asyncio.run(main())
+# 原本是模块顶层的 asyncio.run(main())：任何 `import probe_ctx_reuse`
+# 都会立刻跑起 4 组真实检索并发出 API 请求。文件名看着像个库，
+# 被测试收集器或 `python -c "import ..."` 扫到就会误触发。
+if __name__ == "__main__":
+    asyncio.run(main())

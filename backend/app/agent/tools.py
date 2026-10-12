@@ -12,7 +12,7 @@ import asyncio
 import logging
 import re
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 from app.core.config import Settings, get_settings
@@ -262,8 +262,24 @@ async def list_games(args: dict, ctx: ToolContext) -> str:
     return "\n".join(lines)
 
 
-def get_schemas() -> list[dict]:
-    return list(SCHEMAS)
+def get_schemas(names: Sequence[str] | None = None) -> list[dict]:
+    """工具 schema。
+
+    `names` 非空时**只返回这些工具** —— 这是实验 C 的消融开关：
+    决定"模型能看到哪些工具声明"，而不是"模型调用了哪些工具"
+    （后者会被模型的随机选择污染，测不出能力差异）。
+
+    生产默认只给 search_kb：实验 C 实测 C1(4.60) ≥ C2(4.47)，
+    p=0.47 未达显著，也就是**多挂 3 个工具没有可测收益，却要多付 22.6% token**。
+    要恢复全工具设 `AGENT_TOOLS=search_kb,get_page,calculator,list_games`。
+    """
+    if not names:
+        return list(SCHEMAS)
+    wanted = list(names)
+    unknown = [n for n in wanted if n not in REGISTRY]
+    if unknown:
+        raise ValueError(f"未知工具 {unknown}，可选：{', '.join(REGISTRY)}")
+    return [s for s in SCHEMAS if s.get("function", {}).get("name") in wanted]
 
 
 # 工具自己返回错误文案时统一用的前缀。

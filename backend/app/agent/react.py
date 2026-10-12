@@ -301,7 +301,8 @@ class ReActAgent:
         # 可选：限制本轮允许使用的工具。实验 C（C0/C1/C2）靠它做能力消融 ——
         # 消融的变量必须是「模型能看到哪些工具声明」，
         # 而不是「模型调用了哪些工具」（后者会被模型的随机选择污染）。
-        self.tools = tools if tools is not None else get_schemas()
+        # 默认取 Settings.agent_tools（生产默认只开 search_kb，依据见 config 里的注释）。
+        self.tools = tools if tools is not None else get_schemas(self.s.agent_tool_names)
         # 可选：替换 chat 调用。实验 E 靠它切到 MiniMax 等别的基座，
         # 好处是实验跑的是**生产代码本身**这条循环，而不是脚本里抄一份副本 ——
         # 抄一份的话，测出来的就不是线上真正在跑的东西了。

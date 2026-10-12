@@ -97,6 +97,18 @@ class Settings:
     agent_wall_timeout: float = field(default_factory=lambda: _env_float("AGENT_WALL_TIMEOUT", 60))
     tool_timeout: float = field(default_factory=lambda: _env_float("TOOL_TIMEOUT", 15))
     concurrency_limit: int = field(default_factory=lambda: _env_int("CONCURRENCY_LIMIT", 4))
+    #: 逗号分隔的启用工具名，空 = 全部。
+    #: 默认只给 search_kb —— 实验 C 实测多挂 3 个工具没有可测收益（C1 4.60 vs C2 4.47，
+    #: p=0.47 未达显著）却要多付 22.6% token。改成全量前请先重跑实验 C。
+    agent_tools: str = field(default_factory=lambda: _env("AGENT_TOOLS", "search_kb"))
+
+    @property
+    def agent_tool_names(self) -> list[str] | None:
+        """""不限具体名称，只返回 None（= 全部工具）"或一份名称列表。"""
+        raw = (self.agent_tools or "").strip()
+        if not raw or raw.lower() in {"all", "*", "全部"}:
+            return None
+        return [x.strip() for x in raw.split(",") if x.strip()] or None
 
     # --- 检索 ---
     retrieve_top_k: int = field(default_factory=lambda: _env_int("RETRIEVE_TOP_K", 5))

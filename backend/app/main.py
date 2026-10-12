@@ -109,6 +109,9 @@ class ChatRequest(BaseModel):
     # Chat 基座（deepseek / minimax）。传错或未配置由 LLMClient 抛错，
     # 这里统一转成 400，让前端能给出可读提示而不是 500。
     backend: str | None = None
+    # 本轮允许使用的工具。留空 = 用 Settings.agent_tools（生产默认只给 search_kb）。
+    # 显式传 ["search_kb","get_page","calculator","list_games"] 可复现实验 C 的 C2 档。
+    tools: list[str] | None = None
 
 
 class RetrieveRequest(BaseModel):
@@ -160,7 +163,9 @@ async def health() -> dict:
             if slug not in _settings.games
         },
         "collections": store.list_collections(),
-        "tools": [s["function"]["name"] for s in get_schemas()],
+        # 报**实际生效**的工具集，不是注册表全量 ——
+        # 生产默认只挂 search_kb，报全量会让侧栏看起来像"4 个工具都开着"。
+        "tools": [s["function"]["name"] for s in get_schemas(_settings.agent_tool_names)],
         # 延迟优化的可观测性：预热状态 + 缓存命中率
         "warmup": _warmup_state,
         "cache": llm.cache_stats(),
@@ -220,7 +225,12 @@ def _build_agent(req: ChatRequest) -> tuple[ReActAgent, ToolContext]:
             llm.chat_backend_name(req.backend)
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(400, str(exc)) from exc
-    agent = ReActAgent(settings=_settings, llm=llm, backend=req.backend)
+    agent = ReActAgent(
+        settings=_settings,
+        llm=llm,
+        backend=req.backend,
+        tools=get_schemas(req.tools) if req.tools else None,
+    )
     ctx = ToolContext.build(req.game or _settings.game_primary)
     if req.game:
         ctx.game = req.game

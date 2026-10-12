@@ -22,6 +22,11 @@ ROOT = BACKEND.parent
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+#: 实验结果的落盘目录。读写两端共用这一个常量 ——
+#: 之前 save() 里内联拼 ROOT/"data"/"eval"，而 analyze_significance.py
+#: 读的时候写死了本机绝对路径，两边不是同一个推导方式就可能对不上。
+EVAL_DIR = ROOT / "data" / "eval"
+
 
 def load_cases(limit: int = 0):
     """取实验用的 15 条代表性子集，覆盖全部 6 个题型。
@@ -46,15 +51,28 @@ SUBSET_IDS = [
 ]
 
 
-def aggregate_rows(rows: Sequence[dict]) -> dict:
-    """把 per-case 结果聚合成一行指标。
+def is_kept(row: dict) -> bool:
+    """默认的"这条结果算不算数"：只看 `error` 字段。"""
+    return not row.get("error")
+
+
+def aggregate_rows(rows: Sequence[dict], *, exclude=None) -> dict:
+    """把per-case 结果聚合成一行指标。
 
     **均值只统计没报错的 case** —— 报错的 case judge 会给 0 分，
     但那是链路失败不是能力差，混进去会让均值被悄悄拉低，
     看起来像「这个配置更差」，实际是「它根本没跑起来」。
     `errors` / `n_ok` 两个字段就是给这个场景留的证据。
+
+    `exclude` 是额外的排除谓词（默认 `is_kept`）。
+    为什么要有这个参数：实验 E 里 MiniMax 有一次撞 429，
+    Agent 把模型异常写进 `answer` 而 `error` 字段是空的 ——
+    靠读答案文本猜不可靠，于是用 `prompt_tokens == 0` 作为基础设施失败的判据。
+    这种"额外的排除规则"以前只有 analyze_significance 自己一份实现，
+    现在统一走这里，避免**同一份数据被两个脚本算出两个均值**。
     """
-    ok = [r for r in rows if not r.get("error")] or list(rows)
+    keep = exclude if exclude is not None else is_kept
+    ok = [r for r in rows if keep(r)] or list(rows)
     n_ok = len(ok) or 1
 
     def avg(key: str, cast=float, default=0):
@@ -105,14 +123,37 @@ def print_summary(results: Sequence[dict], title: str) -> None:
     cats = sorted({r["category"] for r in results[0]["rows"] if r.get("category")})
     if cats:
         print("\n--- 按题型拆开（幻觉 / 假前提题是「无 RAG 时会怎样」的照妖镜）---")
-        print(f"{'题型':<14}" + "".join(f"{r['label']:>12}" for r in results))
-        for cat in cats:
-            cells = []
-            for r in results:
-                vals = [x["judge_score"] for x in r["rows"]
-                        if x.get("category") == cat and not x.get("error")]
-                cells.append(f"{statistics.mean(vals):>12.2f}" if vals else f"{'-':>12}")
-            print(f"{cat:<14}" + "".join(cells))
+        print_category_matrix(results)
+
+
+def category_means(results: Sequence[dict], *, metric: str = "judge_score",
+                   exclude=None) -> dict[str, list[float | None]]:
+    """题型 × 各档label 的均值矩阵。抽出来是为了让 print_summary 和
+    analyze_significance 用**同一份实现** —— 以前两边各写一遍，
+    现在改一处两边同时生效。
+    """
+    keep = exclude if exclude is not None else is_kept
+    cats = sorted({r["category"] for r in results[0]["rows"] if r.get("category")})
+    matrix: dict[str, list[float | None]] = {}
+    for cat in cats:
+        col: list[float | None] = []
+        for r in results:
+            vals = [x[metric] for x in r["rows"]
+                    if x.get("category") == cat and keep(x) and x.get(metric) is not None]
+            col.append(round(statistics.mean(vals), 4) if vals else None)
+        matrix[cat] = col
+    return matrix
+
+
+def print_category_matrix(results: Sequence[dict], *, metric: str = "judge_score",
+                          exclude=None, width: int = 12) -> None:
+    matrix = category_means(results, metric=metric, exclude=exclude)
+    if not matrix:
+        return
+    print(f"{'题型':<14}" + "".join(f"{r['label']:>{width}}" for r in results))
+    for cat, col in matrix.items():
+        cells = [(f"{v:>{width}.2f}" if v is not None else f"{'-':>{width}}") for v in col]
+        print(f"{cat:<14}" + "".join(cells))
 
 
 def paired_scores(results: Sequence[dict], metric: str = "judge_score") -> dict | None:
@@ -141,7 +182,7 @@ def paired_scores(results: Sequence[dict], metric: str = "judge_score") -> dict 
 def save(results: Sequence[dict], name: str) -> Path:
     import json
 
-    out_dir = ROOT / "data" / "eval"
+    out_dir = EVAL_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / name
     out.write_text(json.dumps(list(results), ensure_ascii=False, indent=2), encoding="utf-8")
