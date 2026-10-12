@@ -349,7 +349,7 @@ cd kb-agent\backend
 
 | 项 | 状态 |
 |---|---|
-| 语料 | 星铁 518 页→2293 chunk；绝区零 263 页→1517；原神 257 页→1293；合计 **5103 chunk**，**全程 0 次 WAF 硬失败** |
+| 语料 | 星铁 518 页→2293 chunk；绝区零 263 页→1498；原神 257 页→1293；合计 **5084 chunk**，**全程 0 次 WAF 硬失败** |
 | 向量库 | LanceDB 0.40，暴力精确扫描，跨进程读回已验证；NumPy 实现保留为 fallback |
 | 检索 | BM25 + 向量 RRF + 重排，A0–A3 消融已完成（n=29，见 `EVALUATION.md`） |
 | 分块 | 实验 B 四组完成：**chunk 500–800 + embed_mode=title 最优**（A3 0.966） |
@@ -361,12 +361,21 @@ cd kb-agent\backend
 | 后端 | FastAPI，`/api/health` `/api/retrieve` `/api/chat` `/api/chat/stream` `/api/runs` `/api/ingest` `/api/stats` |
 | 前端 | React + Vite + TS，SSE 流式、工具时间线、引用、检索调试面板、双主题、背景图、移动端抽屉 |
 | 存储 | MySQL 9 张表全部非空：pages 778 / chunks 3866 / facts 14788 / runs / tool_calls / eval_cases 32 / eval_results / sessions / messages |
-| 评测 | 评测集 32 条（29 条带 gold，**全部是星铁**）；实验 A/B/C/D/E 均已出真实数据 |
+| 评测 | 评测集 **56 条三库全覆盖**（星铁 32 / 绝区零 12 / 原神 12）；实验 A/B/C/D/E 均已出真实数据 |
+| 工程 | pytest **73 项**全绿 + smoke 自检 41 项；ruff 全清；GitHub Actions 跑 pytest + ruff + 前端构建 + 密钥卫生 |
 
 一条命令自检：
 
 ```powershell
-.venv\Scripts\python.exe backend\scripts\smoke.py
+# 离线单元测试（CI 跑的就是这批，不打网络）
+.venv\Scripts\python.exe -m pytest
+
+# 真实检索 + 真实 LLM 的端到端自检（要联网，手动跑）
+.venv\Scripts\python.exe backend\scripts\smoke_refactor.py
+
+# 用真实语料验收页面过滤器 / .env.example 覆盖率
+.venv\Scripts\python.exe backend\scripts\check_page_filter.py
+.venv\Scripts\python.exe backend\scripts\check_env_example.py
 ```
 
 ### 降级能力：外部 API 挂掉也能演示
@@ -449,30 +458,46 @@ embedding / rerank / judge **同时失效**，但：
     函数定义在后把 dict 顶掉了，`/api/health` 直接 500
     （`Unable to serialize unknown type: <class 'function'>`）。改名后恢复。
 
+14. **"把写死的两个改成 N 个"永远改不完整**。加第三个游戏库时，
+    `Settings.games` 和 `tools.py` 都改成了 N 游戏，**漏了 `react.py` 里的
+    `SYSTEM_PROMPT`** ——它还是写死的「你是星铁与绝区零的知识库助手」。
+    症状：检索层能召回原神、页面确实在库里，Agent 却回"知识库未收录《原神》"，
+    `steps=0`。和当初 `route_game` 默认回退到 `sr` 是同一类错误，只是发生在 LLM 层。
+    只能靠**跨层断言**判断改完了没有，现在 `test_multi_game_routing.py` 盯着这条。
+
+15. **元数据存了不等于读得回来**。`list_collections()` 直接 `new` 一个空 collection，
+    从不读 `.meta.json`，于是 `game`/`variant`/`embed_model` 全空。
+    前端只好退回用正则从 collection 名解析，把实验 B/D 的变体库也加进"生产语料"，
+    界面显示星铁 **9,986** 片段 —— 实际 base 库只有 2,293，**虚高 4.4 倍**。
+    这种数字会被直接抄进简历。
+
+16. **过滤器必须用真实语料验收，不能只靠单元测试**。页面过滤器最初除了按标题过滤，
+    还加了"清洗后正文占比 < 5% 就跳过"的内容启发式。单元测试全过，
+    拿 1035 页真实语料一跑：**误杀 60%**。因为这个 wiki 的内容页本身就是模板驱动的，
+    光锥页 95% 以上是 `{{光锥图鉴|…}}`。现在只保留标题判据，
+    `scripts/check_page_filter.py` 拿全部 1038 页做回归。
+
+17. **同名不同物要用别名**。`persist.py` 同时从 `app.eval.cases` 和 `app.store.models`
+    导入 `EvalCase`，后者把前者遮蔽了 —— 函数里那句 `EvalCase(...)` 实际在构造 ORM 对象。
+    当时没有调用方所以没炸，但是个地雷。ruff 的 F811 抓到了。
+
 ---
 
 ## 下一步
 
-按"投入产出比 × 简历可信度"排序。每项都写清**为什么还没做**，
-避免看起来像是漏了。
+按"投入产出比 × 简历可信度"排序。每项都写清**为什么还没做**，避免看起来像是漏了。
 
-1. **评测集扩到绝区零 / 原神**（最该做）
-   目前 32 条用例全是星铁，zzz 只有 1 条路由题、ys 一条都没有。
-   也就是说 README 里所有量化结论（实验 A–E）都只覆盖了星铁一个库，
-   "多库路由有效"这件事目前只有 smoke 自检兜着，没有被评测集覆盖。
-   难点不是写题，是**逐条核对 gold** —— EVALUATION.md 里记了教训：
-   自己没验证过的 gold 会把模型的正确行为判成错误。
+1. **在真实问题分布上重跑一遍实验 A–E**
+   现在 A/B/C/D/E 全部跑在星铁 56 条里、且检索实验的 29 条评测都在 sr。
+   评测集扩到三库之后，**还没重跑** —— 换语料后指标大概率会变，
+   拿旧数字当新结论就是造假。`rebuild_index.py` + `run_eval.py` 可离线重建，不吃 WAF 配额。
 
-2. **建 git 仓库**
-   目前整个项目**没有任何版本控制**。实验要对比"改之前 / 改之后"、
-   简历里要说"迭代了 N 版"，没有 commit 记录是拿不出来的。
-   动手前先确认 `.gitignore` 排除了 `.env` 与 `data/`。
+2. **评测集继续加量**
+   12 条/库只够验证"路由没错"，统计功效仍然不足
+   （实验 C 在 n=15 时 C1→C2 的 p=0.47 就已经分不出差异）。
+   经验上单库要 30+ 条才谈得上显著性。
 
-3. **把 smoke 自检接进 CI**
-   `smoke_refactor.py` 现在是 38 项断言（含跨层回归，比如"提示词覆盖所有已收录游戏"），
-   但只能手动跑。接进 CI 后，每次改检索或 prompt 逻辑都能自动挡住回归。
-
-4. **语料清洗：跳过 MediaWiki 模板页**
-   现在索引里有 4 个 `<includeonly>{{#set:…}}` 形式的模板源码页
-   （如 `模板_邦布图鉴`、`模板_材料图鉴`），纯语法噪声，不含任何事实。
-   数量不多不影响指标，但会在"查邦布"这类 query 上挤占召回位。
+3. **把 zzz / ys 的语料规模拉到与星铁同量级**
+   现在 518 / 263 / 257 页，三库之间差一个数量级的量级差。
+   跨库对比题（`ys-010` 圣遗物 vs 位面饰品）如果检索只命中了语料多的那个库，
+   结论会偏向"语料多"而不是"路由对"，需要控制这个隐藏变量。
