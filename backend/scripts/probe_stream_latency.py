@@ -22,9 +22,11 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.core.config import get_settings
 from app.llm.client import get_llm
+from probe_io import save_probe
 
 API = "http://127.0.0.1:8000/api"
 Q = "太空封印站的两件套效果是什么？"
@@ -81,9 +83,11 @@ async def main() -> None:
     print("\n" + "=" * 74)
     print("  B. 检索环节（/api/retrieve，A3 完整链路）")
     print("=" * 74)
+    retrieval: dict[str, float] = {}
     for label, kw in (("A3 完整", {}), ("A2 无重排", {"use_rerank": False}),
                       ("A0 纯本地", {"use_rerank": False, "use_vector": False})):
         _, ms = post("/retrieve", {"query": Q, "top_k": 5, **kw})
+        retrieval[label] = round(ms, 1)
         print(f"  {label:<22}: {ms:>6.0f} ms")
 
     print("\n" + "=" * 74)
@@ -92,6 +96,7 @@ async def main() -> None:
     _, t_chat = post("/chat", {"question": Q})
     print(f"  非流式总耗时           : {t_chat:.0f} ms   ← 用户全程干等")
 
+    stream: dict | None = None
     try:
         st = await measure_stream()
         print(f"  流式首字 TTFT          : {st['ttft_ms']:.0f} ms   ← 用户第一次看到反馈")
@@ -100,9 +105,28 @@ async def main() -> None:
         print(f"\n  感知延迟改善           : {gain:.0f} ms（{t_chat:.0f} → {st['ttft_ms']:.0f}，"
               f"降 {gain / t_chat * 100:.0f}%）")
         print(f"  总耗时差异             : {abs(t_chat - st['total_ms']):.0f} ms（基本一致）")
+        stream = {**st, "ttft_ms": round(st["ttft_ms"]), "total_ms": round(st["total_ms"])}
     except Exception as exc:
         print(f"  [流式不可用] {type(exc).__name__}: {str(exc)[:120]}")
         print("  （后端没起？在项目根跑 .venv\\Scripts\\python.exe run_server.py）")
+        stream = {"error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+
+    # 落盘。TTFT 是"感知延迟 −85%"这个卖点的唯一证据，
+    # 而它是对单次请求的一次测量 —— 波动大，必须留原始值而不是只留百分比。
+    save_probe(
+        "probe_stream_latency",
+        {
+            "question": Q,
+            "model": s.deepseek_chat_model,
+            "llm_only_ms": round(t_llm, 1),
+            "completion_tokens": out["usage"]["completion_tokens"],
+            "retrieval_ms": retrieval,
+            "chat_non_stream_ms": round(t_chat, 1),
+            "chat_stream": stream,
+        },
+        context={"model": s.deepseek_chat_model, "endpoint": API,
+                 "note": "TTFT 为单次测量，波动大，结论请看多次重跑的中位数"},
+    )
 
 
 if __name__ == "__main__":

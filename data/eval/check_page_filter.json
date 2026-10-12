@@ -1,0 +1,45 @@
+{
+  "total": 1038,
+  "kept": 1034,
+  "dropped_count": 4,
+  "drop_ratio": 0.003854,
+  "dropped": [
+    {
+      "game": "sr",
+      "title": "模板:遗器套装",
+      "reason": "模板/模块/帮助/分类/图片定义页"
+    },
+    {
+      "game": "zzz",
+      "title": "模板:材料图鉴",
+      "reason": "模板/模块/帮助/分类/图片定义页"
+    },
+    {
+      "game": "zzz",
+      "title": "模板:邦布图鉴",
+      "reason": "模板/模块/帮助/分类/图片定义页"
+    },
+    {
+      "game": "zzz",
+      "title": "模板:邦布图鉴/文档",
+      "reason": "模板/模块/帮助/分类/图片定义页"
+    }
+  ],
+  "missing_meta": [],
+  "threshold": "drop_ratio > 0.05 判定为阈值过狠",
+  "_meta": {
+    "script": "check_page_filter.py",
+    "generated_at_utc": "2026-10-12T15:06:25+00:00",
+    "git_commit": "f56887c",
+    "python": "3.13.5",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "context": {
+      "corpus_root": "C:\\Users\\Liu\\Desktop\\ai实验\\MiniMax\\AI项目\\kb-agent\\data\\raw",
+      "games": [
+        "sr",
+        "ys",
+        "zzz"
+      ]
+    }
+  }
+}

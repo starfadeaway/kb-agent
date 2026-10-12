@@ -10,9 +10,14 @@ from __future__ import annotations
 
 import json
 import statistics
+import sys
 import time
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from probe_io import save_probe
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = "http://127.0.0.1:8000/api"
@@ -84,6 +89,23 @@ def main() -> None:
     print(f"  缓存命中率：embed {health['cache']['embed']['hit_rate']:.0%}  "
           f"rerank {health['cache']['rerank']['hit_rate']:.0%}")
     print("=" * 64)
+
+    # 落盘：这 15 组对照是"裁剪有损"这个结论的全部证据，
+    # 原先只打屏上，改了 rerank_candidates 之后无从判断结论还成不成立。
+    save_probe(
+        "bench_latency_rerank_cut",
+        {
+            "queries": QUERIES,
+            "control_candidates0": {"latency_ms": before, "top5_titles": r_before},
+            "treat_candidates20": {"latency_ms": after, "top5_titles": r_after},
+            "ranking_identical_groups": same,
+            "total_groups": len(r_before),
+            "median_drop_pct": round(cut, 1),
+            "cache_hit_rate": health["cache"],
+        },
+        context={"variable": "rerank_candidates", "control": 0, "treat": 20,
+                 "n_queries": len(QUERIES)},
+    )
 
 
 if __name__ == "__main__":

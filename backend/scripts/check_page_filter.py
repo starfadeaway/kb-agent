@@ -19,8 +19,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.ingest.page_filter import should_index  # noqa: E402
+from probe_io import save_probe  # noqa: E402
 
 DATA_ROOT = Path(__file__).resolve().parents[2] / "data" / "raw"
 
@@ -86,6 +88,22 @@ def main() -> int:
     ratio = len(dropped) / max(total, 1)
     print("-" * 66)
     print(f"过滤比例 {ratio:.2%}")
+
+    # 落盘。"内容启发式误杀 60%"是 README 里第 16 条教训的全部证据，
+    # 而"现在只按标题过滤、比例 0.39%"是它被否掉的依据 —— 两者都只有 stdout。
+    save_probe(
+        "check_page_filter",
+        {
+            "total": total, "kept": kept, "dropped_count": len(dropped),
+            "drop_ratio": round(ratio, 6),
+            "dropped": [{"game": g, "title": t, "reason": w} for g, t, w in dropped],
+            "missing_meta": no_meta,
+            "threshold": "drop_ratio > 0.05 判定为阈值过狠",
+        },
+        context={"corpus_root": str(DATA_ROOT), "games": sorted(
+            p.name for p in DATA_ROOT.iterdir() if p.is_dir())},
+    )
+
     if ratio > 0.05:
         print("✗ 过滤比例过高，阈值可能误杀内容页")
         return 1

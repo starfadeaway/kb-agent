@@ -20,8 +20,10 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import httpx
+from probe_io import save_probe
 
 BASE = "http://127.0.0.1:8000"
 
@@ -157,22 +159,30 @@ async def main() -> None:
     print("  一致性校验")
     print("=" * 96)
     if args.mode == "retrieve":
-        base = None
+        base_ids = None
         ok = True
+        determinism: dict[str, object] = {"checked": True, "ok": True, "per_level": {}}
         for n in levels:
             # 复跑一次固定 query，与 1 并发下的结果比对
             _, ids, _ = await one_retrieve(
                 httpx.AsyncClient(timeout=60), "太空封印站的两件套效果是什么"
             )
-            if base is None:
-                base = ids
-            same = ids == base
+            if base_ids is None:
+                base_ids = ids
+            same = ids == base_ids
             ok &= same
+            determinism["per_level"][str(n)] = {"consistent": same, "top_ids": ids[:5]}
             print(f"  n={n:<3} top5 chunk_id 与基线一致: {'✅' if same else '❌'}  {ids[:3]}")
+        determinism["ok"] = ok
         print(f"\n  结论：{'并发下结果完全一致（确定性保住了）' if ok else '出现不一致 —— 存在隐藏的可变状态'}")
     else:
+        determinism = {"checked": False, "ok": None, "per_level": {}}
         for n in levels:
             r = out[n]["results"][0][1]
+            determinism["per_level"][str(n)] = {
+                "steps": r["steps"], "stop_reason": r["stop_reason"],
+                "refs": len(r["refs"]), "tool_failures": r["tool_failures"],
+            }
             print(
                 f"  n={n:<3} 首个响应 steps={r['steps']} stop={r['stop_reason']} "
                 f"refs={len(r['refs'])} failed={r['tool_failures']}"
@@ -184,10 +194,17 @@ async def main() -> None:
     print("=" * 96)
     base = out[levels[0]]
     base_thr = base["n"] / (base["wall"] / 1000)
+    summary = []
     print(f"  {'并发度':<8}{'p50(ms)':>10}{'max(ms)':>10}{'吞吐(req/s)':>14}{'吞吐倍数':>12}")
     for n in levels:
         r = out[n]
         thr = n / (r["wall"] / 1000)
+        summary.append({
+            "level": n, "p50_ms": round(pct(r["lat"], .5)),
+            "max_ms": round(max(r["lat"])),
+            "throughput_rps": round(thr, 2),
+            "speedup": round(thr / base_thr, 2),
+        })
         print(
             f"  {n:<8}{pct(r['lat'], .5):>10.0f}{max(r['lat']):>10.0f}{thr:>14.2f}"
             f"{thr / base_thr:>11.2f}x"
@@ -195,6 +212,30 @@ async def main() -> None:
     print(
         f"\n  注：并发度 > CONCURRENCY_LIMIT({health.get('concurrency_limit')}) 时多出的请求会排队，"
         "\n      所以吞吐应趋于饱和而 p50 线性上升 —— 这是预期行为，不是 bug。"
+    )
+
+    # 原始结果落盘。以前这张表只活在 stdout 里 —— 文档写着"命令可复现"，
+    # 但没人能拿它和文档里那几行数字对账，也没法在改代码后判断结论是否还成立。
+    save_probe(
+        f"bench_concurrency_{args.mode}",
+        {
+            "mode": args.mode,
+            "concurrency_limit": health.get("concurrency_limit"),
+            "levels": levels,
+            "summary": summary,
+            "determinism": determinism,
+            # 每条 query 的逐次延迟：判断 p50 抖动是不是噪声要看方差，
+            # 只有汇总数字是验不了的。
+            "per_request_ms": {str(n): out[n]["lat"] for n in levels},
+            "queries_used": {str(n): out[n]["queries"] for n in levels},
+        },
+        context={
+            "mode": args.mode,
+            "levels": levels,
+            "concurrency_limit": health.get("concurrency_limit"),
+            "query_pool_size": len(pool),
+            "note": "每档用互不重叠的 query 切片，避免后一档白捡缓存",
+        },
     )
 
 

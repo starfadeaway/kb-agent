@@ -23,9 +23,11 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.core.config import get_settings
 from app.llm.client import get_llm
+from probe_io import save_probe
 
 
 def _cache_field(resp) -> tuple[int, int]:
@@ -61,6 +63,7 @@ async def probe_prefix_stability() -> None:
     print("=" * 78)
     print(f"{'轮':>3}{'prompt tokens':>16}{'cache hit':>12}{'命中率':>9}{'墙钟ms':>10}")
 
+    turns: list[dict] = []
     for turn in range(1, 6):
         t0 = time.perf_counter()
         client = llm.deepseek
@@ -75,6 +78,9 @@ async def probe_prefix_stability() -> None:
         pt = int(usage.prompt_tokens or 0)
         hit, miss = _cache_field(resp)
         rate = (hit / pt * 100) if pt else 0.0
+        turns.append({"turn": turn, "prompt_tokens": pt, "cache_hit_tokens": hit,
+                      "cache_miss_tokens": miss, "hit_rate_pct": round(rate, 1),
+                      "wall_ms": round(ms)})
         print(f"{turn:>3}{pt:>16}{hit:>12}{rate:>8.1f}%{ms:>10.0f}")
 
         # 追加 assistant + tool 消息，模拟 Agent 继续往下走
@@ -84,6 +90,7 @@ async def probe_prefix_stability() -> None:
         )
 
     print("\n  → 若命中率随轮次上升，说明前缀稳定，DeepSeek 侧缓存能生效。")
+    return turns
 
 
 async def probe_latency_vs_length() -> None:
@@ -99,6 +106,7 @@ async def probe_latency_vs_length() -> None:
     print("=" * 78)
     print(f"{'上下文':>12}{'prompt tokens':>16}{'首token ms':>14}{'总耗时 ms':>12}")
 
+    rows: list[dict] = []
     for mult in (5, 30, 60, 120):
         body = ("知识库检索到的游戏资料片段，请据此回答。\n" * mult)
         messages = [
@@ -118,18 +126,31 @@ async def probe_latency_vs_length() -> None:
             n += 1
         total_ms = (time.perf_counter() - t0) * 1000
         pt = len(body) // 2 + 30     # 粗略估计，中文约 1 字 0.5-0.7 token
+        rows.append({"filler_lines": mult, "prompt_tokens_est": pt,
+                     "first_token_ms": round(first_ms or 0),
+                     "total_ms": round(total_ms), "n_chunks": n})
         print(f"{mult:>10} 行{pt:>16}{first_ms or 0:>14.0f}{total_ms:>12.0f}")
 
     print("\n  → 首 token 延迟随上下文增长缓慢 = 预处理已并行；")
     print("    总耗时的大头是生成。加 KV cache 主要省【费用】，省【延迟】有限。")
+    return rows
 
 
 async def main() -> None:
     s = get_settings()
     print(f"模型：{s.deepseek_chat_model}")
     print(f"端点：{s.deepseek_base_url}\n")
-    await probe_prefix_stability()
-    await probe_latency_vs_length()
+    turns = await probe_prefix_stability()
+    by_len = await probe_latency_vs_length()
+
+    # 落盘。ARCHITECTURE 里"KV cache 自动生效、命中率 80%+"这句结论
+    # 全部依赖这张五轮表 —— 没有原始文件就只剩一个没法核对的百分比。
+    save_probe(
+        "probe_kv_cache",
+        {"prefix_stability": turns, "latency_vs_length": by_len},
+        context={"model": s.deepseek_chat_model, "endpoint": s.deepseek_base_url,
+                 "note": "prompt_tokens 在场景 2 是按字符数粗估的，不是 usage 实测值"},
+    )
 
 
 if __name__ == "__main__":
