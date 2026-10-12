@@ -1,0 +1,22 @@
+# 默认按文本处理并在提交时统一为 LF。
+# 本机是 Windows（checkout 会是 CRLF），CI 和 Linux 是 LF ——
+# 不统一的话每个文件在 diff 里都会显示"整行变了"，评审时全是噪音。
+* text=auto eol=lf
+
+# Windows 专用脚本保持 CRLF，否则在 cmd/PowerShell 下可能出问题
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制：不要做行尾转换，不要尝试 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+
+# 锁文件不参与合并冲突解算，由包管理器生成
+frontend/package-lock.json -diff linguist-generated

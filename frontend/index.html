@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1116" />
+    <title>kb-agent · 游戏内容知识库问答</title>
+    <script>
+      // 在样式和 React 之前定好主题，否则会先按默认深色渲染再跳到浅色（白闪）。
+      // 这里不能用 import —— 内联脚本必须同步可执行，所以逻辑在这里重写一遍，
+      // 规则和 src/prefs.ts 的 readStoredTheme 保持一致。
+      (function () {
+        try {
+          var saved = localStorage.getItem('kb-agent.theme')
+          var theme =
+            saved === 'light' || saved === 'dark'
+              ? saved
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+          document.documentElement.setAttribute('data-theme', theme)
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', theme === 'dark' ? '#0e1116' : '#f6f7f9')
+        } catch (e) {
+          /* 隐私模式下 localStorage 不可用，保持默认深色 */
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

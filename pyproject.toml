@@ -1,0 +1,53 @@
+[project]
+name = "kb-agent"
+version = "0.1.0"
+description = "垂直领域游戏知识库问答 Agent：三库路由 + 混合检索 + 手搓 ReAct"
+requires-python = ">=3.11"
+# 运行时依赖的真实清单在 backend/requirements.txt（带实测注释的版本钉死）。
+# 这里不重复声明，避免两处漂移。
+
+[dependency-groups]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+    "ruff==0.8.6",
+]
+
+[tool.pytest.ini_options]
+# backend/ 下的代码用 `from app.xxx import` 这种绝对导入，
+# 所以要把 backend 放进 sys.path，否则 pytest 从仓库根跑会 ImportError。
+pythonpath = ["backend"]
+testpaths = ["backend/tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q --strict-markers"
+markers = [
+    "slow: 需要真实网络/API 的用例，CI 默认跳过",
+    "needs_corpus: 需要本地已抓好的语料（data/raw），没有就 skip",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = [".venv", "frontend", "data"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # bugbear
+    "UP",   # pyupgrade
+    "SIM",  # simplify
+]
+ignore = [
+    # 中文项目里注释/文档字符串写得很长，E501 只在代码行上保留
+    "E501",
+    # 测试里大量用 assert 重写，SIM117 之类不适用
+    "SIM117",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 脚本要先 sys.path.insert 再 import，E402 是这种写法的固有代价，不是缺陷
+"backend/scripts/*.py" = ["E402", "T201"]
+"backend/tests/*.py" = ["E402"]

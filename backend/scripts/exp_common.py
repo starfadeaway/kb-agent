@@ -1,0 +1,149 @@
+"""实验脚本的公共底座。
+
+`exp_c.py`（Agent 能力消融）和 `exp_e.py`（Chat 基座对比）本来各写了一份
+评测子集、结果聚合、表格打印。三个实验再各写一遍的话，改一个统计口径要
+改三个文件，而且一定会漏。
+
+抽到这里之后，**统计口径只有一份** —— 这是比省代码更重要的理由：
+三个实验的数字必须可比，口径一旦分叉，A/B/C/D/E 的对比就失去意义。
+
+用法：
+    from exp_common import SUBSET_IDS, aggregate_rows, print_summary
+"""
+from __future__ import annotations
+
+import statistics
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+BACKEND = Path(__file__).resolve().parent.parent
+ROOT = BACKEND.parent
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
+
+
+def load_cases(limit: int = 0):
+    """取实验用的 15 条代表性子集，覆盖全部 6 个题型。
+
+    为什么不跑全部 32 条：每条要一次 Judge 调用（8B 模型约 15s），
+    3 档 × 32 条 = 96 次 ≈ 24 分钟。15 条 × 3 档 ≈ 11 分钟，
+    换来的是能反复迭代的实验节奏。检索侧实验（A/B/D）跑的是全部 29 条，
+    因为那边没有 Judge 开销。
+    """
+    from app.eval.cases import SR_CASES
+
+    by_id = {c.case_id: c for c in SR_CASES}
+    cases = [by_id[i] for i in SUBSET_IDS if i in by_id]
+    return cases[:limit] if limit else cases
+
+
+# 15 条子集：结构化字段 / 纯语义 / 多跳 / 数值 / 幻觉 / 假前提 各覆盖
+SUBSET_IDS = [
+    "sr-001", "sr-002", "sr-004", "sr-006", "sr-008", "sr-023",
+    "sr-007", "sr-011", "sr-013", "sr-025", "sr-028",
+    "sr-009", "sr-031", "sr-032", "sr-030",
+]
+
+
+def aggregate_rows(rows: Sequence[dict]) -> dict:
+    """把 per-case 结果聚合成一行指标。
+
+    **均值只统计没报错的 case** —— 报错的 case judge 会给 0 分，
+    但那是链路失败不是能力差，混进去会让均值被悄悄拉低，
+    看起来像「这个配置更差」，实际是「它根本没跑起来」。
+    `errors` / `n_ok` 两个字段就是给这个场景留的证据。
+    """
+    ok = [r for r in rows if not r.get("error")] or list(rows)
+    n_ok = len(ok) or 1
+
+    def avg(key: str, cast=float, default=0):
+        vals = [cast(r[key]) for r in ok if r.get(key) is not None]
+        return round(sum(vals) / len(vals), 4) if vals else default
+
+    steps_total = sum(r.get("steps", 0) for r in ok)
+    return {
+        "judge_score": avg("judge_score"),
+        "correctness": avg("correctness"),
+        "faithfulness": avg("faithfulness"),
+        "avg_prompt_tokens": int(avg("prompt_tokens")),
+        "avg_completion_tokens": int(avg("completion_tokens")),
+        "avg_steps": round(avg("steps"), 2),
+        # 分母用总步数而不是 case 数：某个 case 调了 3 次工具、另一个 1 次，
+        # 按 case 平均会让「工具用得多」看起来像「工具更容易失败」。
+        "tool_failure_rate": round(sum(r.get("tool_failures", 0) for r in ok) / max(1, steps_total), 4),
+        "ref_coverage": round(sum(1 for r in ok if r.get("has_refs")) / n_ok, 4),
+        "avg_latency_ms": int(avg("latency_ms")),
+        "errors": sum(1 for r in rows if r.get("error")),
+        "n": len(rows),
+        "n_ok": len(ok),
+    }
+
+
+def print_summary(results: Sequence[dict], title: str) -> None:
+    """打印总表 + 分类别拆解。
+
+    分类别是重点：整体均值会把「幻觉题崩掉、语义题还行」这种结构
+    藏在平均数里 —— 而那恰恰是最值得讲的部分。
+    """
+    if not results:
+        print("（无结果）")
+        return
+
+    print("\n" + "=" * 96)
+    print(f"  {title}")
+    print("=" * 96)
+    print(f"{'配置':<5}{'judge':>8}{'correct':>9}{'faith':>8}"
+          f"{'prompt tok':>12}{'步数':>8}{'引用':>7}{'工具失败':>10}{'延迟ms':>9}{'错误':>6}")
+    for r in results:
+        a = r["aggregate"]
+        print(f"{r['label']:<5}{a['judge_score']:>8.2f}{a['correctness']:>9.2f}"
+              f"{a['faithfulness']:>8.2f}{a['avg_prompt_tokens']:>12}{a['avg_steps']:>8.1f}"
+              f"{a['ref_coverage']:>7.2f}{a['tool_failure_rate']:>10.3f}"
+              f"{a['avg_latency_ms']:>9}{a['errors']:>6}")
+
+    cats = sorted({r["category"] for r in results[0]["rows"] if r.get("category")})
+    if cats:
+        print("\n--- 按题型拆开（幻觉 / 假前提题是「无 RAG 时会怎样」的照妖镜）---")
+        print(f"{'题型':<14}" + "".join(f"{r['label']:>12}" for r in results))
+        for cat in cats:
+            cells = []
+            for r in results:
+                vals = [x["judge_score"] for x in r["rows"]
+                        if x.get("category") == cat and not x.get("error")]
+                cells.append(f"{statistics.mean(vals):>12.2f}" if vals else f"{'-':>12}")
+            print(f"{cat:<14}" + "".join(cells))
+
+
+def paired_scores(results: Sequence[dict], metric: str = "judge_score") -> dict | None:
+    """相邻两档之间的配对比较（首尾对比）。
+
+    用「首尾」而不是「相邻」：实验 C 的问题就是「有 RAG vs 没 RAG」，
+    中间那档只是过渡。首尾对比最能说明项目存在的理由。
+    """
+    from app.eval.metrics import paired_test
+
+    if len(results) < 2:
+        return None
+    first, last = results[0], results[-1]
+    common = [r for r in first["rows"] if not r.get("error")]
+    common_ids = {r["case_id"] for r in common}
+    last_rows = [r for r in last["rows"] if r["case_id"] in common_ids and not r.get("error")]
+    if len(last_rows) < 3:
+        return None
+    return paired_test(
+        [{**r, metric: r[metric]} for r in common],
+        [{**r, metric: r[metric]} for r in last_rows],
+        metric,
+    )
+
+
+def save(results: Sequence[dict], name: str) -> Path:
+    import json
+
+    out_dir = ROOT / "data" / "eval"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / name
+    out.write_text(json.dumps(list(results), ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n结果已写入 {out}")
+    return out

@@ -1,0 +1,37 @@
+{
+  "collection": "kb_zzz_baai-bge-m3_base",
+  "collection_count": 1552,
+  "elapsed_s": 256.3,
+  "per_category": [
+    {
+      "category": "音擎",
+      "pages": 60,
+      "chunks": 66,
+      "done": 60
+    },
+    {
+      "category": "驱动盘",
+      "pages": 39,
+      "chunks": 55,
+      "done": 39
+    },
+    {
+      "category": "角色",
+      "pages": 62,
+      "chunks": 1288,
+      "done": 62
+    },
+    {
+      "category": "邦布",
+      "pages": 42,
+      "chunks": 78,
+      "done": 42
+    },
+    {
+      "category": "材料",
+      "pages": 60,
+      "chunks": 65,
+      "done": 60
+    }
+  ]
+}

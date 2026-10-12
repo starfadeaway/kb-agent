@@ -1,0 +1,570 @@
+[
+  {
+    "label": "A0",
+    "config": {
+      "game": "sr",
+      "embed_model": null,
+      "variant": "base",
+      "use_bm25": true,
+      "use_vector": false,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60
+    },
+    "aggregate": {
+      "recall@3": 1.0,
+      "recall@3_std": 0.0,
+      "hit_rate": 1.0,
+      "hit_rate_std": 0.0,
+      "mrr": 0.9167,
+      "mrr_std": 0.2357,
+      "ndcg": 0.9375,
+      "ndcg_std": 0.1768,
+      "n": 8,
+      "page_hit_rate": 1.0,
+      "avg_latency_ms": 268
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-001",
+        "page_hit": true,
+        "latency_ms": 2040,
+        "top_titles": [
+          "「我」的诞生",
+          "「我」的诞生",
+          "晨曦啊，再抚映遥远地平"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-002",
+        "page_hit": true,
+        "latency_ms": 13,
+        "top_titles": [
+          "太空封印站",
+          "太空封印站",
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-003",
+        "page_hit": true,
+        "latency_ms": 15,
+        "top_titles": [
+          "凝滞虚影 • 巽风之形",
+          "凝滞虚影 • 嗔怒之形",
+          "凝滞虚影 • 天人之形"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-004",
+        "page_hit": true,
+        "latency_ms": 9,
+        "top_titles": [
+          "阿然",
+          "虫鸣秘闻•3.0",
+          "奔腾年代"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-005",
+        "page_hit": true,
+        "latency_ms": 22,
+        "top_titles": [
+          "不老者的仙舟",
+          "阿浮",
+          "不老者的仙舟"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-006",
+        "page_hit": true,
+        "latency_ms": 21,
+        "top_titles": [
+          "凝滞虚影 • 空海之形",
+          "凝滞虚影 • 嗔怒之形",
+          "凝滞虚影 • 天人之形"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 0.3333,
+        "ndcg": 0.5,
+        "case_id": "sr-007",
+        "page_hit": true,
+        "latency_ms": 17,
+        "top_titles": [
+          "无主荒星茨冈尼亚",
+          "沉欢醉饮的海隅",
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-008",
+        "page_hit": true,
+        "latency_ms": 13,
+        "top_titles": [
+          "太空封印站",
+          "太空封印站",
+          "苍穹战线格拉默"
+        ]
+      }
+    ]
+  },
+  {
+    "label": "A1",
+    "config": {
+      "game": "sr",
+      "embed_model": null,
+      "variant": "base",
+      "use_bm25": false,
+      "use_vector": true,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60
+    },
+    "aggregate": {
+      "recall@3": 0.875,
+      "recall@3_std": 0.3536,
+      "hit_rate": 0.875,
+      "hit_rate_std": 0.3536,
+      "mrr": 0.875,
+      "mrr_std": 0.3536,
+      "ndcg": 0.875,
+      "ndcg_std": 0.3536,
+      "n": 8,
+      "page_hit_rate": 0.875,
+      "avg_latency_ms": 194
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-001",
+        "page_hit": true,
+        "latency_ms": 634,
+        "top_titles": [
+          "「我」的诞生",
+          "回到大地的飞行",
+          "记一位星神的陨落"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-002",
+        "page_hit": true,
+        "latency_ms": 134,
+        "top_titles": [
+          "太空封印站",
+          "泛银河商业公司",
+          "沉陆海域露莎卡"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-003",
+        "page_hit": true,
+        "latency_ms": 132,
+        "top_titles": [
+          "凝滞虚影 • 巽风之形",
+          "凝滞虚影 • 塞壬之形",
+          "凝滞虚影 • 偃偶之形"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-004",
+        "page_hit": true,
+        "latency_ms": 128,
+        "top_titles": [
+          "阿然",
+          "AAA送货私我",
+          "颁赐者，千军首，天谴之矛"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-005",
+        "page_hit": true,
+        "latency_ms": 132,
+        "top_titles": [
+          "不老者的仙舟",
+          "不老者的仙舟",
+          "劫火莲灯铸炼宫"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-006",
+        "page_hit": true,
+        "latency_ms": 135,
+        "top_titles": [
+          "凝滞虚影 • 空海之形",
+          "凝滞虚影 • 塞壬之形",
+          "凝滞虚影 • 幽府之形"
+        ]
+      },
+      {
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-007",
+        "page_hit": false,
+        "latency_ms": 130,
+        "top_titles": [
+          "奔狼的都蓝王朝",
+          "无主荒星茨冈尼亚",
+          "奔狼的都蓝王朝"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-008",
+        "page_hit": true,
+        "latency_ms": 132,
+        "top_titles": [
+          "太空封印站",
+          "太空封印站",
+          "反物质引擎控制器"
+        ]
+      }
+    ]
+  },
+  {
+    "label": "A2",
+    "config": {
+      "game": "sr",
+      "embed_model": null,
+      "variant": "base",
+      "use_bm25": true,
+      "use_vector": true,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60
+    },
+    "aggregate": {
+      "recall@3": 1.0,
+      "recall@3_std": 0.0,
+      "hit_rate": 1.0,
+      "hit_rate_std": 0.0,
+      "mrr": 0.9167,
+      "mrr_std": 0.2357,
+      "ndcg": 0.9375,
+      "ndcg_std": 0.1768,
+      "n": 8,
+      "page_hit_rate": 1.0,
+      "avg_latency_ms": 363
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-001",
+        "page_hit": true,
+        "latency_ms": 1854,
+        "top_titles": [
+          "「我」的诞生",
+          "「我」的诞生",
+          "嘿，我在这儿"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-002",
+        "page_hit": true,
+        "latency_ms": 141,
+        "top_titles": [
+          "太空封印站",
+          "泛银河商业公司",
+          "天国@直播间"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-003",
+        "page_hit": true,
+        "latency_ms": 147,
+        "top_titles": [
+          "凝滞虚影 • 巽风之形",
+          "凝滞虚影 • 凛月之形",
+          "凝滞虚影 • 塞壬之形"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-004",
+        "page_hit": true,
+        "latency_ms": 172,
+        "top_titles": [
+          "阿然",
+          "丹西",
+          "阿克赛"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-005",
+        "page_hit": true,
+        "latency_ms": 149,
+        "top_titles": [
+          "不老者的仙舟",
+          "不老者的仙舟",
+          "阿浮"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-006",
+        "page_hit": true,
+        "latency_ms": 149,
+        "top_titles": [
+          "凝滞虚影 • 空海之形",
+          "凝滞虚影 • 凛月之形",
+          "凝滞虚影 • 塞壬之形"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 0.3333,
+        "ndcg": 0.5,
+        "case_id": "sr-007",
+        "page_hit": true,
+        "latency_ms": 146,
+        "top_titles": [
+          "无主荒星茨冈尼亚",
+          "奔狼的都蓝王朝",
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-008",
+        "page_hit": true,
+        "latency_ms": 150,
+        "top_titles": [
+          "太空封印站",
+          "太空封印站",
+          "反物质引擎控制器"
+        ]
+      }
+    ]
+  },
+  {
+    "label": "A3",
+    "config": {
+      "game": "sr",
+      "embed_model": null,
+      "variant": "base",
+      "use_bm25": true,
+      "use_vector": true,
+      "use_rerank": true,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60
+    },
+    "aggregate": {
+      "recall@3": 1.0,
+      "recall@3_std": 0.0,
+      "hit_rate": 1.0,
+      "hit_rate_std": 0.0,
+      "mrr": 1.0,
+      "mrr_std": 0.0,
+      "ndcg": 1.0,
+      "ndcg_std": 0.0,
+      "n": 8,
+      "page_hit_rate": 1.0,
+      "avg_latency_ms": 868
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-001",
+        "page_hit": true,
+        "latency_ms": 2673,
+        "top_titles": [
+          "「我」的诞生",
+          "好戏开演",
+          "嘿，我在这儿"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-002",
+        "page_hit": true,
+        "latency_ms": 570,
+        "top_titles": [
+          "太空封印站",
+          "生命的翁瓦克",
+          "出云显世与高天神国"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-003",
+        "page_hit": true,
+        "latency_ms": 526,
+        "top_titles": [
+          "凝滞虚影 • 巽风之形",
+          "凝滞虚影 • 役轮之形",
+          "凝滞虚影 • 偃偶之形"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-004",
+        "page_hit": true,
+        "latency_ms": 717,
+        "top_titles": [
+          "阿然",
+          "阿来",
+          "阿合马"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-005",
+        "page_hit": true,
+        "latency_ms": 681,
+        "top_titles": [
+          "不老者的仙舟",
+          "不老者的仙舟",
+          "不老者的仙舟"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-006",
+        "page_hit": true,
+        "latency_ms": 562,
+        "top_titles": [
+          "凝滞虚影 • 空海之形",
+          "凝滞虚影 • 塞壬之形",
+          "凝滞虚影 • 偃偶之形"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-007",
+        "page_hit": true,
+        "latency_ms": 580,
+        "top_titles": [
+          "太空封印站",
+          "泛银河商业公司",
+          "苍穹战线格拉默"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-008",
+        "page_hit": true,
+        "latency_ms": 637,
+        "top_titles": [
+          "太空封印站",
+          "太空封印站",
+          "太空封印站"
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,1518 @@
+[
+  {
+    "label": "A0",
+    "config": {
+      "game": "sr",
+      "embed_model": null,
+      "variant": "base",
+      "use_bm25": true,
+      "use_vector": false,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 1,
+      "rrf_k": 60,
+      "rerank_candidates": 20
+    },
+    "aggregate": {
+      "recall@1": 0.8276,
+      "recall@1_std": 0.3844,
+      "hit_rate": 0.8276,
+      "hit_rate_std": 0.3844,
+      "mrr": 0.8276,
+      "mrr_std": 0.3844,
+      "ndcg": 0.8276,
+      "ndcg_std": 0.3844,
+      "n": 29,
+      "page_hit_rate": 0.8276,
+      "avg_latency_ms": 95
+    },
+    "rows": [
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-001",
+        "page_hit": true,
+        "latency_ms": 2332,
+        "top_titles": [
+          "「我」的诞生"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-002",
+        "page_hit": true,
+        "latency_ms": 10,
+        "top_titles": [
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-003",
+        "page_hit": true,
+        "latency_ms": 15,
+        "top_titles": [
+          "凝滞虚影 • 巽风之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-004",
+        "page_hit": true,
+        "latency_ms": 5,
+        "top_titles": [
+          "阿然"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-005",
+        "page_hit": true,
+        "latency_ms": 15,
+        "top_titles": [
+          "不老者的仙舟"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-006",
+        "page_hit": true,
+        "latency_ms": 16,
+        "top_titles": [
+          "凝滞虚影 • 空海之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-008",
+        "page_hit": true,
+        "latency_ms": 12,
+        "top_titles": [
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-007",
+        "page_hit": false,
+        "latency_ms": 13,
+        "top_titles": [
+          "无主荒星茨冈尼亚"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-011",
+        "page_hit": true,
+        "latency_ms": 18,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-012",
+        "page_hit": false,
+        "latency_ms": 18,
+        "top_titles": [
+          "星体差分机"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-013",
+        "page_hit": false,
+        "latency_ms": 14,
+        "top_titles": [
+          "阿克赛"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-014",
+        "page_hit": false,
+        "latency_ms": 16,
+        "top_titles": [
+          "星体差分机"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-015",
+        "page_hit": false,
+        "latency_ms": 16,
+        "top_titles": [
+          "「星核猎手」萨姆（完整）"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-016",
+        "page_hit": true,
+        "latency_ms": 16,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-017",
+        "page_hit": true,
+        "latency_ms": 15,
+        "top_titles": [
+          "凝滞虚影 • 职司之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-018",
+        "page_hit": true,
+        "latency_ms": 14,
+        "top_titles": [
+          "凝滞虚影 • 凛月之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-019",
+        "page_hit": true,
+        "latency_ms": 12,
+        "top_titles": [
+          "凝滞虚影 • 天人之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-020",
+        "page_hit": true,
+        "latency_ms": 9,
+        "top_titles": [
+          "阿来"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-021",
+        "page_hit": true,
+        "latency_ms": 14,
+        "top_titles": [
+          "生命的翁瓦克"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-022",
+        "page_hit": true,
+        "latency_ms": 16,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-023",
+        "page_hit": true,
+        "latency_ms": 17,
+        "top_titles": [
+          "「我」的诞生"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-024",
+        "page_hit": true,
+        "latency_ms": 9,
+        "top_titles": [
+          "凝滞虚影 • 炎华之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-025",
+        "page_hit": true,
+        "latency_ms": 24,
+        "top_titles": [
+          "折断的龙骨"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-026",
+        "page_hit": true,
+        "latency_ms": 24,
+        "top_titles": [
+          "凝滞虚影 • 空海之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-027",
+        "page_hit": true,
+        "latency_ms": 18,
+        "top_titles": [
+          "凝滞虚影 • 凛月之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-028",
+        "page_hit": true,
+        "latency_ms": 25,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-029",
+        "page_hit": true,
+        "latency_ms": 18,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-030",
+        "page_hit": true,
+        "latency_ms": 17,
+        "top_titles": [
+          "折断的龙骨"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-032",
+        "page_hit": true,
+        "latency_ms": 10,
+        "top_titles": [
+          "太空封印站"
+        ]
+      }
+    ]
+  },
+  {
+    "label": "A1",
+    "config": {
+      "game": "sr",
+      "embed_model": null,
+      "variant": "base",
+      "use_bm25": false,
+      "use_vector": true,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 1,
+      "rrf_k": 60,
+      "rerank_candidates": 20
+    },
+    "aggregate": {
+      "recall@1": 0.8276,
+      "recall@1_std": 0.3844,
+      "hit_rate": 0.8276,
+      "hit_rate_std": 0.3844,
+      "mrr": 0.8276,
+      "mrr_std": 0.3844,
+      "ndcg": 0.8276,
+      "ndcg_std": 0.3844,
+      "n": 29,
+      "page_hit_rate": 0.8276,
+      "avg_latency_ms": 152
+    },
+    "rows": [
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-001",
+        "page_hit": true,
+        "latency_ms": 573,
+        "top_titles": [
+          "「我」的诞生"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-002",
+        "page_hit": true,
+        "latency_ms": 123,
+        "top_titles": [
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-003",
+        "page_hit": true,
+        "latency_ms": 375,
+        "top_titles": [
+          "凝滞虚影 • 巽风之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-004",
+        "page_hit": true,
+        "latency_ms": 125,
+        "top_titles": [
+          "阿然"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-005",
+        "page_hit": true,
+        "latency_ms": 171,
+        "top_titles": [
+          "不老者的仙舟"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-006",
+        "page_hit": true,
+        "latency_ms": 142,
+        "top_titles": [
+          "凝滞虚影 • 空海之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-008",
+        "page_hit": true,
+        "latency_ms": 122,
+        "top_titles": [
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-007",
+        "page_hit": false,
+        "latency_ms": 118,
+        "top_titles": [
+          "奔狼的都蓝王朝"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-011",
+        "page_hit": true,
+        "latency_ms": 124,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-012",
+        "page_hit": false,
+        "latency_ms": 124,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-013",
+        "page_hit": false,
+        "latency_ms": 121,
+        "top_titles": [
+          "奔狼的都蓝王朝"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-014",
+        "page_hit": false,
+        "latency_ms": 137,
+        "top_titles": [
+          "烦恼着，幸福着"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-015",
+        "page_hit": false,
+        "latency_ms": 121,
+        "top_titles": [
+          "喰云之首"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-016",
+        "page_hit": true,
+        "latency_ms": 124,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-017",
+        "page_hit": true,
+        "latency_ms": 149,
+        "top_titles": [
+          "凝滞虚影 • 职司之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-018",
+        "page_hit": true,
+        "latency_ms": 145,
+        "top_titles": [
+          "凝滞虚影 • 凛月之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-019",
+        "page_hit": true,
+        "latency_ms": 115,
+        "top_titles": [
+          "凝滞虚影 • 天人之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-020",
+        "page_hit": true,
+        "latency_ms": 118,
+        "top_titles": [
+          "阿来"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-021",
+        "page_hit": true,
+        "latency_ms": 138,
+        "top_titles": [
+          "生命的翁瓦克"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-022",
+        "page_hit": true,
+        "latency_ms": 118,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-023",
+        "page_hit": true,
+        "latency_ms": 125,
+        "top_titles": [
+          "「我」的诞生"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-024",
+        "page_hit": true,
+        "latency_ms": 123,
+        "top_titles": [
+          "凝滞虚影 • 炎华之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-025",
+        "page_hit": true,
+        "latency_ms": 120,
+        "top_titles": [
+          "折断的龙骨"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-026",
+        "page_hit": true,
+        "latency_ms": 118,
+        "top_titles": [
+          "凝滞虚影 • 空海之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-027",
+        "page_hit": true,
+        "latency_ms": 125,
+        "top_titles": [
+          "凝滞虚影 • 凛月之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-028",
+        "page_hit": true,
+        "latency_ms": 117,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-029",
+        "page_hit": true,
+        "latency_ms": 120,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-030",
+        "page_hit": true,
+        "latency_ms": 133,
+        "top_titles": [
+          "折断的龙骨"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-032",
+        "page_hit": true,
+        "latency_ms": 150,
+        "top_titles": [
+          "太空封印站"
+        ]
+      }
+    ]
+  },
+  {
+    "label": "A2",
+    "config": {
+      "game": "sr",
+      "embed_model": null,
+      "variant": "base",
+      "use_bm25": true,
+      "use_vector": true,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 1,
+      "rrf_k": 60,
+      "rerank_candidates": 20
+    },
+    "aggregate": {
+      "recall@1": 0.8621,
+      "recall@1_std": 0.3509,
+      "hit_rate": 0.8621,
+      "hit_rate_std": 0.3509,
+      "mrr": 0.8621,
+      "mrr_std": 0.3509,
+      "ndcg": 0.8621,
+      "ndcg_std": 0.3509,
+      "n": 29,
+      "page_hit_rate": 0.8621,
+      "avg_latency_ms": 197
+    },
+    "rows": [
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-001",
+        "page_hit": true,
+        "latency_ms": 1838,
+        "top_titles": [
+          "「我」的诞生"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-002",
+        "page_hit": true,
+        "latency_ms": 132,
+        "top_titles": [
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-003",
+        "page_hit": true,
+        "latency_ms": 139,
+        "top_titles": [
+          "凝滞虚影 • 巽风之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-004",
+        "page_hit": true,
+        "latency_ms": 132,
+        "top_titles": [
+          "阿然"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-005",
+        "page_hit": true,
+        "latency_ms": 141,
+        "top_titles": [
+          "不老者的仙舟"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-006",
+        "page_hit": true,
+        "latency_ms": 138,
+        "top_titles": [
+          "凝滞虚影 • 空海之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-008",
+        "page_hit": true,
+        "latency_ms": 141,
+        "top_titles": [
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-007",
+        "page_hit": false,
+        "latency_ms": 142,
+        "top_titles": [
+          "无主荒星茨冈尼亚"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-011",
+        "page_hit": true,
+        "latency_ms": 144,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-012",
+        "page_hit": false,
+        "latency_ms": 138,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-013",
+        "page_hit": false,
+        "latency_ms": 138,
+        "top_titles": [
+          "无主荒星茨冈尼亚"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-014",
+        "page_hit": true,
+        "latency_ms": 138,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-015",
+        "page_hit": false,
+        "latency_ms": 139,
+        "top_titles": [
+          "「星核猎手」萨姆（完整）"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-016",
+        "page_hit": true,
+        "latency_ms": 136,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-017",
+        "page_hit": true,
+        "latency_ms": 146,
+        "top_titles": [
+          "凝滞虚影 • 职司之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-018",
+        "page_hit": true,
+        "latency_ms": 147,
+        "top_titles": [
+          "凝滞虚影 • 凛月之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-019",
+        "page_hit": true,
+        "latency_ms": 133,
+        "top_titles": [
+          "凝滞虚影 • 天人之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-020",
+        "page_hit": true,
+        "latency_ms": 125,
+        "top_titles": [
+          "阿来"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-021",
+        "page_hit": true,
+        "latency_ms": 132,
+        "top_titles": [
+          "生命的翁瓦克"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-022",
+        "page_hit": true,
+        "latency_ms": 135,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-023",
+        "page_hit": true,
+        "latency_ms": 150,
+        "top_titles": [
+          "「我」的诞生"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-024",
+        "page_hit": true,
+        "latency_ms": 142,
+        "top_titles": [
+          "凝滞虚影 • 炎华之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-025",
+        "page_hit": true,
+        "latency_ms": 145,
+        "top_titles": [
+          "折断的龙骨"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-026",
+        "page_hit": true,
+        "latency_ms": 153,
+        "top_titles": [
+          "凝滞虚影 • 空海之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-027",
+        "page_hit": true,
+        "latency_ms": 141,
+        "top_titles": [
+          "凝滞虚影 • 凛月之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-028",
+        "page_hit": true,
+        "latency_ms": 140,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-029",
+        "page_hit": true,
+        "latency_ms": 139,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-030",
+        "page_hit": true,
+        "latency_ms": 141,
+        "top_titles": [
+          "折断的龙骨"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-032",
+        "page_hit": true,
+        "latency_ms": 134,
+        "top_titles": [
+          "太空封印站"
+        ]
+      }
+    ]
+  },
+  {
+    "label": "A3",
+    "config": {
+      "game": "sr",
+      "embed_model": null,
+      "variant": "base",
+      "use_bm25": true,
+      "use_vector": true,
+      "use_rerank": true,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 1,
+      "rrf_k": 60,
+      "rerank_candidates": 20
+    },
+    "aggregate": {
+      "recall@1": 0.9655,
+      "recall@1_std": 0.1857,
+      "hit_rate": 0.9655,
+      "hit_rate_std": 0.1857,
+      "mrr": 0.9655,
+      "mrr_std": 0.1857,
+      "ndcg": 0.9655,
+      "ndcg_std": 0.1857,
+      "n": 29,
+      "page_hit_rate": 0.9655,
+      "avg_latency_ms": 548
+    },
+    "rows": [
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-001",
+        "page_hit": true,
+        "latency_ms": 2335,
+        "top_titles": [
+          "「我」的诞生"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-002",
+        "page_hit": true,
+        "latency_ms": 479,
+        "top_titles": [
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-003",
+        "page_hit": true,
+        "latency_ms": 498,
+        "top_titles": [
+          "凝滞虚影 • 巽风之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-004",
+        "page_hit": true,
+        "latency_ms": 499,
+        "top_titles": [
+          "阿然"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-005",
+        "page_hit": true,
+        "latency_ms": 477,
+        "top_titles": [
+          "不老者的仙舟"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-006",
+        "page_hit": true,
+        "latency_ms": 434,
+        "top_titles": [
+          "凝滞虚影 • 空海之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-008",
+        "page_hit": true,
+        "latency_ms": 474,
+        "top_titles": [
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-007",
+        "page_hit": true,
+        "latency_ms": 465,
+        "top_titles": [
+          "太空封印站"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-011",
+        "page_hit": true,
+        "latency_ms": 535,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-012",
+        "page_hit": true,
+        "latency_ms": 469,
+        "top_titles": [
+          "折断的龙骨"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-013",
+        "page_hit": true,
+        "latency_ms": 470,
+        "top_titles": [
+          "生命的翁瓦克"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-014",
+        "page_hit": true,
+        "latency_ms": 536,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-015",
+        "page_hit": false,
+        "latency_ms": 455,
+        "top_titles": [
+          "「星核猎手」萨姆（完整）"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-016",
+        "page_hit": true,
+        "latency_ms": 468,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-017",
+        "page_hit": true,
+        "latency_ms": 443,
+        "top_titles": [
+          "凝滞虚影 • 职司之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-018",
+        "page_hit": true,
+        "latency_ms": 427,
+        "top_titles": [
+          "凝滞虚影 • 凛月之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-019",
+        "page_hit": true,
+        "latency_ms": 484,
+        "top_titles": [
+          "凝滞虚影 • 天人之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-020",
+        "page_hit": true,
+        "latency_ms": 454,
+        "top_titles": [
+          "阿来"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-021",
+        "page_hit": true,
+        "latency_ms": 487,
+        "top_titles": [
+          "生命的翁瓦克"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-022",
+        "page_hit": true,
+        "latency_ms": 505,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-023",
+        "page_hit": true,
+        "latency_ms": 500,
+        "top_titles": [
+          "「我」的诞生"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-024",
+        "page_hit": true,
+        "latency_ms": 638,
+        "top_titles": [
+          "凝滞虚影 • 炎华之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-025",
+        "page_hit": true,
+        "latency_ms": 502,
+        "top_titles": [
+          "折断的龙骨"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-026",
+        "page_hit": true,
+        "latency_ms": 485,
+        "top_titles": [
+          "凝滞虚影 • 空海之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-027",
+        "page_hit": true,
+        "latency_ms": 434,
+        "top_titles": [
+          "凝滞虚影 • 凛月之形"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-028",
+        "page_hit": true,
+        "latency_ms": 483,
+        "top_titles": [
+          "奇想蕉乐园"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-029",
+        "page_hit": true,
+        "latency_ms": 468,
+        "top_titles": [
+          "繁星竞技场"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-030",
+        "page_hit": true,
+        "latency_ms": 468,
+        "top_titles": [
+          "折断的龙骨"
+        ]
+      },
+      {
+        "recall@1": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "sr-032",
+        "page_hit": true,
+        "latency_ms": 542,
+        "top_titles": [
+          "太空封印站"
+        ]
+      }
+    ]
+  }
+]

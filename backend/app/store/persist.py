@@ -1,0 +1,401 @@
+"""MySQL 持久化：结构化数据 + Agent 运行轨迹。
+
+分工（这是整个存储设计的核心）：
+- **向量库**管 chunk 正文与 embedding（语义召回）
+- **MySQL** 管页面元数据、infobox 结构化数值、Agent 轨迹、评测结果（精确查询与可观测性）
+
+两类查询走不同存储是刻意的：
+"太空封印站几件套"要的是精确字段 → SQL；
+"攻击力不够又想更快该带哪个"要的是语义 → 向量。
+"""
+
+from __future__ import annotations
+
+import logging
+
+from sqlalchemy import select
+from sqlalchemy.dialects.mysql import insert as mysql_insert
+
+from app.core.config import Settings, get_settings
+
+# 这两个都叫 EvalCase 但完全是两回事：一个是评测集定义（dataclass），
+# 一个是数据库表（SQLAlchemy model）。同名裸导入时后者会把前者顶掉，
+# 于是下面构造 EvalCase(...) 实际在构造 ORM 对象 —— 必须显式区分。
+from app.eval.cases import EvalCase as EvalCaseDef
+from app.ingest.pipeline import IngestConfig, load_cached_page
+from app.store.db import MySQLUnavailable, init_db, session_scope
+from app.store.models import ChunkMeta, EvalResult, Fact, Message, Page, Run, Session, ToolCallLog
+from app.store.models import EvalCase as EvalCaseRow
+
+logger = logging.getLogger(__name__)
+
+
+# --------------------------------------------------------------------------- #
+# 会话（多轮对话）
+# --------------------------------------------------------------------------- #
+async def ensure_session(session_key: str, game: str = "sr", settings: Settings | None = None) -> bool:
+    s = settings or get_settings()
+    try:
+        async with session_scope(s) as session:
+            ins = mysql_insert(Session).values(session_key=session_key, game=game)
+            await session.execute(ins.on_duplicate_key_update(game=Session.game))
+        return True
+    except MySQLUnavailable:
+        return False
+
+
+async def load_history(session_key: str, limit: int = 8, settings: Settings | None = None) -> list[dict]:
+    """取最近若干轮对话，供 Agent 的 history 用。
+
+    只保留 user/assistant 两种角色：tool 消息不带 tool_call_id 重放给模型会直接 400。
+    """
+    s = settings or get_settings()
+    try:
+        async with session_scope(s) as session:
+            stmt = (
+                select(Message)
+                .where(Message.session_key == session_key, Message.role.in_(("user", "assistant")))
+                .order_by(Message.id.desc())
+                .limit(limit)
+            )
+            rows = list((await session.execute(stmt)).scalars())
+    except MySQLUnavailable:
+        return []
+    # SQL 是倒序取出来的，回填给模型要按时间正序
+    return [{"role": r.role, "content": r.content} for r in reversed(rows)]
+
+
+async def save_turn(
+    session_key: str,
+    *,
+    question: str,
+    answer: str,
+    refs: list | None = None,
+    settings: Settings | None = None,
+) -> bool:
+    s = settings or get_settings()
+    try:
+        await ensure_session(session_key, settings=s)
+        async with session_scope(s) as session:
+            await session.execute(
+                mysql_insert(Message).values([
+                    {"session_key": session_key, "role": "user", "content": question[:8000]},
+                    {"session_key": session_key, "role": "assistant", "content": answer[:8000],
+                     "refs": refs or None},
+                ])
+            )
+        return True
+    except MySQLUnavailable:
+        return False
+
+
+async def list_sessions(limit: int = 20, settings: Settings | None = None) -> list[dict]:
+    s = settings or get_settings()
+    try:
+        async with session_scope(s) as session:
+            stmt = select(Session).order_by(Session.id.desc()).limit(limit)
+            rows = (await session.execute(stmt)).scalars().all()
+    except MySQLUnavailable:
+        return []
+    return [{"session_key": r.session_key, "game": r.game,
+             "created_at": r.created_at.isoformat() if r.created_at else None} for r in rows]
+
+
+# --------------------------------------------------------------------------- #
+# 评测结果落库
+# --------------------------------------------------------------------------- #
+async def save_eval_run(
+    *,
+    exp_label: str,
+    config: dict,
+    rows: list[dict],
+    settings: Settings | None = None,
+) -> int:
+    """把一次评测跑分写进 eval_results。
+
+    落库而不只是写 JSON 文件，是为了能做回归：
+    改了分块参数后跑一遍，直接对比两次的 recall@3 差了多少。
+    """
+    s = settings or get_settings()
+    if not await init_db(s):
+        return 0
+    try:
+        async with session_scope(s) as session:
+            payload = []
+            for r in rows:
+                k = r.get("k", 5)
+                payload.append({
+                    "exp_label": exp_label,
+                    "case_id": r.get("case_id", ""),
+                    "config": config,
+                    "retrieved_ids": r.get("top_titles", []),
+                    "recall_at_k": float(r.get(f"recall@{k}", 0.0)),
+                    "mrr": float(r.get("mrr", 0.0)),
+                    "ndcg": float(r.get("ndcg", 0.0)),
+                    "hit_rate": 1.0 if r.get("page_hit") else 0.0,
+                    "latency_ms": int(r.get("latency_ms", 0)),
+                })
+            if payload:
+                ins = mysql_insert(EvalResult).values(payload)
+                await session.execute(
+                    ins.on_duplicate_key_update(
+                        recall_at_k=ins.inserted.recall_at_k,
+                        mrr=ins.inserted.mrr,
+                        ndcg=ins.inserted.ndcg,
+                        hit_rate=ins.inserted.hit_rate,
+                        latency_ms=ins.inserted.latency_ms,
+                        config=ins.inserted.config,
+                    )
+                )
+        return len(payload)
+    except MySQLUnavailable as exc:
+        logger.warning("评测结果未落库：%s", exc)
+        return 0
+
+
+async def load_eval_cases(game: str, settings: Settings | None = None) -> list[EvalCaseDef]:
+    """从库里读评测集；库里没有就回退到代码里的定义。"""
+    s = settings or get_settings()
+    try:
+        async with session_scope(s) as session:
+            rows = (
+                await session.execute(select(EvalCaseRow).where(EvalCaseRow.game == game))
+            ).scalars().all()
+    except MySQLUnavailable:
+        return []
+    return [
+        EvalCaseDef(r.case_id, r.game, r.category, r.question, r.gold_answer, r.gold_pages or [],
+                    r.difficulty, r.notes or "")
+        for r in rows
+    ]
+
+
+# --------------------------------------------------------------------------- #
+# 语料回填
+# --------------------------------------------------------------------------- #
+def cached_page_ids(game: str) -> list[int]:
+    """扫描本地原始缓存。
+
+    注意层级：persist.py 位于 backend/app/store/，所以项目根是 parents[3]，
+    写成 parents[2] 会指到 backend/，data/ 在那里不存在，
+    表现为"回填了 0 页且不报错"—— 这种静默失败最难查。
+    """
+    import re
+    from pathlib import Path
+
+    d = Path(__file__).resolve().parents[3] / "data" / "raw" / game
+    if not d.is_dir():
+        return []
+    return sorted(
+        int(m.group(1)) for m in (re.match(r"^(\d+)_.+\.txt$", f.name) for f in d.glob("*.txt")) if m
+    )
+
+
+async def backfill_corpus(game: str = "sr", settings: Settings | None = None) -> dict:
+    """把本地缓存的页面 / chunk / infobox 事实全量写入 MySQL。
+
+    走 upsert（ON DUPLICATE KEY UPDATE），可以反复执行不产生重复。
+
+    注意：on_duplicate_key_update 里必须用 ORM 属性（如 Page.title），
+    不能用 sqlalchemy.column("title") —— 后者没有表上下文，
+    MySQL 会报 1052 Column 'title' in field list is ambiguous。
+    """
+    s = settings or get_settings()
+    if not await init_db(s):
+        return {"ok": False, "reason": "MySQL 不可用"}
+
+    cfg = IngestConfig.from_settings(game)
+    from app.ingest.pipeline import page_to_chunks, page_to_facts
+
+    pages_w = chunks_w = facts_w = 0
+    errors: list[str] = []
+
+    async with session_scope(s) as session:
+        for pid in cached_page_ids(game):
+            page = load_cached_page(pid, game)
+            if page is None:
+                errors.append(f"page {pid} 无法复原")
+                continue
+            url = f"{s.wiki_base}/{game}/{page.title}"
+            chunks = page_to_chunks(page, cfg, url)
+            facts = page_to_facts(page, cfg, url)
+
+            # upsert 写法必须是两步：先拿到 ins，再用 ins.inserted.xxx 引用"新值"。
+            # 直接在链式调用里写 ins.value 会 UnboundLocalError；
+            # 写 Model.value 则生成 `table`.`col`，MySQL 读的是**旧值** ——
+            # 两种写法都不报错，但数据永远不更新，非常难查。
+            ins = mysql_insert(Page).values(
+                game=game,
+                page_id=page.page_id,
+                title=page.title,
+                url=url,
+                last_revision=page.revision_id,
+                last_revision_ts=page.last_revision or "",
+                n_chars=sum(c.char_len for c in chunks),
+                n_chunks=len(chunks),
+            )
+            await session.execute(
+                ins.on_duplicate_key_update(
+                    title=ins.inserted.title,
+                    url=ins.inserted.url,
+                    last_revision=ins.inserted.last_revision,
+                    last_revision_ts=ins.inserted.last_revision_ts,
+                    n_chars=ins.inserted.n_chars,
+                    n_chunks=ins.inserted.n_chunks,
+                )
+            )
+            pages_w += 1
+
+            if chunks:
+                ins = mysql_insert(ChunkMeta).values(
+                    [
+                        {
+                            "chunk_id": c.chunk_id, "game": game, "page_id": c.page_id,
+                            "page_title": c.page_title, "section": c.section[:250],
+                            "chunk_index": c.chunk_index, "n_chars": c.char_len,
+                            "last_revision": c.last_revision,
+                            "last_revision_ts": c.last_revision_ts or "",
+                            "source_url": c.source_url, "truncated": int(bool(c.truncated)),
+                        }
+                        for c in chunks
+                    ]
+                )
+                await session.execute(
+                    ins.on_duplicate_key_update(
+                        section=ins.inserted.section,
+                        n_chars=ins.inserted.n_chars,
+                        last_revision=ins.inserted.last_revision,
+                        last_revision_ts=ins.inserted.last_revision_ts,
+                        source_url=ins.inserted.source_url,
+                    )
+                )
+                chunks_w += len(chunks)
+
+            if facts:
+                ins = mysql_insert(Fact).values(facts)
+                await session.execute(
+                    ins.on_duplicate_key_update(
+                        value=ins.inserted.value,
+                        value_num=ins.inserted.value_num,
+                        source_url=ins.inserted.source_url,
+                        last_revision_ts=ins.inserted.last_revision_ts,
+                    )
+                )
+                facts_w += len(facts)
+
+    return {
+        "ok": True,
+        "pages": pages_w,
+        "chunks": chunks_w,
+        "facts": facts_w,
+        "errors": errors[:10],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Agent 运行轨迹
+# --------------------------------------------------------------------------- #
+async def save_run(state, settings: Settings | None = None) -> bool:
+    """把一次 Agent 运行落库。
+
+    MySQL 不可用时返回 False 而不是抛异常 —— 轨迹持久化是加分项，
+    不该因为它让整个问答接口挂掉。
+    """
+    s = settings or get_settings()
+    try:
+        async with session_scope(s) as session:
+            ins = mysql_insert(Run).values(
+                run_id=state.run_id,
+                session_key=state.session_key,
+                question=state.question,
+                answer=state.answer[:8000],
+                game=state.game,
+                model=s.deepseek_chat_model,
+                steps=len(state.steps),
+                prompt_tokens=state.prompt_tokens,
+                completion_tokens=state.completion_tokens,
+                tool_calls=len(state.steps),
+                tool_failures=state.tool_failures,
+                stop_reason=state.stop_reason,
+                latency_ms=state.elapsed_ms,
+                refs=state.refs or None,
+                config={"guard": state.guard_stats()} if state.guard else None,
+            )
+            await session.execute(
+                ins.on_duplicate_key_update(
+                    answer=ins.inserted.answer,
+                    steps=ins.inserted.steps,
+                    latency_ms=ins.inserted.latency_ms,
+                )
+            )
+            if state.steps:
+                await session.execute(
+                    mysql_insert(ToolCallLog).values(
+                        [
+                            {
+                                "run_id": state.run_id, "step": st.step, "tool_name": st.tool_name,
+                                "args": st.args, "ok": int(bool(st.ok)),
+                                "error": st.error, "latency_ms": st.latency_ms,
+                                "result_chars": st.result_chars,
+                            }
+                            for st in state.steps
+                        ]
+                    )
+                )
+        return True
+    except MySQLUnavailable as exc:
+        logger.warning("运行轨迹未落库（MySQL 不可用）：%s", exc)
+        return False
+
+
+async def recent_runs(limit: int = 20, settings: Settings | None = None) -> list[dict]:
+    s = settings or get_settings()
+    try:
+        async with session_scope(s) as session:
+            stmt = (
+                select(Run)
+                .order_by(Run.id.desc())
+                .limit(limit)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+    except MySQLUnavailable:
+        return []
+    return [
+        {
+            "run_id": r.run_id, "game": r.game, "steps": r.steps,
+            "tool_failures": r.tool_failures, "stop_reason": r.stop_reason,
+            "latency_ms": r.latency_ms, "prompt_tokens": r.prompt_tokens,
+            "completion_tokens": r.completion_tokens,
+            "question": r.question[:120], "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
+async def run_detail(run_id: str, settings: Settings | None = None) -> dict | None:
+    s = settings or get_settings()
+    try:
+        async with session_scope(s) as session:
+            run = (await session.execute(select(Run).where(Run.run_id == run_id))).scalar_one_or_none()
+            if run is None:
+                return None
+            calls = (
+                await session.execute(
+                    select(ToolCallLog).where(ToolCallLog.run_id == run_id).order_by(ToolCallLog.step)
+                )
+            ).scalars().all()
+            return {
+                "run_id": run.run_id, "question": run.question, "answer": run.answer,
+                "game": run.game, "model": run.model, "stop_reason": run.stop_reason,
+                "latency_ms": run.latency_ms, "usage": {
+                    "prompt": run.prompt_tokens, "completion": run.completion_tokens,
+                },
+                "refs": run.refs or [], "config": run.config or {},
+                "tool_calls": [
+                    {"step": c.step, "tool": c.tool_name, "args": c.args, "ok": bool(c.ok),
+                     "ms": c.latency_ms, "chars": c.result_chars, "error": c.error}
+                    for c in calls
+                ],
+            }
+    except MySQLUnavailable:
+        return None

@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# 环境与密钥(严禁提交)
+.env
+
+# 运行时数据
+# data/raw 是可再生派生物（重新抓取即可），data/lance 是当前默认的向量索引，
+# data/vectors 是 numpy fallback 的索引 —— 三个都可以用 rebuild_index.py 重建，
+# 而且 data/lance 有 60MB 二进制，提交进去只会让仓库没法看 diff。
+# checkpoint 与 eval 结果要保留：它们是实验可复现的证据。
+data/chroma/
+data/lance/
+data/vectors/
+data/raw/
+data/checkpoints/
+*.sqlite
+*.db
+.tmp_probe/
+
+# 自检/验收脚本的临时产物
+_tmp_*.py
+
+# 前端
+node_modules/
+dist/
+.vite/
+
+# 编辑器
+.idea/
+.vscode/
+*.log

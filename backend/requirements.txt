@@ -1,0 +1,42 @@
+# ---- Web 框架 ----
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic>=2.11,<3
+pydantic-settings>=2.7.0
+python-multipart==0.0.20
+
+# ---- HTTP 客户端 ----
+httpx==0.28.1
+
+# ---- LLM / Embedding / Rerank ----
+openai==1.59.6
+
+# ---- 向量库 ----
+# LanceDB 0.40 提供 cp313 预编译轮子；0.40 起 create_index 建的是 IVF-PQ 近似索引，
+# 会量化向量并改变排名，所以本项目默认只做暴力精确扫描（见 lance_store.py）。
+lancedb==0.40.0
+numpy==2.5.4
+
+# ---- 稀疏检索 ----
+rank-bm25==0.2.2
+
+# ---- 数据库 ----
+SQLAlchemy==2.0.36
+greenlet==3.1.1
+aiomysql==0.2.0
+PyMySQL==1.1.1
+cryptography==44.0.0
+
+# ---- 文本处理 ----
+beautifulsoup4==4.12.3
+lxml==5.3.0
+jieba==0.42.1
+
+# ---- 配置与日志 ----
+python-dotenv==1.0.1
+loguru==0.7.3
+
+# ---- 开发工具 ----
+pytest==8.3.4
+pytest-asyncio==0.25.0
+ruff==0.8.6

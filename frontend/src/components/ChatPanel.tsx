@@ -1,0 +1,399 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { Health, Turn } from '../types'
+import type { BgSettings, Theme } from '../prefs'
+import { ToolTimeline } from './ToolTimeline'
+import { SettingsPanel } from './SettingsPanel'
+
+/** 样例问题覆盖三个库，方便演示"加一个游戏 = 多个体系都能查" */
+const SAMPLES = [
+  '位面饰品太空封印站的两件套效果是什么？',
+  '圣遗物套装有哪些效果？',
+  '绝区零的邦布等级怎么提升？',
+  '太空封印站给攻击力1000的角色加多少攻击力？请给出计算过程。',
+  '崩坏3的雷电女王怎么配装？',
+]
+
+/** 基座 id → 展示名。显示模型全名才能看出「换的到底是哪个模型」。 */
+const BACKEND_LABELS: Record<string, string> = {
+  deepseek: 'DeepSeek',
+  minimax: 'MiniMax',
+}
+
+interface Props {
+  turns: Turn[]
+  busy: boolean
+  health: Health | null
+  backend: string
+  onBackend: (b: string) => void
+  theme: Theme
+  onToggleTheme: () => void
+  /** 设置面板里点的是明确的主题，与 toggle 语义不同 */
+  setTheme: (t: Theme) => void
+  onOpenSettings: () => void
+  settingsOpen: boolean
+  /** 背景设置由 App 持有（背景图层在那里渲染），必须传进来而不是各存一份 */
+  bg: BgSettings
+  onBg: (b: BgSettings) => void
+  onSend: (question: string, game: string, backend: string) => void
+  onStop: () => void
+  onReset: () => void
+}
+
+export function ChatPanel({
+  turns,
+  busy,
+  health,
+  backend,
+  onBackend,
+  theme,
+  onToggleTheme,
+  setTheme,
+  onOpenSettings,
+  settingsOpen,
+  bg,
+  onBg,
+  onSend,
+  onStop,
+  onReset,
+}: Props) {
+  const [input, setInput] = useState('')
+  const [game, setGame] = useState('sr')
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  // 游戏列表完全由后端下发 —— 前端不再写死「只有星铁和绝区零」，
+  // 加第四个库时这里一行都不用改。
+  const games = useMemo(() => Object.entries(health?.games ?? { sr: '崩坏：星穹铁道' }), [health])
+  const uncovered = health?.known_uncovered ?? {}
+
+  // 库刚加载完时，如果当前选的 game 已经不存在了，纠正到第一个
+  useEffect(() => {
+    if (games.length && !games.some(([slug]) => slug === game)) setGame(games[0][0])
+  }, [games, game])
+
+  // 只有配好密钥的基座才出现在切换器里 —— 点了就报错不如不显示
+  const backends = (health?.chat_backends ?? []).filter((b) => b.configured)
+  const active = backends.find((b) => b.id === backend) ?? backends[0]
+  const activeGame = games.find(([slug]) => slug === game)
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+  }, [turns])
+
+  // 输入框随内容增高，但设上限，超出后内部滚动
+  useEffect(() => {
+    const ta = taRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
+  }, [input])
+
+  const submit = () => {
+    const q = input.trim()
+    if (!q || busy || !active) return
+    onSend(q, game, active.id)
+    setInput('')
+  }
+
+  return (
+    <div className="chat">
+      <header className="chat-head">
+        <div className="chat-title">
+          <h1>知识库问答</h1>
+          <p className="muted">ReAct Agent 先检索再作答，工具调用过程全程可见</p>
+        </div>
+
+        <div className="head-actions">
+          <Segmented
+            value={game}
+            onChange={setGame}
+            options={games.map(([slug, label]) => ({ id: slug, label }))}
+          />
+
+          {backends.length > 1 && (
+            <div className="model-picker">
+              <span className="picker-label">模型</span>
+              <Segmented
+                value={active?.id ?? backend}
+                onChange={onBackend}
+                options={backends.map((b) => ({
+                  id: b.id,
+                  label: BACKEND_LABELS[b.id] ?? b.id,
+                  title: b.model,
+                }))}
+              />
+            </div>
+          )}
+
+          <button className="ghost" onClick={onReset} disabled={turns.length === 0}>
+            清空
+          </button>
+          {busy && (
+            <button className="danger" onClick={onStop}>
+              中断
+            </button>
+          )}
+          <button className="icon-btn" onClick={onToggleTheme} aria-label="切换主题">
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
+          <button
+            className={settingsOpen ? 'icon-btn active' : 'icon-btn'}
+            onClick={onOpenSettings}
+            aria-label="外观设置"
+          >
+            ⚙
+          </button>
+        </div>
+      </header>
+
+      {settingsOpen && (
+        <SettingsPanel
+          theme={theme}
+          bg={bg}
+          onTheme={setTheme}
+          onBg={onBg}
+          onClose={onOpenSettings}
+        />
+      )}
+
+      <div className="messages" ref={scrollRef}>
+        {turns.length === 0 && (
+          <div className="empty">
+            <div className="empty-hint">
+              知识库覆盖 {games.map(([, l]) => l).join(' / ')}。
+              {Object.keys(uncovered).length > 0
+                ? `问点别的游戏（比如 ${Object.values(uncovered)[0]}）会得到明确的边界说明，而不是编一个答案。`
+                : '试一个问题：'}
+            </div>
+            <div className="samples">
+              {SAMPLES.map((s) => (
+                <button
+                  key={s}
+                  className="sample"
+                  onClick={() => onSend(s, game, active?.id ?? 'deepseek')}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {turns.map((t) => (
+          <div key={t.id} className="turn">
+            <div className="q">
+              <span
+                className="badge"
+                data-scope={t.outOfScope ? 'out' : undefined}
+                title={t.outOfScope ? '该游戏未收录，本轮为越界拒答' : undefined}
+              >
+                {t.outOfScope ? (uncovered[t.outOfScope] ?? t.outOfScope) : gameLabel(t.game, health)}
+              </span>
+              <span>{t.question}</span>
+            </div>
+
+            <ToolTimeline tools={t.tools} />
+
+            <div className="a">
+              {t.answer ? (
+                <>
+                  <Markdownish text={t.answer} />
+                  <CopyButton text={t.answer} />
+                </>
+              ) : t.error ? null : (
+                <span className="muted thinking">
+                  <span className="spinner" /> 思考中…
+                </span>
+              )}
+              {t.error && (
+                <div className="error">
+                  出错了：{t.error}
+                  <button className="ghost mini" onClick={() => onSend(t.question, t.game, t.backend)}>
+                    重试
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {t.refs.length > 0 && (
+              <div className="refs">
+                <span className="refs-title">引用来源</span>
+                {t.refs.map((r) => (
+                  <a key={r.url} href={r.url} target="_blank" rel="noreferrer">
+                    {r.url.replace(/^https?:\/\/wiki\.biligame\.com\//, '')}
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {t.done && (
+              <div className="metrics">
+                <Stat label="模型" value={BACKEND_LABELS[t.backend] ?? t.backend} />
+                <Stat label="步数" value={t.done.steps} />
+                <Stat
+                  label="工具失败"
+                  value={t.done.tool_failures}
+                  tone={t.done.tool_failures ? 'bad' : 'ok'}
+                />
+                <Stat label="耗时" value={`${t.done.elapsed_ms}ms`} />
+                <Stat label="Token" value={`${t.done.prompt_tokens}/${t.done.completion_tokens}`} />
+                <Stat
+                  label="终止"
+                  value={t.done.stop_reason}
+                  tone={t.done.stop_reason === 'out_of_scope' ? 'warn' : undefined}
+                />
+                <Stat label="Run" value={t.done.run_id.slice(0, 8)} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="composer">
+        <textarea
+          ref={taRef}
+          value={input}
+          placeholder={`问点${activeGame?.[1] ?? '游戏'}内的事，或问一个未收录的游戏看看边界处理`}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              submit()
+            }
+          }}
+          rows={2}
+        />
+        <div className="composer-side">
+          <button onClick={submit} disabled={busy || !input.trim() || !active}>
+            {busy ? '回答中…' : '发送'}
+          </button>
+          <span className="kbd-hint">
+            <kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function gameLabel(slug: string, health: Health | null): string {
+  return health?.games?.[slug] ?? slug
+}
+
+/** 分段控件。比原生 select 更能一眼看出「现在有几个选项、选的是哪个」。 */
+function Segmented({
+  value,
+  onChange,
+  options,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: Array<{ id: string; label: string; title?: string }>
+}) {
+  return (
+    <div className="segmented" role="group">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          title={o.title ?? o.label}
+          className={o.id === value ? 'seg active' : 'seg'}
+          onClick={() => onChange(o.id)}
+          aria-pressed={o.id === value}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      className="ghost mini copy"
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(
+          () => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1600)
+          },
+          () => setCopied(false),
+        )
+      }}
+    >
+      {copied ? '已复制' : '复制'}
+    </button>
+  )
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string | number
+  tone?: 'ok' | 'bad' | 'warn'
+}) {
+  return (
+    <span className="stat" data-tone={tone}>
+      <em>{label}</em>
+      {value}
+    </span>
+  )
+}
+
+/** 极简 Markdown 渲染：只处理 **粗体**、行内代码、列表和标题，不引第三方库。 */
+function Markdownish({ text }: { text: string }) {
+  const blocks = text.split('\n')
+  return (
+    <>
+      {blocks.map((line, i) => {
+        const t = line.trim()
+        if (!t) return <div key={i} style={{ height: 8 }} />
+        // 表格分隔行（|---|---|）不是内容，别渲染出来
+        if (/^\|?[\s|:-]+\|?$/.test(t) && t.includes('-')) return null
+        // Markdown 标题。切换基座后才发现必须处理：DeepSeek 习惯用粗体小标题，
+        // MiniMax 直接吐 "### xxx"，不处理就会把 ### 原样显示给用户。
+        const heading = t.match(/^(#{1,6})\s+(.*)$/)
+        if (heading) {
+          return (
+            <div key={i} className="md-h" data-level={Math.min(heading[1].length, 4)}>
+              {inline(heading[2])}
+            </div>
+          )
+        }
+        if (/^[-*]\s+/.test(t) || /^\d+\.\s+/.test(t)) {
+          return (
+            <div key={i} className="li">
+              {inline(t.replace(/^[-*]\s+|^\d+\.\s+/, ''))}
+            </div>
+          )
+        }
+        if (t.startsWith('|')) {
+          return (
+            <div key={i} className="row-line">
+              {inline(t.replace(/^\||\|$/g, ''))}
+            </div>
+          )
+        }
+        return (
+          <div key={i} className="para">
+            {inline(t)}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+function inline(s: string) {
+  const parts = s.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\])/g)
+  return parts.map((p, i) => {
+    if (p.startsWith('**') && p.endsWith('**')) return <strong key={i}>{p.slice(2, -2)}</strong>
+    if (p.startsWith('`') && p.endsWith('`')) return <code key={i}>{p.slice(1, -1)}</code>
+    if (p.startsWith('[') && p.endsWith(']')) return <em key={i} className="cite">{p}</em>
+    return <span key={i}>{p}</span>
+  })
+}
