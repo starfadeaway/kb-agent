@@ -10,6 +10,7 @@
 | 分块 / embed_mode 消融 | chunk 500 ≈ 800 > 1200；`embed_mode title→text` 使 MRR **0.966→0.885** | [`data/eval/exp_B0..B3_*.json`](data/eval) |
 | Agent 能力消融（n=15, Judge） | 无工具 **2.43** → `search_kb` **4.67** → 全套工具 4.80 | [`data/eval/exp_C.json`](data/eval/exp_C.json) |
 | 假前提题（幻觉测试） | 无检索 3.83 → 有检索 **5.00**（模型学会"明确说不知道"） | 同上 |
+| Chat 基座对比（n=15, DeepSeek⇄MiniMax） | 质量 **4.57 vs 4.00，p=0.167 未达显著**（不敢说谁更强）；延迟 **4.08×**（p=0.0011 显著）。两者失败模式**互补** | [`data/eval/exp_E.json`](data/eval/exp_E.json) |
 | 代价 | 挂知识库 = prompt token **×19.9**、延迟 3.5 倍；C2 比 C1 多花 8% token 只涨 0.13 分 | [`docs/cost_latency_quality.md`](docs/cost_latency_quality.md) |
 | 并发（真实问题压测） | 并发 4 吞吐 **×3.98**（5.01 req/s），4 档 top-5 结果**逐条一致** | [`docs/concurrency.md`](docs/concurrency.md) |
 | 流式 | TTFT **860ms** vs 非流式 3410ms（感知延迟 −75%），总耗时仅差 264ms | [`data/eval/probe_stream_latency.json`](data/eval) |
