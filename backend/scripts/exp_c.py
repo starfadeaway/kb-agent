@@ -47,8 +47,10 @@ from exp_common import (  # noqa: E402
     aggregate_rows,
     load_cases,
     paired_scores,
+    parse_games,
     print_summary,
     save,
+    subset_composition,
 )
 
 # 每级开放哪些工具 —— 唯一的变量
@@ -155,7 +157,9 @@ async def run_one(label: str, case_list, judge: Judge, *, concurrency: int = 2) 
 async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--labels", default="C0,C1,C2")
-    ap.add_argument("--limit", type=int, default=0, help="0 = 用 15 条子集")
+    ap.add_argument("--limit", type=int, default=0, help="0 = 用代表性子集")
+    ap.add_argument("--game", default="sr",
+                    help="目标库：sr / ys / zzz，可逗号分隔或 all")
     ap.add_argument("--concurrency", type=int, default=2,
                     help="同档内并发跑几条题。1=串行。默认 2（plan.md 原设计）。"
                          "注意：并发只影响墙钟，不影响质量指标；但 latency_ms 会因排队变长，"
@@ -163,8 +167,14 @@ async def main() -> None:
     ap.add_argument("--out", default=None, help="结果文件名；不给则按样本量自动命名")
     args = ap.parse_args()
 
-    case_list = load_cases(args.limit)
+    case_list = load_cases(args.limit, game=args.game)
     print(f"评测子集：{len(case_list)} 条，标签 {args.labels}，并发 {args.concurrency}")
+    # 题型构成必须打出来：三库题型分布差得很远（ys 可用题里 7/9 是 single_hop），
+    # 不看构成就比三库 judge 均值，等于把「题型构成差」读成「Agent 能力差」。
+    print(f"题型构成：{subset_composition(case_list)}")
+    if len(parse_games(args.game)) > 1:
+        print("  ⚠ 多库题混跑：各库题型构成不同（见上），**跨库均值不可直接比较**，"
+              "只能看同一库内的档位对比。")
     if args.concurrency > 1:
         print("  ⚠ 并发下 latency_ms 含排队时间，只用于本次内部参考，"
               "跨并发度的延迟数字不可比。\n")
@@ -178,7 +188,30 @@ async def main() -> None:
 
     # 输出名可指定：否则 --limit 4 这种试跑会静默覆盖掉正式的 15 条结果。
     # （和 exp_b 的 B0 读旧文件是同一类病：产物路径写死，跑错一次就没了）
-    out = args.out or f"exp_C{'' if len(case_list) == 15 else f'_{len(case_list)}'}.json"
+    #
+    # 单库时沿用历史命名 exp_C.json（n=15），多库时带库名 ——
+    # 用 `len(case_list) == 15` 判断单库在多库下会误判：
+    # 恰好 15 条的多库子集会被写成 exp_C.json，直接覆盖单库的历史产物。
+    games = parse_games(args.game)
+    if args.out:
+        out = args.out
+    elif len(games) > 1:
+        out = f"exp_C_{'_'.join(games)}.json"
+    else:
+        out = f"exp_C{'' if len(case_list) == 15 else f'_{len(case_list)}'}.json"
+
+    # 题型构成写进产物：三库题型分布差很多，后续汇总必须能看出
+    # 「三库均值差」里有多少来自题型构成而不是被测系统。
+    results[0]["_meta"] = {
+        "script": "exp_c.py",
+        "experiment": "C",
+        "game": args.game,
+        "games": games,
+        "n": len(case_list),
+        "subset_composition": subset_composition(case_list),
+        "concurrency": args.concurrency,
+        "note": "concurrency>1 时 latency_ms 含排队时间，跨并发度不可比",
+    }
     save(results, out)
     print_summary(results, f"实验 C：Agent 能力阶梯消融（生成侧，n={len(case_list)}）")
 

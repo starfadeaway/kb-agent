@@ -36,6 +36,21 @@ jieba==0.42.1
 python-dotenv==1.0.1
 loguru==0.7.3
 
+# ---- MCP（Model Context Protocol）----
+# ⚠️ **starlette 必须钉死在 0.41.x**，这不是随手写的，是踩坑换来的：
+#
+# mcp 2.3.0 声明 `starlette>=0.48`，直接 `pip install mcp` 会把 starlette
+# 顶到 1.8.0；而 fastapi 0.115.6 要求 starlette<0.42。
+# 结果是 FastAPI 连构造都失败：
+#     TypeError: Router.__init__() got an unexpected keyword argument 'on_startup'
+# —— 整个后端起不来，而且报错信息完全指不到「是你刚装的 mcp 干的」。
+#
+# 两者其实可以共存（实测 pip check 干净、MCP server 能正常列工具并调用），
+# 但必须**先装 starlette==0.41.3 再装 mcp**，否则 pip 解析顺序不可控。
+# 安装顺序见 docs/mcp.md。
+mcp==2.3.0
+starlette==0.41.3
+
 # ---- 开发工具 ----
 pytest==8.3.4
 pytest-asyncio==0.25.0

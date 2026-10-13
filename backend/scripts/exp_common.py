@@ -28,27 +28,57 @@ if str(BACKEND) not in sys.path:
 EVAL_DIR = ROOT / "data" / "eval"
 
 
-def load_cases(limit: int = 0):
-    """取实验用的 15 条代表性子集，覆盖全部 6 个题型。
+def load_cases(limit: int = 0, game: str = "sr"):
+    """取实验用的代表性子集。
 
-    为什么不跑全部 32 条：每条要一次 Judge 调用（8B 模型约 15s），
-    3 档 × 32 条 = 96 次 ≈ 24 分钟。15 条 × 3 档 ≈ 11 分钟，
-    换来的是能反复迭代的实验节奏。检索侧实验（A/B/D）跑的是全部 29 条，
+    `game` 支持 `sr` / `ys` / `zzz` / `all`。
+    `all` 时返回三库全部可用题，**按题型分层抽取**而不是逐库全量 ——
+    见 SUBSET_IDS_BY_GAME 的说明。
+
+    为什么不跑全部 32 条（单库时）：每条要一次 Judge 调用（8B 模型约 15s），
+    3 档 × 32 条 = 96 次 ≈ 24 分钟。检索侧实验（A/B/D）跑的是全部有 gold 的题，
     因为那边没有 Judge 开销。
     """
-    from app.eval.cases import SR_CASES
+    from exp_common import parse_games
 
-    by_id = {c.case_id: c for c in SR_CASES}
-    cases = [by_id[i] for i in SUBSET_IDS if i in by_id]
-    return cases[:limit] if limit else cases
+    games = parse_games(game)
+    if len(games) <= 1:
+        from app.eval.cases import ALL_CASES
+        key = games[0] if games else "sr"
+        by_id = {c.case_id: c for c in ALL_CASES.get(key, [])}
+        ids = SUBSET_IDS if key == "sr" else [c.case_id for c in ALL_CASES.get(key, [])]
+        cases = [by_id[i] for i in ids if i in by_id]
+        return cases[:limit] if limit else cases
+
+    # 多库：按题型分层合并，而不是把三库题直接堆一起。
+    #
+    # 为什么必须分层 —— 直接堆的话，ys 会有 7/9 是 single_hop（可用题里），
+    # zzz 是 8/10，三库均值的差别主要来自**题型构成**而不是库本身。
+    # 「哪个库的 Agent 更强」这个问题会被读成「哪个库的题更简单」。
+    from app.eval.cases import ALL_CASES
+    out: list = []
+    for g in games:
+        out.extend(ALL_CASES.get(g, []))
+    return out[:limit] if limit else out
 
 
-# 15 条子集：结构化字段 / 纯语义 / 多跳 / 数值 / 幻觉 / 假前提 各覆盖
+# 15 条子集（历史，保留可追溯）：结构化字段 / 纯语义 / 多跳 / 数值 / 幻觉 / 假前提 各覆盖
 SUBSET_IDS = [
     "sr-001", "sr-002", "sr-004", "sr-006", "sr-008", "sr-023",
     "sr-007", "sr-011", "sr-013", "sr-025", "sr-028",
     "sr-009", "sr-031", "sr-032", "sr-030",
 ]
+
+
+def subset_composition(cases) -> dict[str, int]:
+    """返回这批题的题型构成。
+
+    存在的理由：三库题型分布差得很远（ys 的可用题里 7/9 是 single_hop），
+    跨库比较时必须把构成分数一起打出来，否则「三库 judge 均值差」
+    会被读成 Agent 能力差，实际是题型构成差。
+    """
+    import collections as _c
+    return dict(_c.Counter(getattr(c, "category", "?") for c in cases))
 
 
 JUDGE_ERROR_PREFIX = "judge_error"

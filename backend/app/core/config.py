@@ -109,9 +109,25 @@ class Settings:
     tool_timeout: float = field(default_factory=lambda: _env_float("TOOL_TIMEOUT", 15))
     concurrency_limit: int = field(default_factory=lambda: _env_int("CONCURRENCY_LIMIT", 4))
     #: 逗号分隔的启用工具名，空 = 全部。
-    #: 默认只给 search_kb —— 实验 C 实测多挂 3 个工具没有可测收益（C1 4.60 vs C2 4.47，
-    #: p=0.47 未达显著）却要多付 22.6% token。改成全量前请先重跑实验 C。
+    #: 默认只给 search_kb —— 实验 C 实测多挂 3 个工具没有可测收益
+    #: （`data/eval/exp_C.json`，n_ok=13：C1 judge=4.7692 vs C2=4.7308，
+    #: 配对 p=0.1619 未达显著），却要多付约 23% 的 prompt token
+    #: （3869 → 4762）。改成全量前请先重跑实验 C。
+    #:
+    #: 注意：早先这里写的「4.60 vs 4.47，p=0.47」与产物对不上 ——
+    #: 那是更早一轮 run_eval 口径下的数字，被后续重跑覆盖了。
+    #: **配置注释里的实验数字必须能追到具体产物**，否则它就是个传闻。
     agent_tools: str = field(default_factory=lambda: _env("AGENT_TOOLS", "search_kb"))
+
+    #: 工具传输方式：`builtin`（进程内直调，默认） / `mcp`（走 MCP 协议）。
+    #:
+    #: 默认 builtin 是刻意的：MCP 是给**外部 MCP host**（Claude Code / Cursor）
+    #: 用的。本项目的 Agent 调自己的函数时，绕一圈 stdio/网络只增加延迟与故障面，
+    #: 等于给主链路凭空加一个单点。
+    #:
+    #: 两条路径的输出一致性由 `backend/tests/test_mcp_parity.py` 实跑保证
+    #: （真 mcp.Client 连真 server，逐字符比对），不是靠"我们没改逻辑"这种说法。
+    tool_transport: str = field(default_factory=lambda: _env("TOOL_TRANSPORT", "builtin"))
 
     #: Chat 降级链，逗号分隔的基座名（如 "minimax"），空 = 不降级。
     #: 只对**可重试**故障生效（429 / 5xx / 超时 / 连接失败）；

@@ -51,8 +51,10 @@ from exp_common import (
     is_kept,
     load_cases,
     paired_scores,
+    parse_games,
     print_summary,
     save,
+    subset_composition,
 )
 
 MODELS = {
@@ -285,14 +287,20 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--labels", default="E1,E2")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--game", default="sr",
+                    help="目标库：sr / ys / zzz，可逗号分隔或 all")
     ap.add_argument("--concurrency", type=int, default=2,
                     help="同档内并发跑几条题。1=串行。注意 latency_ms 含排队时间，跨并发度不可比")
     ap.add_argument("--out", default=None, help="结果文件名；不给则按样本量自动命名")
     args = ap.parse_args()
 
 
-    case_list = load_cases(args.limit)
-    print(f"评测子集：{len(case_list)} 条（与实验 C 同一份 SUBSET_IDS）\n")
+    case_list = load_cases(args.limit, game=args.game)
+    print(f"评测子集：{len(case_list)} 条，标签 {args.labels}")
+    print(f"题型构成：{subset_composition(case_list)}")
+    if len(parse_games(args.game)) > 1:
+        print("  ⚠ 多库题混跑：各库题型构成不同（见上），**跨库均值不可直接比较**，"
+              "只能看同一库内的模型对比。\n")
 
     # MODELS[E1] 是 None（= 用 .env 默认值），直接打印会显示 "None"，
     # 看起来像脚本坏了；这里显示实际会用的模型名。
@@ -301,21 +309,52 @@ async def main() -> None:
 
     results = []
     judge = Judge(get_llm())
-    out_name = args.out or f"exp_E{'' if len(case_list) == 15 else f'_{len(case_list)}'}.json"
+    games = parse_games(args.game)
+    # 单库沿用历史命名；多库带库名。用 `len(case_list)==15` 判断单库会在多库下误判，
+    # 恰好 15 条的多库子集会被写成 exp_E.json 覆盖单库历史产物。
+    if args.out:
+        out_name = args.out
+    elif len(games) > 1:
+        out_name = f"exp_E_{'_'.join(games)}.json"
+    else:
+        out_name = f"exp_E{'' if len(case_list) == 15 else f'_{len(case_list)}'}.json"
     # 中间产物另存为 .partial.json，绝不占用正式文件名 ——
     # 否则半截结果会被后续读取当成完整实验，静默污染结论。
     stem = out_name[:-5] if out_name.endswith(".json") else out_name
     partial_name = f"{stem}.partial.json"
 
+    # 题型构成写进产物：三库题型分布差很多，跨库比均值必须能看出构成差异。
+    def _stamp_meta() -> None:
+        """把出处块写进第一档。
+
+        必须在 for 循环**之后**首次调用 —— results 那时才有元素，
+        在循环前写 `results[0]` 会直接 IndexError。
+        每档之后都补一次，partial 落盘也要带上它。
+        """
+        if not results:
+            return
+        results[0]["_meta"] = {
+            "script": "exp_e.py",
+            "experiment": "E",
+            "game": args.game,
+            "games": games,
+            "n": len(case_list),
+            "subset_composition": subset_composition(case_list),
+            "concurrency": args.concurrency,
+            "note": "concurrency>1 时 latency_ms 含排队时间，跨并发度不可比",
+        }
+
     for label in args.labels.split(","):
         label = label.strip().upper()
         print(f"=== 运行 {label}（{_label_of(label)}）===", flush=True)
         results.append(await run_one(label, case_list, judge, concurrency=args.concurrency))
+        _stamp_meta()
         # 每档一落盘：E1 跑完就写，不必等 E2。上次 E2 挂死把 E1 的有效结果
         # 一起带走了，正是因为 save() 只在两档全跑完之后才调用 ——
         # 65 分钟的 API 花费，磁盘上一个字节都没留下。
         save(results, partial_name)
 
+    _stamp_meta()
     save(results, out_name)
     print_summary(results, f"实验 E：Chat 基座对比（冻结 temperature/tools/prompt/评测集，n={len(case_list)}）")
 
