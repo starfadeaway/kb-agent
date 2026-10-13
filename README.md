@@ -61,6 +61,8 @@ git commit、Python 版本、平台，以及当时的测量条件**（并发度�
 | `docs/glossary.md` | **专有名词释义** —— RAG / BM25 / RRF / rerank / NDCG 等，每个都写清「是什么、用在哪、实测多少」 |
 | `docs/rerank.md` | **重排（Rerank）深入说明** —— 一篇文档讲透，含实测效果与代价 |
 | `docs/concurrency.md` | **并发实测** —— 能开几个、同时跑会怎样、共享状态有哪些坑、怎么调 |
+| `docs/injection_guard.md` | **间接 Prompt 注入** —— 威胁模型、为什么"命中就拦"是错的、规则集实测误报率 |
+| `docs/fallback_chain.md` | **LLM 降级链** —— 哪些故障值得换模型、哪些换也没用、降级为什么必须显形 |
 | `docs/experiments.md` | **五个实验各自想证明什么、结果里每列是什么意思** —— 忘了当初为什么做实验就看这个 |
 | `EVALUATION.md` | 实验数据与结论，含方法论教训 |
 
@@ -422,7 +424,9 @@ cd kb-agent\backend
 | 分块 | 实验 B 四组完成：**chunk 500–800 + embed_mode=title 最优**（A3 0.966） |
 | Embedding | 实验 D 完成：**保留 bge-m3**，但依据是 reranker 配套而非质量（A2 跨模型配对 p=0.8215，无法区分；Qwen 显著更快） |
 | 延迟 | A3 检索 858ms → **567ms（−34%）**；感知延迟靠流式 −85%；KV cache 自动生效，无需配置 |
-| 并发 | 实测 1/4/8 并发：4 并发吞吐 3.95x，8 并发 5.93x；同 query 各并发度下 top5 完全一致（`docs/concurrency.md`） |
+| 并发 | 实测 1/4/8 并发：4 并发吞吐 3.95x，8 并发 5.93x；同 query 各并发度下 top5 完全一致。冷缓存并发从"8 次重复建索引"降到 1 次（`docs/concurrency.md`） |
+| 安全 | 间接 Prompt 注入：11 条规则分两级，5097 chunk 真实语料误报 **0**、攻击样本召回 **13/13**；工具结果一律包进不受信任数据区（`docs/injection_guard.md`） |
+| 可用性 | Chat 降级链：只对 429/5xx/超时降级，400/401 不重试；降级在响应 `fallback` 字段与 `/api/health` 留痕（`docs/fallback_chain.md`） |
 | Agent | 手搓 ReAct，4 工具 + 4 道安全阀 + 熔断；不可答问题从 7 步/30317 token 降到 4 步/6514 token |
 | 多库路由 | 三态（库内/越界/未提及）；越界走无工具单轮，实测 0 步 / 1.1s，库内 3–5 步 / 5–8s |
 | 后端 | FastAPI，`/api/health` `/api/retrieve` `/api/chat` `/api/chat/stream` `/api/runs` `/api/ingest` `/api/stats` |
