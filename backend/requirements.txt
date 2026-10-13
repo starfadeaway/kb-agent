@@ -2,8 +2,11 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic>=2.11,<3
-pydantic-settings>=2.7.0
-python-multipart==0.0.20
+# 这里曾经列过两项，全仓无 import，已删：
+#   python-multipart  —— FastAPI 只有在出现 Form/File 端点时才需要，本项目没有；
+#   pydantic-settings —— Settings 是自己写的 frozen dataclass + python-dotenv。
+# 留着它们只是让安装变慢、并让人以为「配置来自 pydantic-settings」。
+# 防回退见 backend/tests/test_requirements_honest.py。
 
 # ---- HTTP 客户端 ----
 httpx==0.28.1
@@ -24,17 +27,24 @@ rank-bm25==0.2.2
 SQLAlchemy==2.0.36
 greenlet==3.1.1
 aiomysql==0.2.0
+# PyMySQL 是 aiomysql 的运行时依赖，显式列出只为固定版本。
+# ⚠ cryptography **不能删**，它看起来像历史残留但有真实调用路径：
+# PyMySQL 的 _auth.py 顶层 import 它，而 caching_sha2_password
+# （MySQL 8 的默认认证插件）在 RSA 交换时走 sha2_rsa_encrypt()
+# → serialization / padding。删掉之后 MySQL 连接会在**认证阶段**炸，
+# 而报错完全指不到「是少装了一个包」。
 PyMySQL==1.1.1
 cryptography==44.0.0
 
 # ---- 文本处理 ----
-beautifulsoup4==4.12.3
-lxml==5.3.0
+# 只留 jieba（BM25 中文分词）。曾列过 beautifulsoup4 / lxml，已删：
+# wiki 源是 wikitext，走 template_parser 的正则清洗，**从不解析 HTML**。
 jieba==0.42.1
 
 # ---- 配置与日志 ----
 python-dotenv==1.0.1
-loguru==0.7.3
+# 曾经列过 loguru，已删：全仓用标准库 logging（tools.py / llm / persist 都是
+# logging.getLogger），两套日志并存只会让「日志去哪了」变成一个问题。
 
 # ---- MCP（Model Context Protocol）----
 # ⚠️ **starlette 必须钉死在 0.41.x**，这不是随手写的，是踩坑换来的：

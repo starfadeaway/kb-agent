@@ -219,7 +219,7 @@ class Collection:
 class VectorStore:
     def __init__(self, settings: Settings | None = None) -> None:
         self.s = settings or get_settings()
-        self.root = self.s.chroma_abs_path.parent / "vectors"
+        self.root = self.s.data_root_abs / "vectors"
         self.root.mkdir(parents=True, exist_ok=True)
         self._collections: dict[str, Collection] = {}
 
@@ -227,7 +227,7 @@ class VectorStore:
     def collection_name(self, game: str, model: str | None = None, variant: str = "base") -> str:
         model = model or self.s.embed_model_main
         # variant 用来隔离分块/embedding 实验：不同参数绝不写进同一个索引
-        return f"{self.s.chroma_collection_prefix}_{game}_{model_slug(model)}_{variant}"
+        return f"{self.s.collection_prefix}_{game}_{model_slug(model)}_{variant}"
 
     def get_collection(self, game: str, model: str | None = None, variant: str = "base") -> Collection:
         name = self.collection_name(game, model, variant)

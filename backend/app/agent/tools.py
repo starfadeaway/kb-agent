@@ -91,6 +91,13 @@ def tool(
 
 
 def _truncate(text: str, limit: int) -> str:
+    """截断并**显式告知原长度**。
+
+    静默截断会让模型以为自己已经看全了正文，于是基于半截内容作答
+    或者反复检索同一页 —— 尾部那句标记就是给模型看的信号。
+    limit 由 .env 提供（TOOL_CHUNK_CHARS / TOOL_PAGE_CHARS），
+    早先这里是字面量 500 / 4000，是全项目唯一改不了的预算。
+    """
     return text if len(text) <= limit else text[:limit] + f"\n...[已截断，原长度 {len(text)}]"
 
 
@@ -154,7 +161,7 @@ async def search_kb(args: dict, ctx: ToolContext) -> str:
         c = h.chunk
         lines.append(
             f"\n[{i}] 分数 {h.score:.4f} | {c.page_title} > {c.metadata.get('section', '')}\n"
-            f"{_truncate(c.text, 500)}\n"
+            f"{_truncate(c.text, s.tool_chunk_chars)}\n"
             f"出处：{c.source_url}"
         )
     return "\n".join(lines)
@@ -203,7 +210,7 @@ async def get_page(args: dict, ctx: ToolContext) -> str:
     dt = int((time.perf_counter() - t0) * 1000)
     return (
         f"《{page.title}》最后修订 {page.last_revision}（{dt}ms，共 {len(text)} 字）\n"
-        f"出处：{ctx.settings.wiki_base}/{game}/{page.title}\n\n{_truncate(text, 4000)}"
+        f"出处：{ctx.settings.wiki_base}/{game}/{page.title}\n\n{_truncate(text, ctx.settings.tool_page_chars)}"
     )
 
 

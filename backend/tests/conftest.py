@@ -38,9 +38,9 @@ def stores_probe():
 
     两个坑都在这里挡掉，新写测试的人不用再踩：
     1. `Settings` 是 frozen dataclass，只能用 dataclasses.replace 改字段；
-    2. **数据根是 `chroma_path.parent`，不是 `chroma_path` 本身**
-       （两个 store 都是 `chroma_abs_path.parent / "vectors"|"lance"`）。
-       把 chroma_path 直接指向 mkdtemp 会让所有测试共用系统 Temp 目录，
+    2. **数据根指向真实数据目录（data_root），向量落在它的 vectors/ 与 lance/ 下**
+       （两个 store 都是 `data_root_abs / "vectors"|"lance"`）。
+       把 data_root 直接指向 mkdtemp 会让所有测试共用系统 Temp 目录，
        数据互相污染 —— 表现为条数莫名变大、schema 被上一个测试写死。
     """
     import dataclasses
@@ -52,7 +52,7 @@ def stores_probe():
     from app.store.vector_store import VectorStore
 
     tmp = Path(tempfile.mkdtemp(prefix="kb_store_"))
-    s = dataclasses.replace(get_settings(), chroma_path=str(tmp / "data" / "chroma"))
+    s = dataclasses.replace(get_settings(), data_root=str(tmp / "data"))
     try:
         yield VectorStore(s), LanceVectorStore(s)
     finally:

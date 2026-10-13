@@ -311,6 +311,31 @@ def route_game(question: str, covered: dict[str, str]) -> str | None:
     return None
 
 
+def trim_history(history: list[dict], max_chars: int) -> list[dict]:
+    """把多轮历史裁到 `max_chars` 字符以内，**整轮丢弃**，返回时间正序。
+
+    从最新一条往回累加：最新那轮才是当前问题的直接上文，砍它比砍三轮前的更伤。
+
+    不做摘要：历史是「问 / 答」成对的，摘要会把引用出处、已确认/未确认这类
+    结构信息抹平，而出处正是忠实度评测要对齐的东西。宁可少记几轮，
+    也不要把问答对压成一篇看不出对错的散文。
+
+    至少留最后一条（下面的 `if kept`）：极端情况下单条就超预算，
+    全丢等于把多轮会话静默降级成单轮；留一条的代价有上界，
+    真超了 `agent_token_budget` 也会在循环里被拦。
+    """
+    kept: list[dict] = []
+    used = 0
+    for msg in reversed(history):
+        n = len(str(msg.get("content") or ""))
+        if kept and used + n > max_chars:
+            break
+        kept.append(msg)
+        used += n
+    kept.reverse()
+    return kept
+
+
 def _split_for_stream(text: str, min_len: int = 6) -> list[str]:
     """把完整答案切成适合打字机效果的片段（优先按中文标点断句）。"""
     if not text:
@@ -395,9 +420,14 @@ class ReActAgent:
         else:
             system = build_system_prompt(covered, self.s.game_terms)
         messages: list[dict] = [{"role": "system", "content": system}]
-        # 历史只保留最近 4 轮，避免长会话把预算吃光
+        # 历史有两道限制，职责不同，别混成一道：
+        #   load_history(limit=8)  控 DB IO —— 最多取多少行；
+        #   trim_history(...)      控上下文预算 —— 取回来的能塞多少字符。
+        # 早先只有前者：8 条短问答和 8 条长回答占的预算差好几倍，
+        # 而 agent_token_budget 只在 ReAct 循环里检查、不管历史，
+        # 表现为"没怎么检索就被判 token_budget 收尾"。
         if history:
-            messages.extend(history[-8:])
+            messages.extend(trim_history(history, self.s.agent_history_chars))
         messages.append({"role": "user", "content": question})
         state = AgentState(
             session_key=session_key, game=game, messages=messages, question=question

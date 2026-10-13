@@ -251,7 +251,7 @@ class LanceVectorStore:
 
     def __init__(self, settings) -> None:
         self.s = settings
-        self.root = self.s.chroma_abs_path.parent / "lance"
+        self.root = self.s.data_root_abs / "lance"
         self.root.mkdir(parents=True, exist_ok=True)
         self._collections: dict[str, LanceCollection] = {}
 
@@ -261,7 +261,7 @@ class LanceVectorStore:
 
     def collection_name(self, game: str, model: str | None = None, variant: str = "base") -> str:
         model = model or self.s.embed_model_main
-        return f"{self.s.chroma_collection_prefix}_{game}_{self._slug(model)}_{variant}"
+        return f"{self.s.collection_prefix}_{game}_{self._slug(model)}_{variant}"
 
     def get_collection(self, game: str, model: str | None = None, variant: str = "base") -> LanceCollection:
         name = self.collection_name(game, model, variant)

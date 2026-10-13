@@ -73,16 +73,23 @@ class Settings:
     mysql_required: bool = field(default_factory=lambda: _env_bool("MYSQL_REQUIRED", False))
 
     # --- 向量库 ---
-    # 这三个名字里的 "chroma" 是**历史遗留**，不是指 ChromaDB：
-    # chromadb 早已弃用（1.5.9 索引不落盘、换进程必崩），包也从 .venv 里卸掉了，
-    # 现在真实向量库是 LanceDB（默认）/ NumPy 精确索引（fallback）。
-    # 保留原名是为了不破坏已发布的 `CHROMA_PATH` / `CHROMA_COLLECTION_PREFIX`
-    # env var —— 改名属于破坏性变更，得连同 .env.example、conftest、
-    # 两个 store 一起动，收益是纯美观，暂不做。
-    # 注意它的**语义**：数据根是 `chroma_abs_path.parent`（即项目根 data/），
-    # `chroma_path` 自己（./data/chroma）这个目录并不存在、也不使用。
-    chroma_path: str = field(default_factory=lambda: _env("CHROMA_PATH", "./data/chroma"))
-    chroma_collection_prefix: str = field(default_factory=lambda: _env("CHROMA_COLLECTION_PREFIX", "kb"))
+    # 这两个字段早先叫 chroma_path / chroma_collection_prefix，
+    # 但 chromadb 早已弃用（1.5.9 索引不落盘、换进程必崩，包也从 .venv 卸了），
+    # 真实向量库是 LanceDB（默认）/ NumPy 精确索引（fallback）。
+    # 更糟的是旧 `chroma_path` 的值（./data/chroma）**自己从不被使用** ——
+    # 两个 store 取的都是它的 `.parent`，也就是那个目录既不存数据也不被读取。
+    # 名字和路径都在指向一个不存在的东西，现在改成直接表达真实语义。
+    #
+    # 改名不是重定位，默认值等价（已在 test_context_budget 里锁住）：
+    #   旧：Path("./data/chroma").parent / "lance"  →  data/lance
+    #   新：Path("./data")            / "lance"  →  data/lance
+    # 且 collection_prefix 默认仍是 "kb" ⇒ LanceDB 表名不变，已有索引原地可读。
+    #
+    # ⚠ `.env` 里若显式设过**非默认**的 CHROMA_PATH，删字段后该值不再被读取，
+    # 数据根会静默回落到 ./data（找不到索引，不会报错，只会全部检索为空）。
+    # 迁移提示写在 .env.example 里。
+    data_root: str = field(default_factory=lambda: _env("DATA_ROOT", "./data"))
+    collection_prefix: str = field(default_factory=lambda: _env("COLLECTION_PREFIX", "kb"))
     # lancedb（真实向量库）| numpy（零依赖精确索引）。
     # 只有这两个后端 —— 早先这里写着第三个「sqlite（最小演示后端）」，
     # 但 sqlite3 / SQLiteStore 在 app/ 下从来没有任何实现，
@@ -104,9 +111,28 @@ class Settings:
 
     # --- Agent ---
     agent_max_steps: int = field(default_factory=lambda: _env_int("AGENT_MAX_STEPS", 8))
+    #: 多轮历史进上下文的**字符**预算，从最新一条往回累加，超了整轮丢弃。
+    #:
+    #: 原来这里是 `messages.extend(history[-8:])` —— 固定 8 条，不看每条多长。
+    #: 8 条短问答和 8 条长回答占的预算是差几倍的，而 agent_token_budget
+    #: 只在**循环内**检查、不管历史，历史能一口吃掉大半预算再把循环掐死。
+    #:
+    #: 用字符而不是 token：本项目的预算口径本来就不是 token ——
+    #: `_truncate`、StepRecord.result_chars、SSE 的 chars 字段全是字符，
+    #: 混用两套口径会让"到底超了多少"没法自证。要精确 token 得引 tokenizer，
+    #: 对一个防溢出的粗闸来说收益不抵依赖。
+    agent_history_chars: int = field(default_factory=lambda: _env_int("AGENT_HISTORY_CHARS", 4000))
     agent_token_budget: int = field(default_factory=lambda: _env_int("AGENT_TOKEN_BUDGET", 60000))
     agent_wall_timeout: float = field(default_factory=lambda: _env_float("AGENT_WALL_TIMEOUT", 60))
     tool_timeout: float = field(default_factory=lambda: _env_float("TOOL_TIMEOUT", 15))
+    #: 工具结果进上下文的截断长度。
+    #:
+    #: 这两个值早先是字面量 500 / 4000 写死在 tools.py 里，是全项目唯一
+    #: 不可配的预算 —— 遇到"检索结果太短不够答"或"get_page 撑爆上下文"
+    #: 时只能改代码重新部署。项目里其他旋钮（TOP_K / TOOL_TIMEOUT / RRF_K）
+    #: 都能走 .env，唯独它不能，属于同类缺陷。
+    tool_chunk_chars: int = field(default_factory=lambda: _env_int("TOOL_CHUNK_CHARS", 500))
+    tool_page_chars: int = field(default_factory=lambda: _env_int("TOOL_PAGE_CHARS", 4000))
     concurrency_limit: int = field(default_factory=lambda: _env_int("CONCURRENCY_LIMIT", 4))
     #: 逗号分隔的启用工具名，空 = 全部。
     #: 默认只给 search_kb —— 实验 C 实测多挂 3 个工具没有可测收益
@@ -152,8 +178,14 @@ class Settings:
     chunk_overlap: int = field(default_factory=lambda: _env_int("CHUNK_OVERLAP", 50))
 
     @property
-    def chroma_abs_path(self) -> Path:
-        p = Path(self.chroma_path)
+    def data_root_abs(self) -> Path:
+        """向量数据根（绝对路径）。lance/ 与 vectors/ 直接落在这里。
+
+        早先这个 property 叫 chroma_abs_path，两个 store 各自再取一次
+        `.parent / "lance"` —— 也就是"给一个从不使用的路径，再取它的上级当根"。
+        现在数据根本身就是配置项，少一次 `.parent` 猜测。
+        """
+        p = Path(self.data_root)
         return p if p.is_absolute() else (PROJECT_ROOT / p)
 
     # slug → (显示名, 该游戏的专属术语)。

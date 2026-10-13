@@ -14,6 +14,8 @@ venv/
 # data/vectors 是 numpy fallback 的索引 —— 三个都可以用 rebuild_index.py 重建，
 # 而且 data/lance 有 60MB 二进制，提交进去只会让仓库没法看 diff。
 # eval 结果要保留：它们是实验可复现的证据。
+# data/chroma 是 chromadb 的目录，早已弃用（1.5.9 索引不落盘、换进程必崩），
+# 现在没有任何代码路径会写它。保留这条纯防御：万一某个旧脚本又建出它，别让它进仓库。
 data/chroma/
 data/lance/
 data/vectors/

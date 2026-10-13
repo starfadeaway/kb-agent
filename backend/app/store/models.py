@@ -115,6 +115,14 @@ class Session(Base):
     session_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     game: Mapped[str] = mapped_column(String(16), default="sr")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    #: **预留字段，当前代码从不写入。**
+    #:
+    #: `ensure_session` 只 upsert `game`，没有一行代码给 meta 赋值。
+    #: 之所以不删列而是写清楚：本项目没有 migration 体系（表靠 create_all 建），
+    #: 改已有表的列结构成本高于收益；留着并明说，比留一个让人以为
+    #: 「会话有元数据可用」的空字段诚实。守卫见 test_db_schema_honest.py。
+    #:
+    #: 将来若真的要做「跨会话记忆」，第一个落点就是这里。
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
@@ -126,6 +134,13 @@ class Message(Base):
     session_key: Mapped[str] = mapped_column(String(64), index=True)
     role: Mapped[str] = mapped_column(String(16))          # user / assistant / tool
     content: Mapped[str] = mapped_column(Text)
+    #: **当前只可能是 NULL** —— `save_turn` 只落 user/assistant 两条，
+    #: 两条都不设 tool_name。`role` 注释里那个 `tool` 分支实际上不会出现。
+    #:
+    #: 工具调用的明细在 `tool_call_logs` 表里（含 args/ok/error/latency），
+    #: 信息量远大于在这里记一个名字，所以 messages 不重复存。
+    #: 另一个原因是硬约束：tool 消息不带 `tool_call_id` 无法重放回模型，
+    #: 存进历史会让下一轮 API 直接 400。
     tool_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     refs: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
