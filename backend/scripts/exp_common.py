@@ -278,13 +278,58 @@ def build_meta(args) -> dict:
         from app.store.vector_store import get_vector_store
 
         s = get_settings()
-        game = meta["game"] or s.game_primary
         model = getattr(args, "embed_model", None) or s.embed_model_main
-        col = get_vector_store(s).get_collection(game, model, meta["variant"] or "base")
-        data = col.get(include=["metadatas"])
-        metas = data.get("metadatas") or []
-        meta["index_chunks"] = len(data.get("ids") or [])
-        meta["index_pages"] = len({(m or {}).get("page_title", "") for m in metas} - {""})
+        variant = meta["variant"] or "base"
+        games = parse_games(meta["game"])
+        if len(games) > 1:
+            # 多库评测时每库的规模差得很远，而且**页数与 chunk 数不是同一个比例**：
+            # sr 706 页 / 3932 chunk，ys 435 页 / 5413 chunk，zzz 260 页 / 1498 chunk。
+            # ys 的 chunk 数反而最多（页面更长、分得更碎），所以只报一个总数
+            # 反而看不出「指标差异里有多少来自语料规模」—— 逐库记，汇总方才好核对。
+            meta["index_by_game"] = {}
+            for g in games:
+                try:
+                    data = get_vector_store(s).get_collection(g, model, variant).get(
+                        include=["metadatas"]
+                    )
+                    metas = data.get("metadatas") or []
+                    meta["index_by_game"][g] = {
+                        "index_chunks": len(data.get("ids") or []),
+                        "index_pages": len({(m or {}).get("page_title", "") for m in metas} - {""}),
+                    }
+                except Exception:
+                    meta["index_by_game"][g] = {"index_chunks": None, "index_pages": None}
+        else:
+            game = games[0] if games else s.game_primary
+            col = get_vector_store(s).get_collection(game, model, variant)
+            data = col.get(include=["metadatas"])
+            metas = data.get("metadatas") or []
+            meta["index_chunks"] = len(data.get("ids") or [])
+            meta["index_pages"] = len({(m or {}).get("page_title", "") for m in metas} - {""})
     except Exception:
         pass
     return meta
+
+
+def parse_games(game: str | None) -> list[str]:
+    """`--game` 参数归一成库列表。
+
+    支持三种写法：`sr` / `sr,ys` / `all`。
+    库顺序**固定按 sr, ys, zzz**（与 `cases.ALL_CASES` 的声明顺序一致），
+    不按命令行里写的顺序 —— 否则 `--game zzz,sr` 和 `--game sr,zzz`
+    会产出顺序不同的 rows，配对检验按 case_id 求交集还好，
+    但逐条产物 diff 出来全是噪声，两次运行也就没法互相核对了。
+    """
+    from app.eval.cases import ALL_CASES
+
+    order = ["sr", "ys", "zzz"]
+    raw = (game or "").strip()
+    if not raw:
+        return []
+    if raw == "all":
+        return [g for g in order if g in ALL_CASES]
+    picked = {x.strip() for x in raw.split(",") if x.strip()}
+    unknown = picked - set(ALL_CASES)
+    if unknown:
+        raise SystemExit(f"未知的库：{', '.join(sorted(unknown))}；可用：{', '.join(ALL_CASES)} 或 all")
+    return [g for g in order if g in picked]

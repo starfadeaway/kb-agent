@@ -64,23 +64,51 @@ def _norm(src: str) -> str:
 
 
 @pytest.mark.parametrize(
-    "filename,first_arg",
+    "filename,accepted_first_args",
     [
-        # run_eval：相邻两级，第一个实参必须是当前档（改进档）
-        ("run_eval.py", 'cur["rows"]'),
+        # run_eval：相邻两级，第一个实参必须是当前档（改进档）。
+        # 多库改造后有两个调用点 —— 合并跑（cur["rows"]）与分库跑（crows，
+        # 即 cur["rows"] 里筛出本库的那些行）。两者都必须传改进档，
+        # 所以这里列的是**允许集合**，多一个调用点就多一个必须命中的模式。
+        ("run_eval.py", ('cur["rows"]', "crows")),
         # exp_common：首尾对比，第一个实参必须是末档（改进档）
-        ("exp_common.py", "last_rows"),
+        ("exp_common.py", ("last_rows",)),
     ],
 )
-def test_call_sites_pass_improved_first(filename: str, first_arg: str):
+def test_call_sites_pass_improved_first(filename: str, accepted_first_args: tuple[str, ...]):
     """调用点必须把「改进档」放在第一个参数位。"""
     calls = _call_args_of("paired_test", filename)
     assert calls, f"{filename} 里找不到 paired_test 调用"
     for args in calls:
-        assert _norm(first_arg) in _norm(args[0]), (
-            f"{filename} 的 paired_test 第一个实参是 {_norm(args[0])!r}，"
-            f"应传改进档（{first_arg!r}），否则 Δ 与 Cohen d 的符号会与直觉相反"
+        first = _norm(args[0])
+        assert any(a in first for a in accepted_first_args), (
+            f"{filename} 的 paired_test 第一个实参是 {first!r}，"
+            f"应传改进档（{accepted_first_args} 之一），否则 Δ 与 Cohen d 的符号会与直觉相反"
         )
+
+
+def test_per_game_paired_test_filters_current_label_first():
+    """分库配对检验的入参必须是「当前档的本库行」在前、「上一档的本库行」在后。
+
+    单看 `paired_test(crows, prows)` 那一行看不出 crows/prows 是谁 ——
+    它们来自上面两行推导。所以这里把推导也一起锁住：
+    crows 必须来自 cur_g（当前/改进档），prows 必须来自 prev_g（上一档/基线）。
+    两行搞反的话符号不会报错，只会静默变成「改进=变差」。
+    """
+    tree = ast.parse((SCRIPTS / "run_eval.py").read_text(encoding="utf-8"))
+    assigns: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id in ("crows", "prows")):
+            assigns[node.targets[0].id] = ast.unparse(node.value)
+    assert set(assigns) == {"crows", "prows"}, f"run_eval 里找不到 crows/prows 的推导：{assigns}"
+    assert "cur_g" in _norm(assigns["crows"]), (
+        f"crows 必须筛自 cur_g（当前/改进档），实际是 {assigns['crows']!r}"
+    )
+    assert "prev_g" in _norm(assigns["prows"]), (
+        f"prows 必须筛自 prev_g（上一档/基线），实际是 {assigns['prows']!r}"
+    )
 
 
 def test_exp_common_first_arg_is_last_rows():

@@ -165,9 +165,12 @@ def test_bare_continue_without_recording_is_gone():
 # ---------- 替身 ----------
 
 class _Case:
-    def __init__(self, case_id, gold_pages):
+    # category 是多库改造后 run_one 会写进 rows 的字段（分库/分题型拆解要用），
+    # 缺了会在构造 rows 时 AttributeError —— 桩得跟真实 EvalCase 对齐。
+    def __init__(self, case_id, gold_pages, category="single_hop"):
         self.case_id = case_id
         self.gold_pages = gold_pages
+        self.category = category
         self.question = "问题"
 
 
