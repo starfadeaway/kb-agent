@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.core.config import get_settings  # noqa: E402
 from app.eval import metrics as M  # noqa: E402
@@ -25,6 +26,7 @@ from app.eval.cases import cases_for  # noqa: E402
 from app.llm.client import get_llm  # noqa: E402
 from app.retrieval.hybrid import HybridRetriever, RetrievalConfig  # noqa: E402
 from app.store.vector_store import get_vector_store  # noqa: E402
+from exp_common import is_kept  # noqa: E402
 
 logger = logging.getLogger("eval")
 
@@ -51,14 +53,23 @@ class CaseOutcome:
 async def run_one(
     label: str, game: str, top_k: int, variant: str,
     embed_model: str | None, rerank_candidates: int = 0,
+    retriever=None,
 ) -> dict:
+    """跑一个 label 的全部 case。
+
+    `retriever` 是注入点：默认 None 时按生产路径自建 HybridRetriever，
+    测试则传入可控替身，用来验证「检索失败时会发生什么」。
+    故障注入没法靠 mock.patch 私有调用链完成，而这条路径恰恰最需要守卫 ——
+    早先就是「失败即消失」把各档样本集弄得不一致。
+    """
     s = get_settings()
     llm = get_llm()
     # 清掉 embedding / rerank 缓存：A0 只用 BM25 但 A1/A2/A3 共用同一条 query 的
     # embedding，若不清理，后跑的 label 会白捡前一个 label 的缓存，
     # 延迟列就不是同一条件下的可比数字了（指标不受影响，缓存是确定性的）。
     llm.clear_caches()
-    retriever = HybridRetriever(settings=s, llm=llm, store=get_vector_store(s))
+    if retriever is None:
+        retriever = HybridRetriever(settings=s, llm=llm, store=get_vector_store(s))
     cfg = RetrievalConfig(
         game=game, embed_model=embed_model, variant=variant, final_top_k=top_k,
         # 0 = 全量送重排（优化前的行为，也是本实验的对照组）
@@ -78,6 +89,25 @@ async def run_one(
             hits = await retriever.retrieve(case.question, cfg)
         except Exception as exc:  # noqa: BLE001
             logger.error("[%s] %s 检索失败: %s", label, case.case_id, exc)
+            # 记一条失败，而不是让这条 case 直接消失。
+            #
+            # 早先这里是 `continue` 且不落任何行，问题有两层：
+            # 1. 若 A0 的某条 case 检索失败，A0 的 rows 就少一条，A1/A2/A3 却是完整的
+            #    —— **各档样本集不同**，均值不再是同一批 case 上的对比，配对检验也失真；
+            # 2. 失败只在日志里 error，聚合结果里看不出少了 case，等于静默丢数据。
+            #
+            # 指标键名（recall@k 等）由 RetrievalMetrics.as_dict() 统一生成，
+            # 这里直接复用它，不手写字段名 —— 手写就会和 k 的动态命名脱钩。
+            rows.append(
+                {
+                    **M.RetrievalMetrics(0.0, 0.0, 0.0, 0.0, top_k).as_dict(),
+                    "case_id": case.case_id,
+                    "page_hit": False,
+                    "latency_ms": int((time.perf_counter() - t0) * 1000),
+                    "top_titles": [],
+                    "error": f"{type(exc).__name__}: {str(exc)[:160]}",
+                }
+            )
             continue
         dt = int((time.perf_counter() - t0) * 1000)
         ids = [h.chunk_id for h in hits]
@@ -96,13 +126,26 @@ async def run_one(
             }
         )
 
+    # 均值只用成功的 case —— 失败行是链路故障，不是检索能力差。
+    # 与 exp_c/exp_e 共用同一个 is_kept 谓词，避免同一个项目两套口径。
+    ok_rows = [r for r in rows if is_kept(r)]
     agg = M.aggregate(
-        [{k: r[k] for k in r if k.startswith(("recall", "hit_rate", "mrr", "ndcg"))} for r in rows]
+        [{k: r[k] for k in r if k.startswith(("recall", "hit_rate", "mrr", "ndcg"))}
+         for r in ok_rows]
     )
+    # 全档检索失败时 aggregate 收到的是空列表，返回的 dict **没有指标键**，
+    # 下游读 agg["mrr"] 会直接 KeyError —— 「全军覆没」不该表现得像「格式变了」。
+    # 这里补齐键名，值为 0，配合下面的 n_ok=0 / errors=n 表示"一条都没成功"。
+    for key in (f"recall@{top_k}", "hit_rate", "mrr", "ndcg"):
+        agg.setdefault(key, 0.0)
     agg["page_hit_rate"] = round(
-        sum(1 for r in rows if r["page_hit"]) / len(rows), 4
-    ) if rows else 0.0
-    agg["avg_latency_ms"] = int(sum(r["latency_ms"] for r in rows) / len(rows)) if rows else 0
+        sum(1 for r in ok_rows if r["page_hit"]) / len(ok_rows), 4
+    ) if ok_rows else 0.0
+    agg["avg_latency_ms"] = int(sum(r["latency_ms"] for r in ok_rows) / len(ok_rows)) if ok_rows else 0
+    # n / n_ok / errors 一起给出：只看均值会以为失败的那些 case 从未存在
+    agg["errors"] = len(rows) - len(ok_rows)
+    agg["n"] = len(rows)
+    agg["n_ok"] = len(ok_rows)
     return {"label": label, "config": cfg.as_dict(), "aggregate": agg, "rows": rows}
 
 
