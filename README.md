@@ -1,12 +1,55 @@
 # kb-agent · 游戏内容知识库问答 Agent
 
-面向 **AI 应用开发 / 大模型应用工程师** 岗位的垂直领域问答系统。知识库选游戏内容，
+> **一句话**：三库 1038 页 / 5097 chunk 的垂直知识库问答系统。手写 ReAct Agent +
+> 混合检索（BM25 ∥ 向量 → RRF → Cross-Encoder 重排），5 组单变量消融实验，
+> 每个数字都能追溯到产生它的脚本与 git commit。
+
+| 维度 | 结果 | 出处 |
+|---|---|---|
+| 检索策略消融（n=29, top_k=3） | 纯 BM25 **0.897** → 纯向量 0.828 → 融合 0.897 → **+重排 0.966** | [`data/eval/exp_A.json`](data/eval/exp_A.json) |
+| 分块 / embed_mode 消融 | chunk 500 ≈ 800 > 1200；`embed_mode title→text` 使 MRR **0.966→0.885** | [`data/eval/exp_B0..B3_*.json`](data/eval) |
+| Agent 能力消融（n=15, Judge） | 无工具 **2.43** → `search_kb` **4.67** → 全套工具 4.80 | [`data/eval/exp_C.json`](data/eval/exp_C.json) |
+| 假前提题（幻觉测试） | 无检索 3.83 → 有检索 **5.00**（模型学会"明确说不知道"） | 同上 |
+| 代价 | 挂知识库 = prompt token **×19.9**、延迟 3.5 倍；C2 比 C1 多花 8% token 只涨 0.13 分 | [`docs/cost_latency_quality.md`](docs/cost_latency_quality.md) |
+| 并发（真实问题压测） | 并发 4 吞吐 **×3.98**（5.01 req/s），4 档 top-5 结果**逐条一致** | [`docs/concurrency.md`](docs/concurrency.md) |
+| 流式 | TTFT **860ms** vs 非流式 3410ms（感知延迟 −75%），总耗时仅差 264ms | [`data/eval/probe_stream_latency.json`](data/eval) |
+| 失败模式 | 4 类，含「答案全对但引用了不存在的页面」 | [`docs/failure_analysis.md`](docs/failure_analysis.md) |
+
+## 📌 所有数字可复现
+
+`data/eval/` 下每个结果文件都带 `_meta` 出处块，记录**产生它的脚本名、UTC 时间、
+git commit、Python 版本、平台，以及当时的测量条件**（并发度、缓存冷热、top_k、
+`rerank_candidates` 等）。
+
+```json
+"_meta": {
+  "script": "bench_latency.py",
+  "generated_at_utc": "2026-10-13T07:55:43+00:00",
+  "git_commit": "fd18a4e",
+  "context": { "variable": "rerank_candidates", "warm_cache": true, "note": "两组均已预热…" }
+}
+```
+
+这意味着：**任何人都能判断某个结论在什么条件下成立**，
+而不是只能相信屏幕上的一行数字。实测中它直接抓出过两个真问题 ——
+延迟数字没标缓存口径（冷缓存 −14.8% vs 热缓存 −2.0%，差 7 倍），
+以及评测 Runner 的并发顺序效应（同一份代码两次跑出相反的符号）。
+详见 [`docs/experiments.md`](docs/experiments.md) 的「四个会把人带沟里的坑」。
+
+## 为什么选游戏内容做知识库
+
 不是因为游戏"简单"，而是因为它天然具备普通 RAG 项目最缺的两样东西：
 
 1. **大量低频专有名词**（位面饰品、行迹、命途、音擎、驱动盘）——纯向量检索一定翻车，能放大混合检索 + 重排的收益；
 2. **有时间维度的语料**（wiki 每次修订都是新版本）——能演示"通用 RAG 在会过期的知识上会失效"，以及版本感知检索怎么解。
 
 主知识库：崩坏:星穹铁道（`sr`，518 页 → 2306 chunk）。次知识库：绝区零（`zzz`，263 页 → 1498 chunk）。第三库：原神（`ys`，257 页 → 1293 chunk）。三库合计 1038 页 → 5097 chunk，全部只用生产索引统计。
+
+> 关于 n 的诚实说明：检索类实验 n=29、生成类实验 n=15。样本量偏小，
+> 所以正文中出现的显著性一律标注口径（`p<0.001` 为正态近似而非 t 分布），
+> 且不把 p 的具体位数写进结论。**已知的能力边界见
+> [`docs/failure_analysis.md`](docs/failure_analysis.md)** ——包括一条 A3 完整链路
+> 也召不回来的题，和一类"答案正确但引用被编造"的幻觉。
 
 ## 文档
 
