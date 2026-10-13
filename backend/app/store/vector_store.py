@@ -29,8 +29,6 @@ import numpy as np
 
 from app.core.config import Settings, get_settings
 
-NEG_INF = -1e9
-
 
 def model_slug(model: str) -> str:
     """BAAI/bge-m3 -> baai-bge-m3，embo-01 -> embo-01。"""

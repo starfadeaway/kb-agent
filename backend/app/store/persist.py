@@ -19,10 +19,12 @@ from sqlalchemy.dialects.mysql import insert as mysql_insert
 
 from app.core.config import Settings, get_settings
 
-# 这两个都叫 EvalCase 但完全是两回事：一个是评测集定义（dataclass），
-# 一个是数据库表（SQLAlchemy model）。同名裸导入时后者会把前者顶掉，
-# 于是下面构造 EvalCase(...) 实际在构造 ORM 对象 —— 必须显式区分。
-from app.eval.cases import EvalCase as EvalCaseDef
+# 这里原本还要 `from app.eval.cases import EvalCase as EvalCaseDef` ——
+# 评测集定义（dataclass）与数据库表（SQLAlchemy model）都叫 EvalCase，
+# 同名裸导入时后者会把前者顶掉，于是 `EvalCase(...)` 实际在构造 ORM 对象。
+# 当时靠别名区分，后来 load_eval_cases()（唯一的用户）被删成死代码，
+# 别名与它一起走了，**陷阱本身也一起消失了** —— 这比留一个未使用的别名更干净。
+# 真要再从库里读评测集时，记得把别名加回来。
 from app.ingest.fingerprint import chunk_hash, page_hash
 from app.ingest.pipeline import IngestConfig, load_cached_page
 from app.store.db import MySQLUnavailable, init_db, session_scope
@@ -186,23 +188,6 @@ async def save_eval_cases(game: str, settings: Settings | None = None) -> int:
             )
         )
     return len(cases)
-
-
-async def load_eval_cases(game: str, settings: Settings | None = None) -> list[EvalCaseDef]:
-    """从库里读评测集；库里没有就回退到代码里的定义。"""
-    s = settings or get_settings()
-    try:
-        async with session_scope(s) as session:
-            rows = (
-                await session.execute(select(EvalCaseRow).where(EvalCaseRow.game == game))
-            ).scalars().all()
-    except MySQLUnavailable:
-        return []
-    return [
-        EvalCaseDef(r.case_id, r.game, r.category, r.question, r.gold_answer, r.gold_pages or [],
-                    r.difficulty, r.notes or "")
-        for r in rows
-    ]
 
 
 # --------------------------------------------------------------------------- #

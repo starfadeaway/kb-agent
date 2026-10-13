@@ -253,9 +253,6 @@ class AgentState:
             "rules": sorted(rules),
         }
 
-    def tool_call_count(self) -> int:
-        return len(self.steps)
-
     def guard_stats(self) -> dict:
         return self.guard.stats() if self.guard else {}
 

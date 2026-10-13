@@ -32,15 +32,6 @@ def covered(settings) -> dict[str, str]:
     return settings.games
 
 
-@pytest.fixture(scope="session")
-def raw_corpus() -> Path:
-    """本地已抓语料目录；没有就 skip，而不是让 CI 变红。"""
-    d = PROJECT_ROOT / "data" / "raw"
-    if not d.is_dir() or not(any(d.iterdir())):
-        pytest.skip("本地没有语料（data/raw 为空），先跑 scripts/crawl_all.py")
-    return d
-
-
 @pytest.fixture()
 def stores_probe():
     """一套**互相隔离**的 (numpy_store, lance_store)，指向临时目录。

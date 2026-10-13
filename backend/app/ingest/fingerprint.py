@@ -34,12 +34,13 @@ from __future__ import annotations
 
 import hashlib
 import re
-import unicodedata
 
 # 行尾空白（含全角空格 —— 手工编辑 wiki 时很容易带进来）
 _TRAIL_WS = re.compile(r"[ \t\u3000\u00a0]+(?=\n)")
 _BLANK_RUN = re.compile(r"\n{3,}")
 _LEAD_BOM = "\ufeff"
+# 零宽字符：U+200B 零宽空格 / U+200C ZWNJ / U+200D ZWJ / U+FEFF BOM
+_ZERO_WIDTH = re.compile(r"[\u200b\u200c\u200d\ufeff]")
 
 
 def normalize_text(text: str) -> str:
@@ -48,14 +49,18 @@ def normalize_text(text: str) -> str:
     刻意**不做**的事：
     - 不折叠内部空格（表格对齐空格有结构含义）
     - 不做 Unicode 归一化 NFC —— 全角字母与半角字母在 wiki 里可能是不同字符，
-      统一它们会把真实的内容改动抹掉（`unicodedata.normalize` 只在下面
-      用于判断零宽字符，属于读取侧的防御，不是归一化步骤）
+      统一它们会把真实的内容改动抹掉
+
+    零宽字符转成**空格**而不是删除：删除会把 `ignore|all` 粘成一个词，
+    反而绕过按词匹配的规则；而对指纹来说，空格会被 `_TRAIL_WS` 与
+    `_BLANK_RUN` 一起收掉，等价于"看不见"。
     """
     if not text:
         return ""
     s = text.replace("\r\n", "\n").replace("\r", "\n")
     if s.startswith(_LEAD_BOM):
         s = s[len(_LEAD_BOM):]
+    s = _ZERO_WIDTH.sub(" ", s)
     s = _TRAIL_WS.sub("", s)
     s = _BLANK_RUN.sub("\n\n", s)
     return s.strip()
@@ -97,13 +102,3 @@ def is_stale(local_hash: str, remote_hash: str) -> bool:
     if not local_hash or not remote_hash:
         return True
     return local_hash != remote_hash
-
-
-def has_zero_width(text: str) -> bool:
-    """正文里有没有零宽字符。
-
-    单独拎出来是因为它**会破坏哈希**：U+200B 在 `str.strip()` 里不被当作空白，
-    两份视觉上完全相同的文本可能算出不同指纹。调用方应先把它挑出来告警，
-    而不是指望哈希去容忍它。
-    """
-    return any(unicodedata.category(ch) == "Cf" for ch in text)

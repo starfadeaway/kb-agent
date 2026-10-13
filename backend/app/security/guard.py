@@ -189,10 +189,6 @@ class ScanResult:
             return "block"
         return "warn" if self.hits else "none"
 
-    @property
-    def block_rules(self) -> tuple[str, ...]:
-        return tuple(h.rule for h in self.hits if h.severity == "block")
-
     def summary(self) -> dict:
         """给日志 / 响应体用的紧凑摘要（不含原文，避免把注入内容再抄一遍出去）。"""
         return {

@@ -42,16 +42,6 @@ def hit_rate(retrieved_ids: list[str], gold_ids: list[str], k: int) -> float:
     return 1.0 if any(g in set(retrieved_ids[:k]) for g in gold_ids) else 0.0
 
 
-def mrr(retrieved_ids: list[str], gold_ids: list[str], k: int = 10) -> float:
-    """首个命中排名的倒数，越靠前越好。"""
-    if not gold_ids:
-        return 0.0
-    for rank, rid in enumerate(retrieved_ids[:k], start=1):
-        if rid in gold_ids:
-            return 1.0 / rank
-    return 0.0
-
-
 def ndcg(retrieved_ids: list[str], gold_ids: list[str], k: int = 10) -> float:
     """二值增益版 NDCG。"""
     if not gold_ids:
@@ -114,16 +104,6 @@ def list_mrr(retrieved: Sequence[str], gold: Sequence[str], k: int = 10) -> floa
         if normalize(item) in gold_set:
             return 1.0 / rank
     return 0.0
-
-
-def evaluate(retrieved_ids: list[str], gold_ids: list[str], k: int = 5) -> RetrievalMetrics:
-    return RetrievalMetrics(
-        recall_at_k=recall_at_k(retrieved_ids, gold_ids, k),
-        hit_rate=hit_rate(retrieved_ids, gold_ids, k),
-        mrr=mrr(retrieved_ids, gold_ids),
-        ndcg=ndcg(retrieved_ids, gold_ids),
-        k=k,
-    )
 
 
 def page_level_hit(retrieved_ids: list[str], gold_pages: list[str], page_of: dict[str, str]) -> bool:

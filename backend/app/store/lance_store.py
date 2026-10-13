@@ -39,8 +39,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-NEG_INF = -1e9
-
 
 def _sql_escape(v: str) -> str:
     return str(v).replace("'", "''")
