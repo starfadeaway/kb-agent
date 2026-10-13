@@ -279,8 +279,35 @@ revision 变了但内容没变  0 页
 如果它在这里报出 100 多页"变了"，那才说明归一化没起作用。
 
 > ⚠️ 但也要如实说：**第 3 级（取正文算指纹）在本次实测中未被真实触发**。
-> 它目前只有假 WikiClient 的守卫覆盖（`test_delta_sync.py` 8 项）。
+> 它目前只有假 WikiClient 的守卫覆盖（`test_delta_sync.py`）。
 > 要真正验证，需要隔一段时间语料变旧之后再跑一次。
+
+#### 降级逻辑在真实场景下被验证了
+
+产物 `data/eval/delta_sync_sr_7d.json` 是一次**被 WAF 截断**的运行：
+
+```json
+{"local_pages": 706, "scanned_changes": 2500, "unique_changed_site": 1003,
+ "intersect": 148, "changed_count": 0, "window_exhausted": false,
+ "lower_bound": true, "waf_hits": 2,
+ "requests": {"level1_recentchanges": 5, "level2_revision_meta": 8, "level3_content": 0}}
+```
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| WAF 中断时的行为 | 抛 `WAFBlocked`，整轮崩溃 | `waf_hits=2`，保留已读结果 |
+| 已读到的 2500 条 / 1003 页 | **全部作废** | 保留，产出交集 148 |
+| 是否自报下界 | 来不及 | `lower_bound: true` |
+| 进程退出码 | 1 | 0 |
+
+**这正好闭环了文档里那对数字**：这次 148 就是文中说的"早期下界"，
+而首次跑通那次翻完了全部 2922 条、交集 162、且 `window_exhausted: true`。
+两个数字都真实存在，区别只在窗口是否翻完——被 WAF 截断的读数只能是下界。
+
+顺带修掉一个自己引入的 bug：产物路径用了 `parents[2]`，算成
+`backend/data/eval/`——那条路径不匹配 `.gitignore` 里任何规则，
+产物会被直接提交进仓库，且永远不出现在文档引用的位置上。
+现由 `test_artifact_dir_is_project_data_eval` 守住。
 
 
 

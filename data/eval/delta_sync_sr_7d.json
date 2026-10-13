@@ -1,0 +1,20 @@
+{
+  "game": "sr",
+  "since": "2026-10-06T14:18:08Z",
+  "local_pages": 706,
+  "scanned_changes": 2500,
+  "unique_changed_site": 1003,
+  "intersect": 148,
+  "changed": [],
+  "changed_count": 0,
+  "revision_only_count": 0,
+  "new_pages_count": 0,
+  "requests": {
+    "level1_recentchanges": 5,
+    "level2_revision_meta": 8,
+    "level3_content": 0
+  },
+  "window_exhausted": false,
+  "lower_bound": true,
+  "waf_hits": 2
+}

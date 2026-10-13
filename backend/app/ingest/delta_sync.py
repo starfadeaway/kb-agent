@@ -272,7 +272,11 @@ async def main(game: str, days: int) -> int:
         print(f"    {c['title'][:28]}  {c['old_hash']} -> {c['new_hash']}")
 
     # 产物必须落盘：这些数字要写进文档与简历，只留在终端输出里等于无法追溯。
-    out = Path(__file__).resolve().parents[2] / "data" / "eval" / f"delta_sync_{game}_{days}d.json"
+    # 路径是 parents[3] 不是 parents[2]：本文件在 backend/app/ingest/ 下，
+    # parents[2] 指向的是 backend/，产物会落到 backend/data/eval/ ——
+    # 那个路径不匹配任何 .gitignore 规则，会被误提交进仓库。
+    out = (Path(__file__).resolve().parents[3] / "data" / "eval"
+           / f"delta_sync_{game}_{days}d.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n产物已写 {out.name}")

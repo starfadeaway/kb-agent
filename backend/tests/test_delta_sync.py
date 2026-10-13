@@ -332,3 +332,22 @@ async def test_waf_on_level3_does_not_lose_level12(monkeypatch):
     assert rep.intersect == 1
     assert rep.changed == [], "取不到正文时不得凭空报出变更页"
     assert rep.waf_hits >= 1
+
+
+# --------------------------------------------------------------------------
+# 产物路径：写错会污染仓库
+# --------------------------------------------------------------------------
+
+def test_artifact_dir_is_project_data_eval():
+    """产物必须落在**项目根**的 data/eval/。
+
+    踩过：`delta_sync.py` 在 backend/app/ingest/ 下，用 parents[2] 会算成
+    `backend/data/eval/` —— 那条路径不匹配 .gitignore 里任何一条规则
+    （那里的规则是无前导斜杠的 data/raw/ 之类），产物会被直接提交进仓库，
+    而且永远不会出现在文档引用的位置上。
+    """
+    art_dir = Path(ds.__file__).resolve().parents[3] / "data" / "eval"
+    assert art_dir.is_dir(), f"产物目录不存在：{art_dir}"
+    assert art_dir.parent.name == "data"
+    assert art_dir.parent.parent.name != "backend", \
+        "产物目录落在 backend/ 之下 —— 会绕过 .gitignore 被提交"
