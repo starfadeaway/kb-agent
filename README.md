@@ -453,6 +453,7 @@ cd kb-agent\backend
 | 数据时效 | 版本更新：实测 wiki `recentchanges` 可穿过 WAF；近 7 天变更页 ∩ 已收录 = **162/706 页（23.0%）**，检测只花 **15 次请求**（全量重抓要 71 次）。⚠️ 全站口径 1157 页会得出"增量无意义"的**相反结论**。内容指纹已落库（1401 页 + 10843 chunk 100% 覆盖），归一化把格式误判从 **100% 压到 0**（`docs/delta_sync.md`） |
 | Agent | 手搓 ReAct，4 工具 + 4 道安全阀 + 熔断；不可答问题从 7 步/30317 token 降到 4 步/6514 token |
 | 多库路由 | 三态（库内/越界/未提及）；越界走无工具单轮，实测 0 步 / 1.1s，库内 3–5 步 / 5–8s |
+| MCP | 4 个工具以标准 MCP（SDK 2.3.0）暴露给外部 host，stdio 传输；**内置路径与 MCP 路径输出逐字符一致由守卫实跑保证**（16 项，真 `mcp.Client` 连真 server）。默认走 builtin——MCP 是出口不是入口，见 [docs/mcp.md](docs/mcp.md) |
 | 后端 | FastAPI，`/api/health` `/api/retrieve` `/api/chat` `/api/chat/stream` `/api/runs` `/api/ingest` `/api/stats` |
 | 前端 | React + Vite + TS，SSE 流式、工具时间线、引用、检索调试面板、双主题、背景图、移动端抽屉 |
 | 存储 | MySQL 语料三表与向量库**逐条一致**（`backfill_mysql.py` 剪枝后核对）：pages 1401（sr 706 / zzz 260 / ys 435）/ chunks 10843（3932 / 1498 / 5413）/ facts 25111（15017 / 4976 / 5118）。唯一差异是 ys 的「角色投稿测试（先说对不起）」正文长度为 0，被 `page_filter` 挡在索引外但 MySQL 记了"抓到了"；另有 runs / tool_calls / eval_cases / eval_results / sessions / messages |
@@ -607,9 +608,13 @@ embedding / rerank / judge **同时失效**，但：
    目前只有 sr 有样本支撑（+0.230，10/29 题）。
 
 2. **评测集继续加量**
-   12 条/库只够验证"路由没错"，统计功效仍然不足
-   （实验 C 在 n=13 时 C1→C2 的 p=0.16、d=0.28 就已经分不出差异）。
-   经验上单库要 30+ 条才谈得上显著性。
+   检索侧三库已到 48 条（sr 29 / ys 9 / zzz 10），但**生成侧 ys+zzz 加起来才 24 条**，
+   统计功效仍然不足。经验上单库要 30+ 条才谈得上显著性，
+   而 ys/zzz 现在离这个线还有一半。
+   ⚠️ 注意：**ys 的可用题里 7/9 是 `single_hop`**，而结构化题恰恰是
+   「有没有 RAG」差别最大的题型 —— 所以跨库比 judge 均值时，
+   题型构成差异会主导结果（`data/eval/exp_C_*.json` 的 `_meta.subset_composition`
+   就是为此记录的）。加题时要**按题型补**，不能只补数量。
 
 3. **把 zzz 的语料规模拉到与 sr / ys 同量级**
    现在 sr 706 / ys 435 / zzz 260 页，补抓角色页后 zzz 反而成了最短的板。

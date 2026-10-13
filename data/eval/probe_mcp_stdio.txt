@@ -1,0 +1,14 @@
+﻿工具列表（stdio 子进程）:
+  search_kb: 在游戏 wiki 知识库中检索（星穹铁道 / 原神 / 绝区零）
+    schema={"type": "object", "properties": {"query": {"title": "Query", "type": "string"}, "game": {"default": "", "title": "Game", "type": "string"}, "top_k": {"default": "", "title": "Top K", "type": "string"}}, "required": ["query"], "title": "search_kbArguments"}
+  get_page: 按标题取回知识库中的页面全文
+    schema={"type": "object", "properties": {"title": {"title": "Title", "type": "string"}, "game": {"default": "", "title": "Game", "type": "string"}}, "required": ["title"], "title": "get_pageArguments"}
+  calculator: 计算算术表达式
+    schema={"type": "object", "properties": {"expression": {"title": "Expression", "type": "string"}}, "required": ["expression"], "title": "calculatorArguments"}
+  list_games: 列出知识库覆盖的游戏
+    schema={"type": "object", "properties": {}, "title": "list_gamesArguments"}
+
+调用 calculator(0.8+0.2)*1000 -> (0.8+0.2)*1000 = 1000
+调用 list_games -> 知识库覆盖的游戏：
+
+OK: stdio 传输下的 MCP server 可用

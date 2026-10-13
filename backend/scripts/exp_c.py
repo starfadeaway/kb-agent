@@ -133,19 +133,30 @@ async def run_one(label: str, case_list, judge: Judge, *, concurrency: int = 2) 
 
     # ② 再并发跑题。并发只改"什么时候算"，不改"算出什么"：
     #    检索是纯读、生成 temperature=0、Judge 输入互不相干。
+    # 用 as_completed 边跑边打，而不是 gather 跑完一次性打。
+#
+# 15 条时无所谓，56 条（三库全量）就是好几分钟的完全静默 ——
+# 后台任务看不出是在跑还是卡死了。**可观测性缺失会让「慢」和「挂」无法区分**，
+# 而这两者的处置完全不同（等 vs 中止）。
     sem = asyncio.Semaphore(max(1, concurrency))
     tasks = [
         run_case(case, label=label, judge=judge, llm=llm, schemas=schemas,
                  ctx=ToolContext.build(case.game), single_shot=single_shot, sem=sem)
         for case in case_list
     ]
-    # gather 保序：返回顺序与 case_list 一致，聚合与打印都靠这个顺序对齐
-    rows = list(await asyncio.gather(*tasks))
-
-    for r in rows:
+    # 按 case_list 顺序回填，保证 rows 与输入顺序一致
+    # （聚合与题型矩阵都依赖这个顺序）
+    ordered: list[dict] = []
+    for done, coro in enumerate(asyncio.as_completed(tasks), start=1):
+        r = await coro
+        ordered.append(r)
         print(f"  [{label}] {r['case_id']:<8} score={r['judge_score']:<6} "
               f"corr={r['correctness']:<4} faith={r['faithfulness']:<4} "
-              f"steps={r['steps']} tok={r['prompt_tokens']:>6} {r['latency_ms']:>6}ms", flush=True)
+              f"steps={r['steps']} tok={r['prompt_tokens']:>6} {r['latency_ms']:>6}ms "
+              f"({done}/{len(case_list)})", flush=True)
+    # case_id 必须唯一，否则下面按 id 回填顺序时会静默取到别的 case 的行。
+    # 守卫在 test_exp_common_counting.py 里。
+    rows = [next(x for x in ordered if x["case_id"] == c.case_id) for c in case_list]
 
     # 聚合口径统一在 exp_common.aggregate_rows —— 三个实验必须用同一份，否则数字不可比
     return {
