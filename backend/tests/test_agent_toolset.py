@@ -15,8 +15,13 @@ from app.agent.tools import REGISTRY, get_schemas
 
 
 def test_production_default_is_search_kb_only(settings):
-    """实验 C：多挂工具没有可测收益（C1 4.60 ≥ C2 4.47，p=0.47 未显著），
-    却要多付 22.6% token —— 所以生产默认必须收敛到 search_kb。"""
+    """生产默认工具集必须收敛到 search_kb。
+
+    依据（`data/eval/exp_C.json`，n_ok=13，C1→C2 配对 p=0.1619 未达显著）：
+    多挂工具没有可测收益，却要多付约 23% 的 prompt token
+    （3869 → 4762）。结论数字不写进断言 —— 数字属于实验记录，
+    断言只守「默认挂了哪些工具」这个生产配置。
+    """
     assert settings.agent_tools == "search_kb"
     assert settings.agent_tool_names == ["search_kb"]
     active = [s["function"]["name"] for s in get_schemas(settings.agent_tool_names)]

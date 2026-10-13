@@ -173,34 +173,41 @@ def test_artifact_agrees_with_its_own_significance_flag():
     assert checked >= 8, f"产物里可校验的指标太少（{checked}），守卫没生效"
 
 
-def test_qwen_latency_is_faster_in_final_fusion_stage():
-    """**融合档（A2）** 是本项目实际使用的配置，它的延迟差异必须显著且方向是 Qwen。
+def test_fusion_latency_direction_is_self_consistent():
+    """融合档（A2）延迟的方向判定必须与三个量自洽 —— 不断言"显著"。
 
-    为什么只锁 A2、不锁 A1：A1 是"纯向量"这个中间档，
-    2026-10-13 重跑后它的延迟差异已不显著（p=0.0946）。
-    宣称"Qwen 全面更快"是过度解读 —— 真正站得住的只有融合档。
-    A1 的显著性交给上面那条自洽性断言，不在这里硬编码。
+    **为什么不写死 `significant is True`**：
+    那条断言（以及同文件里对 `winner == "other"` / `cohens_d < 0.1` 的断言）
+    断言的是**实验 D 的结论**，不是代码不变量。而 `data/eval/model_compare_*.json`
+    是入库产物，CI 上真实存在、真实执行 —— 换一次语料、重跑一次实验、换一个索引，
+    它就会变红，而红的原因与代码质量毫无关系。
+
+    实测已经发生过：ys 的 A2 延迟 p=0.5788（不显著），而 sr/zzz 显著。
+    "三库都显著"从来就不是事实。
+
+    这里守的是**判定逻辑本身**：给定 mean_diff、higher_is_better、winner 三者，
+    winner 必须是唯一正确的那个。这类断言对数据更新免疫，重跑实验不会变红。
     """
-    d = _artifact()
-    m = d["A2"]["metrics"]["latency_ms"]
-    assert m["significant"] is True, (
-        f"融合档延迟不再显著（p={m.get('p')}）→ README/EVALUATION 里"
-        "「Qwen 显著更快」的说法要改"
-    )
-    assert m["winner"] == "other", (
-        f"A2 延迟 winner 应为 other(Qwen)，实际 {m['winner']} —— "
-        "方向判定或产物已过期"
-    )
-    assert m["mean_diff"] > 0, "bge 延迟更大即 bge 更慢"
-    # 显著 ≠ 实际重要：效应量必须同时被记下来，否则容易被当成"快很多"
-    assert "cohens_d" in m and m["cohens_d"] < 0.1, (
-        f"效应量 {m.get('cohens_d')} 偏大，文档里「显著更快」的说法需要再核对量级"
-    )
+    for game in ("sr", "ys", "zzz"):
+        d = _artifact(game)
+        for label, block in d.items():
+            if label.startswith("_") or "metrics" not in block:
+                continue
+            for key, m in block["metrics"].items():
+                hi = m["higher_is_better"]
+                diff = m["mean_diff"]
+                expected = ("tie" if diff == 0
+                            else ("bge" if ((diff > 0) == hi) else "other"))
+                assert m["winner"] == expected, (
+                    f"{game}/{label}.{key}：mean_diff={diff}、higher_is_better={hi} "
+                    f"推出 winner 应为 {expected!r}，实际 {m['winner']!r} —— "
+                    f"方向判定逻辑错了"
+                )
 
 
 @pytest.mark.parametrize("game", ["sr", "ys", "zzz"])
 def test_fusion_latency_direction_holds_in_every_game(game):
-    """「融合档 Qwen 更快」这条必须在**三库每一库**都成立。
+    """「融合档 Qwen 更快」这条必须在**三库每一库**方向都成立（不断言显著）。
 
     为什么加这条：原守卫只看默认那一份产物，于是 sr 上成立就被当成全局结论。
     实测三库里 ys 的 A2 延迟差异 p=0.5788 —— **只有两库显著**。
@@ -209,11 +216,16 @@ def test_fusion_latency_direction_holds_in_every_game(game):
     """
     d = _artifact(game)
     m = d["A2"]["metrics"]["latency_ms"]
-    if m["significant"]:
-        assert m["winner"] == "other", (
-            f"{game} 的 A2 延迟显著时，方向必须是 Qwen 更快，实际 {m['winner']}"
-        )
-        assert m["mean_diff"] > 0, f"{game} 的 A2：bge 延迟更大即 bge 更慢"
+    # 无条件断言方向，**不要**放进 `if m["significant"]:` 里。
+    #
+    # 放进去的后果很隐蔽：ys 的 A2 p=0.5788（不显著），整条用例会**一条断言都不执行**
+    # 然后通过 —— docstring 写着「三库每一库都成立」，实际上 ys 是空跑，
+    # 给的是覆盖率的假象。而"方向对不对"这件事与显著不显著无关，
+    # 即使 p=0.58，mean_diff 的符号也必须和 winner 一致。
+    assert m["winner"] == "other", (
+        f"{game} 的 A2 延迟方向必须是 Qwen 更快（winner=other），实际 {m['winner']}"
+    )
+    assert m["mean_diff"] > 0, f"{game} 的 A2：bge 延迟更大即 bge 更慢（实际 {m['mean_diff']}）"
 
 
 def test_guards_refuse_to_run_on_failed_control():

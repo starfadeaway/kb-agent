@@ -16,6 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 是**功能性要求**，不是"历史完整一点"的美观设置。
+          #
+          # 三条双向验证守卫（test_run_eval_multigame / test_exp_d_missing_model /
+          # test_model_compare_control）会用 `git worktree add` 检出**改造前的固定
+          # commit**（17f285f / acbb64f），实跑旧代码确认守卫会红。
+          # 默认 fetch-depth: 1 的浅克隆里取不到那些 commit ——
+          # 实测 `git cat-file -t 17f285f` 返回 `fatal: Not a valid object name`，
+          # 于是三条守卫全部走 pytest.skip，CI 上从来没真正执行过。
+          # 也就是说「双向验证已完成」这个结论只有本地证据，没有 CI 证据。
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:

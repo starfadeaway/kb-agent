@@ -140,9 +140,17 @@ def test_all_registered_tools_have_valid_json_schema():
 
 
 def test_search_kb_is_the_only_tool_enabled_by_default():
-    """实验 C 结论：C1（只给 search_kb）比 C2（全工具）高 2.13 分且显著，
-    但 token 多 22.6%。生产默认因此只挂 search_kb，
-    别被"功能更全"说服改回去。其余工具仍在注册表里，需要时手动开。"""
+    """四个工具都必须留在注册表里（供手动开启），但默认只挂 search_kb。
+
+    这条断言守的是**注册表内容**，不是实验结论。
+    早先这里的 docstring 写着「实验 C：C1 比 C2 高 2.13 分且显著」，
+    同项目另一处却写着「C1 4.60 ≥ C2 4.47，p=0.47 未显著」—— 两处互相矛盾。
+    查 `data/eval/exp_C.json` 的真实值：C1 judge=4.7692（n_ok=13）、C2 judge=4.7308（n_ok=13），
+    差 **0.038**，配对检验 p=0.1619 **未达显著**（见 EVALUATION.md 实验 C）。
+
+    所以「挂更多工具显著更好」从来就不成立。结论数字不进断言，
+    免得实验重跑后这里只因为数字变了就红 —— 那是数据问题，不是代码问题。
+    """
     assert set(REGISTRY) == {"search_kb", "get_page", "calculator", "list_games"}
 
 

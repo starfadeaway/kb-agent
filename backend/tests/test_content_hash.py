@@ -92,7 +92,12 @@ def test_sidecar_records_content_hash(raw_dir):
     pipeline.cache_raw(_page(), "sr")
     meta = json.loads((raw_dir / "sr" / "1494.meta.json").read_text(encoding="utf-8"))
     assert meta.get("content_hash"), "sidecar 未记录内容指纹"
-    assert len(meta["content_hash"]) == 16
+    # 只断言「是个短十六进制摘要」，不写死长度。
+    # 写死 16 的话，换算法（blake2b）或改 digest_size 都会红，
+    # 而那与「指纹有没有正确记录下来」无关。
+    h = meta["content_hash"]
+    assert 1 <= len(h) <= 64, f"content_hash 长度异常：{h!r}"
+    assert all(c in "0123456789abcdef" for c in h), f"不是小写十六进制：{h!r}"
 
 
 def test_sidecar_hash_readable_without_reading_body(raw_dir):

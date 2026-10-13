@@ -83,11 +83,17 @@ def test_gold_answer_never_defers_to_wiki():
 
 def test_gold_pages_exist_in_corpus(page_titles):
     """gold_pages 指向的页面必须真的被抓进来了，否则这条题永远判失败。"""
+    # 没有语料时必须 **skip**，不能 `continue`。
+    #
+    # `continue` 的话整条用例等于什么都没跑却通过 —— 给的是覆盖率的假象。
+    # 而且 `data/raw/` 是 gitignore 的，CI 上必然没有语料，
+    # 于是这条守卫在 CI 上恒真，从来没起过作用。skip 至少在报告里是诚实的。
+    if not any(page_titles.get(g) for g in ("sr", "ys", "zzz")):
+        pytest.skip("本地无原始语料（data/raw 未入库），无法核对 gold 页面")
+
     missing: list[str] = []
     for c in all_cases():
         titles = page_titles.get(c.game) or set()
-        if not titles:
-            continue  # 没有语料，跳过
         for gp in c.gold_pages:
             if gp not in titles:
                 missing.append(f"{c.case_id} -> 「{gp}」")
