@@ -18,9 +18,18 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+# Windows 的 venv 布局是 .venv/Scripts/python.exe，POSIX 是 .venv/bin/python。
+# 找不到时退回当前解释器 —— 但必须**说出来**：静默退回意味着可能在没有项目依赖的
+# 解释器里跑完整个流程，最后报一个莫名其妙的 ImportError，根因却在这里。
 PY = ROOT / ".venv" / "Scripts" / "python.exe"
-if not PY.is_file():  # 非 Windows
-    PY = Path(sys.executable)
+if not PY.is_file():
+    _posix = ROOT / ".venv" / "bin" / "python"
+    if _posix.is_file():
+        PY = _posix
+    else:
+        PY = Path(sys.executable)
+        print(f"[警告] 没找到项目 venv（{ROOT / '.venv'}），改用当前解释器：{PY}\n"
+              f"       若依赖缺失，请先执行：{ROOT / '.venv'} 下创建虚拟环境并装 backend/requirements.txt")
 
 
 def npm_cmd() -> str:

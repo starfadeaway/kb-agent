@@ -28,9 +28,17 @@ from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parent.parent
 ROOT = BACKEND.parent
+# 解释器路径：先按 Windows 布局找，再试 POSIX 布局，都没有才退回当前解释器。
+# 退回时必须提示 —— 否则可能在一个没装项目依赖的解释器里跑完整套实验，
+# 最后炸在一个看不出根因的 ImportError 上。
 PY = ROOT / ".venv" / "Scripts" / "python.exe"
 if not PY.is_file():
-    PY = Path(sys.executable)
+    _posix = ROOT / ".venv" / "bin" / "python"
+    if _posix.is_file():
+        PY = _posix
+    else:
+        PY = Path(sys.executable)
+        print(f"[警告] 没找到项目 venv（{ROOT / '.venv'}），改用当前解释器：{PY}")
 
 # 每一步相对 BASE 改了哪个变量，在这里写死，避免跑的时候临时改
 STEPS = {

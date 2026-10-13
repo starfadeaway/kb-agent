@@ -145,32 +145,27 @@ async def chat_with(label: str, model_name: str | None, messages: list[dict],
     return {"content": content, "tool_calls": calls, "usage": usage}
 
 
-async def run_one(label: str, case_list, judge: Judge) -> dict:
+async def run_case(case, *, label: str, model_name: str, judge: Judge, tools,
+                   ctx, sem: asyncio.Semaphore) -> dict:
+    """跑单条 case。每条自己建/关 client，不共享可变状态，并发安全。"""
     s = get_settings()
-    model_name = MODELS[label]
-    if label == "E1" and not model_name:
-        model_name = s.deepseek_chat_model
-    rows = []
-    tools = get_schemas()
+    # 证据固定：两个模型看到完全一样的检索结果，
+    # 否则「谁答得好」可能只是因为「谁检索到的证据更好」
+    try:
+        ev = await ctx.retriever.retrieve(case.question, RetrievalConfig(game=case.game, final_top_k=5))
+        contexts = contexts_from_hits(ev)
+    except Exception:  # noqa: BLE001
+        contexts = ""
 
-    for case in case_list:
-        ctx = ToolContext.build(case.game)
-        # 证据固定：两个模型看到完全一样的检索结果，
-        # 否则「谁答得好」可能只是因为「谁检索到的证据更好」
-        try:
-            ev = await ctx.retriever.retrieve(case.question, RetrievalConfig(game=case.game, final_top_k=5))
-            contexts = contexts_from_hits(ev)
-        except Exception:  # noqa: BLE001
-            contexts = ""
+    # 只注入 chat 函数，ReAct 循环、工具执行、安全阀、引用收集
+    # 全部走生产代码本身 —— 不在脚本里抄一份副本。
+    # 抄一份的话，测出来的就不是线上真正在跑的东西。
+    async def chat_fn(messages, **kw):
+        return await chat_with(label, model_name, messages, kw.get("tools") or tools)
 
-        # 只注入 chat 函数，ReAct 循环、工具执行、安全阀、引用收集
-        # 全部走生产代码本身 —— 不在脚本里抄一份副本。
-        # 抄一份的话，测出来的就不是线上真正在跑的东西。
-        async def chat_fn(messages, **kw):
-            return await chat_with(label, model_name, messages, kw.get("tools") or tools)
+    agent = ReActAgent(settings=s, llm=get_llm(), tools=tools, chat_fn=chat_fn)
 
-        agent = ReActAgent(settings=s, llm=get_llm(), tools=tools, chat_fn=chat_fn)
-
+    async with sem:
         t0 = time.perf_counter()
         err = None
         try:
@@ -185,34 +180,60 @@ async def run_one(label: str, case_list, judge: Judge) -> dict:
 
         js = await judge.score(question=case.question, gold=case.gold_answer,
                                answer=answer, contexts=contexts)
-        d = js.as_dict()
-        # 报错的 case 不能和"答得差"混为一谈 —— judge 对空回答给 0 分，
-        # 但那是链路失败不是能力差，不加标记的话均值会被悄悄拉低，
-        # 看起来像"这个模型更差"，实际是它根本没跑起来。
-        if err:
-            d["errored"] = True
-        rows.append({
-            "case_id": case.case_id, "category": case.category,
-            "correctness": d["correctness"], "faithfulness": d["faithfulness"],
-            "completeness": d["completeness"], "judge_score": d["judge_score"],
-            "judge_reason": d["reason"],
-            "prompt_tokens": usage.get("prompt_tokens", 0),
-            "completion_tokens": usage.get("completion_tokens", 0),
-            "steps": steps, "tool_failures": failures, "has_refs": bool(refs),
-            "latency_ms": dt, "error": err, "answer": answer[:500],
-        })
-        print(f"  [{label}] {case.case_id:<8} score={d['judge_score']:<6} "
-              f"steps={steps} tok={usage.get('prompt_tokens', 0):>6} {dt:>6}ms"
-              + (f"  ⚠ ERR {str(err)[:70]}" if err else ""), flush=True)
+    d = js.as_dict()
+    # 报错的 case 不能和"答得差"混为一谈 —— judge 对空回答给 0 分，
+    # 但那是链路失败不是能力差，不加标记的话均值会被悄悄拉低，
+    # 看起来像"这个模型更差"，实际是它根本没跑起来。
+    if err:
+        d["errored"] = True
+    return {
+        "case_id": case.case_id, "category": case.category,
+        "correctness": d["correctness"], "faithfulness": d["faithfulness"],
+        "completeness": d["completeness"], "judge_score": d["judge_score"],
+        "judge_reason": d["reason"],
+        "prompt_tokens": usage.get("prompt_tokens", 0),
+        "completion_tokens": usage.get("completion_tokens", 0),
+        "steps": steps, "tool_failures": failures, "has_refs": bool(refs),
+        "latency_ms": dt, "error": err, "answer": answer[:500],
+    }
+
+
+async def run_one(label: str, case_list, judge: Judge, *, concurrency: int = 2) -> dict:
+    s = get_settings()
+    model_name = MODELS[label]
+    if label == "E1" and not model_name:
+        model_name = s.deepseek_chat_model
+    tools = get_schemas()
+
+    # 先串行建好 ToolContext（首次建 BM25 ~1.8s，之后命中进程缓存 ~17ms），
+    # 再并发跑题 —— 与 exp_c 同一套并发策略。
+    for case in case_list:
+        ToolContext.build(case.game)
+
+    sem = asyncio.Semaphore(max(1, concurrency))
+    rows = list(await asyncio.gather(*[
+        run_case(case, label=label, model_name=model_name, judge=judge, tools=tools,
+                 ctx=ToolContext.build(case.game), sem=sem)
+        for case in case_list
+    ]))
+
+    for r in rows:
+        print(f"  [{label}] {r['case_id']:<8} score={r['judge_score']:<6} "
+              f"steps={r['steps']} tok={r['prompt_tokens']:>6} {r['latency_ms']:>6}ms"
+              + (f"  ⚠ ERR {str(r['error'])[:70]}" if r["error"] else ""), flush=True)
 
     # 聚合口径统一在 exp_common.aggregate_rows —— 与实验 C 共用同一个函数
-    return {"label": label, "model": model_name, "aggregate": aggregate_rows(rows), "rows": rows}
+    return {"label": label, "model": model_name, "concurrency": concurrency,
+            "aggregate": aggregate_rows(rows), "rows": rows}
 
 
 async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--labels", default="E1,E2")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--concurrency", type=int, default=2,
+                    help="同档内并发跑几条题。1=串行。注意 latency_ms 含排队时间，跨并发度不可比")
+    ap.add_argument("--out", default=None, help="结果文件名；不给则按样本量自动命名")
     args = ap.parse_args()
 
 
@@ -229,9 +250,9 @@ async def main() -> None:
     for label in args.labels.split(","):
         label = label.strip().upper()
         print(f"=== 运行 {label}（{_label_of(label)}）===", flush=True)
-        results.append(await run_one(label, case_list, judge))
+        results.append(await run_one(label, case_list, judge, concurrency=args.concurrency))
 
-    save(results, "exp_E.json")
+    save(results, args.out or f"exp_E{'' if len(case_list) == 15 else f'_{len(case_list)}'}.json")
     print_summary(results, f"实验 E：Chat 基座对比（冻结 temperature/tools/prompt/评测集，n={len(case_list)}）")
 
     print("--- 各档 Chat 基座 ---")

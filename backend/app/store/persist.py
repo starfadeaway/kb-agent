@@ -12,8 +12,9 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 
 from app.core.config import Settings, get_settings
@@ -224,6 +225,24 @@ def cached_page_ids(game: str) -> list[int]:
     )
 
 
+def empty_corpus_refusal(page_ids: list[int], existing_pages: int, game: str) -> str | None:
+    """语料为空但库里已有数据时，给出拒绝理由；不该拒绝时返回 None。
+
+    抽成纯函数是为了能脱离数据库单测 —— 这个判断一旦失效，
+    后果是整个库的语料被静默删光，所以它必须有测试守着，
+    而不能只在跑真回填时才"顺便验证一下"。
+    """
+    if page_ids:
+        return None
+    if existing_pages:
+        return (
+            f"缓存目录里没有 {game} 的任何页面，但库里已有 {existing_pages} 页 —— "
+            f"拒绝执行，以免剪枝把整库删光。先确认 data/raw/{game} 是否存在"
+            f"（当前工作目录：{Path.cwd()}）"
+        )
+    return None
+
+
 async def backfill_corpus(game: str = "sr", settings: Settings | None = None) -> dict:
     """把本地缓存的页面 / chunk / infobox 事实全量写入 MySQL。
 
@@ -246,6 +265,26 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
     if not await init_db(s):
         return {"ok": False, "reason": "MySQL 不可用"}
 
+    # **语料为空时必须拒绝执行，而不是"回填 0 页"**。
+    #
+    # 下面的剪枝逻辑是"以本轮语料为准的全量替换"：keep_* 三个集合为空时，
+    # 库里现有的每一行都会被判成"残留"而删除。
+    # 于是只要 cached_page_ids 返回空（cwd 不对、data/raw 被清、game 拼错），
+    # 一次回填就会把这个 game 的 Page / ChunkMeta / Fact **全部删光**，
+    # 而且照旧返回 ok=True、pages=0 —— 不报错、不告警、数据不可逆。
+    #
+    # 触发它不需要什么罕见条件，跑错一次工作目录就够了。
+    page_ids = cached_page_ids(game)
+    if not page_ids:
+        async with session_scope(s) as probe:
+            existing = (
+                await probe.execute(select(func.count()).select_from(Page).where(Page.game == game))
+            ).scalar() or 0
+        refusal = empty_corpus_refusal(page_ids, existing, game)
+        if refusal:
+            return {"ok": False, "reason": refusal}
+        return {"ok": True, "pages": 0, "note": f"缓存与库里都没有 {game}，无需回填"}
+
     cfg = IngestConfig.from_settings(game)
     from app.ingest.page_filter import should_index
     from app.ingest.pipeline import page_to_chunks, page_to_facts
@@ -259,7 +298,7 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
     keep_page_ids: set[int] = set()
 
     async with session_scope(s) as session:
-        for pid in cached_page_ids(game):
+        for pid in page_ids:
             page = load_cached_page(pid, game)
             if page is None:
                 errors.append(f"page {pid} 无法复原")
