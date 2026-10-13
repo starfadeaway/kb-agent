@@ -1,7 +1,7 @@
 {
   "meta": {
-    "scanned_chunks": 5097,
-    "scanned_chars": 1935126,
+    "scanned_chunks": 10843,
+    "scanned_chars": 4414262,
     "games": [
       "sr",
       "zzz",
@@ -219,10 +219,10 @@
     ]
   },
   "real_corpus": {
-    "chunks": 5097,
+    "chunks": 10843,
     "flagged": 0,
     "flag_rate": 0.0,
-    "per_chunk_ms": 0.3431,
+    "per_chunk_ms": 0.2916,
     "hits": {}
   },
   "verdict": {
