@@ -17,6 +17,7 @@
 | `docs/glossary.md` | **专有名词释义** —— RAG / BM25 / RRF / rerank / NDCG 等，每个都写清「是什么、用在哪、实测多少」 |
 | `docs/rerank.md` | **重排（Rerank）深入说明** —— 一篇文档讲透，含实测效果与代价 |
 | `docs/concurrency.md` | **并发实测** —— 能开几个、同时跑会怎样、共享状态有哪些坑、怎么调 |
+| `docs/experiments.md` | **五个实验各自想证明什么、结果里每列是什么意思** —— 忘了当初为什么做实验就看这个 |
 | `EVALUATION.md` | 实验数据与结论，含方法论教训 |
 
 ---

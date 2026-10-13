@@ -108,31 +108,15 @@ async def run_one(
 
 async def persist_results(args, results: list[dict]) -> None:
     """评测集 + 每条 case 的得分一起落 MySQL。"""
-    from app.eval.cases import cases_for
-    from app.store.db import init_db, session_scope
-    from app.store.models import EvalCase as EvalCaseRow
-    from app.store.persist import save_eval_run
-    from sqlalchemy.dialects.mysql import insert as mysql_insert
+    from app.store.db import init_db
+    from app.store.persist import save_eval_cases, save_eval_run
 
     if not await init_db():
         print("MySQL 不可用，跳过落库（结果仍已写入 JSON）")
         return
 
     try:
-        async with session_scope() as session:
-            cases = cases_for(args.game)
-            if cases:
-                ins = mysql_insert(EvalCaseRow).values([c.as_dict() for c in cases])
-                await session.execute(
-                    ins.on_duplicate_key_update(
-                        question=ins.inserted.question,
-                        gold_answer=ins.inserted.gold_answer,
-                        gold_pages=ins.inserted.gold_pages,
-                        difficulty=ins.inserted.difficulty,
-                        notes=ins.inserted.notes,
-                    )
-                )
-        n_cases = len(cases_for(args.game))
+        n_cases = await save_eval_cases(args.game)
     except Exception as exc:  # noqa: BLE001
         print(f"评测集落库失败（不影响结果）：{type(exc).__name__}: {exc}")
         return
@@ -208,11 +192,12 @@ async def main() -> None:
     # 消融实验跑的是同一批题，case 难度方差极大，配对检验先消掉这个方差源。
     if len(results) >= 2:
         print("\n=== 配对 t 检验（metric=mrr，与上一级比）===")
-        print(f"{'对比':<16}{'Δmrr':>9}{'t':>8}{'p':>8}{'Cohen d':>9}{'显著':>7}")
+        print(f"{'对比':<16}{'Δmrr(后-前)':>13}{'t':>8}{'p':>8}{'Cohen d':>9}{'显著':>7}")
         sig_rows = []
         for i in range(1, len(results)):
             prev, cur = results[i - 1], results[i]
-            t = M.paired_test(prev["rows"], cur["rows"], "mrr")
+            # 传 (当前, 上一档)：Δ 与 d 都是「后减前」，正数 = 这次改进是正收益。
+            t = M.paired_test(cur["rows"], prev["rows"], "mrr")
             sig_rows.append({"comparison": f"{prev['label']}→{cur['label']}", **t})
             if t.get("n", 0) >= 3:
                 print(f"{prev['label'] + '→' + cur['label']:<16}{t['mean_diff']:>9.4f}"

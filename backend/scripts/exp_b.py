@@ -100,9 +100,16 @@ def main() -> None:
     rows = []
     for step, cfg in STEPS.items():
         f = out_dir / f"exp_{step}_{args.game}_k{args.top_k}.json"
-        if step == "B0":
-            f = out_dir / f"exp_A_k{args.top_k}_v2.json"   # base 的结果在实验 A 里
+        # 原来 B0 被特殊处理去读写死的 `exp_A_k{k}_v2.json`：
+        # ① 那个文件名是某一次临时跑法的产物，run_eval 早就改成别的命名了；
+        # ② 重跑实验 A 之后 B0 不会跟着更新，于是汇总表里混着两个时期的数据
+        #    （本次就发现 B0 的延迟还是旧的 95/147/221/567，而新 A 是 90/156/219/709）。
+        # 统一按各步自己的产物读，B0 走 --skip-rebuild 跑评测即可，不必重建 base。
         if not f.is_file():
+            if step == "B0":
+                print(f"  提示：缺 {f.name}，B0 需要先跑一次 --steps B0 --skip-rebuild")
+            else:
+                print(f"  提示：缺 {f.name}，跳过 {step}")
             continue
         for r in json.loads(f.read_text(encoding="utf-8")):
             if step != "B0" and r["config"].get("variant") != cfg["variant"]:

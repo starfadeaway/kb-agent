@@ -153,6 +153,39 @@ async def save_eval_run(
         return 0
 
 
+async def save_eval_cases(game: str, settings: Settings | None = None) -> int:
+    """把代码里定义的评测集 upsert 进 `eval_cases` 表，返回落库条数。
+
+    单独抽出来是因为原先这段逻辑内嵌在 `run_eval.py` 的落库分支里，
+    而它只处理 `args.game` —— 于是只有"正好被实验跑到过的那个库"才有评测集。
+    实验 A–E 全跑 sr，于是 zzz / ys 的 24 条评测集永远进不了库，
+    表就少了一大半，看起来像"评测集就这么大"。
+
+    upsert 而非 insert：重复执行是幂等的，改了 gold 也会刷新。
+    """
+    from sqlalchemy.dialects.mysql import insert as mysql_insert
+
+    from app.eval.cases import cases_for
+
+    cases = cases_for(game)
+    if not cases:
+        return 0
+    s = settings or get_settings()
+    async with session_scope(s) as session:
+        ins = mysql_insert(EvalCaseRow).values([c.as_dict() for c in cases])
+        await session.execute(
+            ins.on_duplicate_key_update(
+                question=ins.inserted.question,
+                category=ins.inserted.category,
+                gold_answer=ins.inserted.gold_answer,
+                gold_pages=ins.inserted.gold_pages,
+                difficulty=ins.inserted.difficulty,
+                notes=ins.inserted.notes,
+            )
+        )
+    return len(cases)
+
+
 async def load_eval_cases(game: str, settings: Settings | None = None) -> list[EvalCaseDef]:
     """从库里读评测集；库里没有就回退到代码里的定义。"""
     s = settings or get_settings()

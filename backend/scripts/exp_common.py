@@ -173,8 +173,11 @@ def paired_scores(results: Sequence[dict], metric: str = "judge_score") -> dict 
     if len(last_rows) < 3:
         return None
     return paired_test(
-        [{**r, metric: r[metric]} for r in common],
+        # 传 (末档, 首档)：Δ 与 d 都是「末档减首档」，正数 = 加了 RAG 之后变好。
+        # 反过来传的话，C0→C1 会打出负的 Δ，而 "C1 更好" 这个结论要靠读者
+        # 自己把符号翻过来才成立 —— 与直觉相反的方向约定迟早会被抄错。
         [{**r, metric: r[metric]} for r in last_rows],
+        [{**r, metric: r[metric]} for r in common],
         metric,
     )
 
