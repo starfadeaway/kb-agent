@@ -1,0 +1,45 @@
+{
+  "groups": {
+    "sr": {
+      "cases": 32,
+      "local_pages": 707,
+      "cases_with_gold": 29,
+      "missing": 0,
+      "categories": {
+        "single_hop": 14,
+        "multi_hop": 5,
+        "numerical": 3,
+        "unanswerable": 3,
+        "routing": 1,
+        "semantic": 6
+      }
+    },
+    "ys": {
+      "cases": 12,
+      "local_pages": 435,
+      "cases_with_gold": 9,
+      "missing": 0,
+      "categories": {
+        "single_hop": 7,
+        "multi_hop": 1,
+        "semantic": 1,
+        "routing": 1,
+        "unanswerable": 2
+      }
+    },
+    "zzz": {
+      "cases": 12,
+      "local_pages": 263,
+      "cases_with_gold": 10,
+      "missing": 0,
+      "categories": {
+        "routing": 1,
+        "single_hop": 7,
+        "semantic": 2,
+        "numerical": 1,
+        "unanswerable": 1
+      }
+    }
+  },
+  "missing": []
+}
