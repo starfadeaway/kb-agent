@@ -16,6 +16,7 @@ import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import Settings, get_settings
+from app.llm.fallback import describe, is_retryable
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +187,9 @@ class LLMClient:
         # 主要收益场景：评测重跑、Agent 连续几步问同一个 query、用户重复提问。
         self._embed_cache = _LRU(maxsize=512)
         self._rerank_cache = _LRU(maxsize=256)
+        #: 发生过降级的记录。给 /api/health 看 —— 降级本身不报错，
+        #: 不留痕的话「今天有 40% 的回答其实来自备用模型」根本不会有人知道。
+        self._fallback_events: list[dict] = []
 
     # ---------------- provider 懒加载 ----------------
     def _provider(self, name: str) -> AsyncOpenAI:
@@ -295,6 +299,22 @@ class LLMClient:
             raise RuntimeError(f"{key} 对应的模型名未配置（检查 .env）")
         return model_name
 
+    def fallback_stats(self) -> dict:
+        """降级留痕统计。`/api/health` 展示用。
+
+        降级不是错误，可它改变了这个系统到底在用什么模型回答用户 ——
+        不统计就等于把这件事藏起来。
+        """
+        by_pair: dict[tuple[str, str], int] = {}
+        for ev in self._fallback_events:
+            by_pair[(ev["from"], ev["to"])] = by_pair.get((ev["from"], ev["to"]), 0) + 1
+        return {
+            "chain": [x.strip() for x in self.s.chat_fallbacks.split(",") if x.strip()],
+            "total": len(self._fallback_events),
+            "by_pair": [{"from": a, "to": b, "count": n} for (a, b), n in by_pair.items()],
+            "recent": self._fallback_events[-5:],
+        }
+
     def available_backends(self) -> list[dict]:
         """已配好密钥的 Chat 基座，/api/health 透给前端渲染下拉框。
 
@@ -354,11 +374,80 @@ class LLMClient:
         tools: list[dict] | None = None,
         **kwargs: Any,
     ) -> dict:
-        """返回 {'content': str, 'tool_calls': [...], 'usage': {...}, 'model': str}。
+        """返回 {'content': str, 'tool_calls': [...], 'usage': {...}, 'model': str,
+        'backend': str, 'fallback': {...}}。
 
         `backend` 是对外的 provider 名（deepseek / minimax），
         上层不需要知道 key 和 base_url 在哪 —— 那是这里的事。
+
+        **降级事实必须显式带回。** `fallback.used` 为 True 表示这个答案是
+        备用基座生成的，`fallback.from` 记原基座。这不是可选项 ——
+        一次悄悄的降级会让跨模型对比实验混进"模型换了"这个隐藏变量，
+        而实验 D 刚刚因为检验对象用错推翻了结论，同一个坑不能再踩一次。
         """
+        chain = self._fallback_chain(backend, model)
+        primary = (backend or "deepseek").lower()
+        last_exc: BaseException | None = None
+
+        for idx, be in enumerate(chain):
+            if idx:  # 不是第一次尝试 → 这是降级
+                await asyncio.sleep(self.s.chat_fallback_backoff * idx)
+                logger.warning(
+                    "Chat 降级：%s → %s（上一个失败：%s）",
+                    primary, be, self._fallback_note(last_exc),
+                )
+            try:
+                out = await self._chat_once(
+                    messages, model=model, backend=be, temperature=temperature,
+                    max_tokens=max_tokens, tools=tools, **kwargs,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if idx == len(chain) - 1 or not is_retryable(exc):
+                    raise
+                continue
+            if idx:
+                self._fallback_events.append({"from": primary, "to": be, "why": self._fallback_note(exc_ := last_exc)})
+                out["fallback"] = {"used": True, "from": primary, "to": be, "why": self._fallback_note(exc_)}
+            else:
+                out["fallback"] = {"used": False}
+            return out
+        raise RuntimeError("Chat 降级链为空")  # pragma: no cover - chain 至少含主基座
+
+    def _fallback_chain(self, backend: str | None, model: str | None) -> list[str]:
+        """降级顺序 = [主基座] + CHAT_FALLBACKS 解析出的基座名。
+
+        显式指定了 `model`（实验脚本会这么做）时**不降级**：
+        那时的诉求是"就用这个模型"，悄悄换一个等于把实验变量换掉。
+
+        解析放在这里而不是 Settings property 上，是因为「去掉主基座、去重」
+        是编排层的事 —— 配置层只负责原样存下用户写的字符串。
+        """
+        primary = (backend or "deepseek").lower()
+        if model:
+            return [primary]
+        chain = [primary]
+        for fb in (x.strip().lower() for x in self.s.chat_fallbacks.split(",")):
+            if fb and fb != primary and fb not in chain:
+                chain.append(fb)
+        return chain
+
+    @staticmethod
+    def _fallback_note(exc: BaseException | None) -> str:
+        return "unknown" if exc is None else describe(exc)
+
+    async def _chat_once(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        model: str | None,
+        backend: str,
+        temperature: float,
+        max_tokens: int,
+        tools: list[dict] | None,
+        **kwargs: Any,
+    ) -> dict:
+        """单次 Chat 调用，不含任何降级逻辑（降级由 chat() 统一编排）。"""
         provider, model_name = self._chat_provider(backend, model)
 
         if tools:
@@ -389,7 +478,8 @@ class LLMClient:
             "prompt_tokens": resp.usage.prompt_tokens if resp.usage else 0,
             "completion_tokens": resp.usage.completion_tokens if resp.usage else 0,
         }
-        return {"content": content, "tool_calls": calls, "usage": usage, "model": model_name}
+        return {"content": content, "tool_calls": calls, "usage": usage,
+                "model": model_name, "backend": (backend or "deepseek").lower()}
 
     async def chat_stream(
         self,

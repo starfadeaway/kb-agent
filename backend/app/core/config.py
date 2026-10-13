@@ -110,6 +110,13 @@ class Settings:
     #: p=0.47 未达显著）却要多付 22.6% token。改成全量前请先重跑实验 C。
     agent_tools: str = field(default_factory=lambda: _env("AGENT_TOOLS", "search_kb"))
 
+    #: Chat 降级链，逗号分隔的基座名（如 "minimax"），空 = 不降级。
+    #: 只对**可重试**故障生效（429 / 5xx / 超时 / 连接失败）；
+    #: 400 参数错、401 鉴权错、内容过滤这类确定性失败一律不重试 ——
+    #: 同样的请求再发一次还是会失败，重试只是把延迟和账单翻倍。
+    chat_fallbacks: str = field(default_factory=lambda: _env("CHAT_FALLBACKS", ""))
+    chat_fallback_backoff: float = field(default_factory=lambda: _env_float("CHAT_FALLBACK_BACKOFF", 0.8))
+
     @property
     def agent_tool_names(self) -> list[str] | None:
         """""不限具体名称，只返回 None（= 全部工具）"或一份名称列表。"""

@@ -165,6 +165,9 @@ async def health() -> dict:
         },
         # 前端模型下拉框的数据源。只列出配好密钥的，不会泄露密钥内容。
         "chat_backends": llm.available_backends(),
+        # 降级留痕。降级不报错，所以它必须自己出现在健康检查里 ——
+        # 否则「今天有 40% 的回答其实来自备用模型」这件事根本不会有人知道。
+        "fallback": llm.fallback_stats(),
         "embed_model": _settings.embed_model_main,
         "rerank_model": _settings.rerank_model,
         # slug → 显示名。前端游戏切换器直接渲染这个，不再在前端写死两个游戏。
