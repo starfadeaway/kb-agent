@@ -27,7 +27,12 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 
-from app.agent.tools import ToolContext, call_tool, get_schemas
+from app.agent.tools import (
+    _INFRA_FAILURE_PREFIXES,  # noqa: F401 单一来源，避免两处前缀不同步
+    ToolContext,
+    call_tool,
+    get_schemas,
+)
 from app.core.config import Settings, get_settings
 from app.llm.client import LLMClient, get_llm
 
@@ -146,6 +151,13 @@ class SearchGuard:
         if result.startswith("[重复查询已拦截]") or result.startswith("[熔断]"):
             return
         head = result[:200]
+        if result.startswith(_INFRA_FAILURE_PREFIXES):
+            # 基础设施失败期间继续检索只会重复失败，必须计入 miss。
+            # 原先这里没有这一分支，失败会落到末尾把 misses 清零 ——
+            # 熔断因此自我解除，Agent 一路空转到 agent_max_steps，
+            # 而且从 guard_stats 完全看不出来（consecutive_misses 一直是 0）。
+            self.consecutive_misses += 1
+            return
         if "status=empty" in head:
             self.consecutive_misses += 1
             return

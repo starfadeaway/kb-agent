@@ -292,6 +292,14 @@ def get_schemas(names: Sequence[str] | None = None) -> list[dict]:
 # 它们确实没执行成功，但 Agent 层单独按 `ok=False` 记，不重复计入工具失败。
 _ERROR_PREFIXES = ("[错误]", "[超时]", "[异常]", "[检索失败]", "[抓取失败]")
 
+#: 上面的**子集**：属于基础设施失败（网络/超时/后端异常）而不是参数用错。
+#:
+#: 区分它们的理由：Agent 的熔断要掐的是「连续拿不到可信信息」。
+#: 基础设施失败期间继续检索只会重复失败，所以这类必须计入熔断计数；
+#: 而 `[错误]`（如 query 为空）是模型自己传错参数，改一下就能重试，
+#: 计入熔断等于惩罚一次可自愈的错误。SearchGuard 依赖这个区分。
+_INFRA_FAILURE_PREFIXES = ("[超时]", "[异常]", "[检索失败]", "[抓取失败]")
+
 
 async def call_tool(name: str, args: dict, ctx: ToolContext, timeout: float) -> tuple[str, bool]:
     """执行工具，返回 (结果文本, 是否成功)。
