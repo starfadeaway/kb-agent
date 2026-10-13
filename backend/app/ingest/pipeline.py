@@ -99,34 +99,61 @@ def raw_meta_path(page_id: int, game: str) -> Path:
     return root / f"{page_id}.meta.json"
 
 
-def cache_raw(page: PageContent, game: str) -> None:
-    """落原始 wikitext + 侧车元数据。
+def cache_raw(page: PageContent, game: str) -> bool:
+    """落原始 wikitext + 侧车元数据。返回**本次是否真的更新了缓存**。
 
     有了它，清洗/分块的任何改动都能离线重跑验证 ——
     既省 WAF 配额，也让"同一份数据在不同 chunk 参数下对比"成为可能。
 
     侧车文件单独存元数据，是因为正文文件名里只编码了 page_id 和标题，
     而 last_revision 是版本时效性设计的输入，不能丢。
+
+    **必须是「存在则更新」，不是「不存在才写」。**
+    早先写的是 `if not p.is_file(): p.write_text(...)`，
+    看上去像「没有就写一份」，实际后果是**缓存一旦落盘就永不更新**：
+    重抓到一个页面出了新版本（正文改了、last_revision 变了），
+    缓存里仍停在第一次抓到的内容上。
+
+    两个后果都很难在当场发现：
+      1. 离线重建索引用的是旧正文 → MySQL（每次抓取都会 upsert）
+         与向量库内容**分叉**，而索引看起来完全正常；
+      2. `last_revision_ts` 停在旧值 —— 而它正是版本感知检索
+         `min_revision_ts` 的输入，等于拿过期的时间戳做版本过滤。
+
+    > 2026-10-13 实测核对：当前 1034 个可比页面，两处的 `revision_id` 与
+    > `last_revision_ts` **完全一致，尚未分叉** —— 因为这批语料抓取后没有重抓过。
+    > 所以这是**潜在缺陷，不是已发生的损失**。
+
+    只保留最新版、无法对比历史版本，是本项目的既有取舍
+    （见 `docs/version_staleness.md`：语料每页只有最新版，做不到版本对比）。
+
+    返回是否变化，是为了让抓取器能统计「这轮真的更新了几页」——
+    如果全程都是 False，说明这轮抓取没有任何实质进展。
     """
+    changed = False
+
     p = raw_cache_path(page, game)
-    if not p.is_file():
+    if not p.is_file() or p.read_text(encoding="utf-8") != page.wikitext:
         p.write_text(page.wikitext, encoding="utf-8")
+        changed = True
+
     meta_p = raw_meta_path(page.page_id, game)
-    if not meta_p.is_file():
-        meta_p.write_text(
-            json.dumps(
-                {
-                    "page_id": page.page_id,
-                    "title": page.title,
-                    "last_revision": page.last_revision or "",
-                    "last_revision_ts": page.last_revision or "",
-                    "revision_id": page.revision_id,
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+    meta = json.dumps(
+        {
+            "page_id": page.page_id,
+            "title": page.title,
+            "last_revision": page.last_revision or "",
+            "last_revision_ts": page.last_revision or "",
+            "revision_id": page.revision_id,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    if not meta_p.is_file() or meta_p.read_text(encoding="utf-8") != meta:
+        meta_p.write_text(meta, encoding="utf-8")
+        changed = True
+
+    return changed
 
 
 def load_cached_page(page_id: int, game: str) -> PageContent | None:
