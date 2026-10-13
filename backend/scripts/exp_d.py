@@ -63,6 +63,15 @@ def main() -> None:
                     default=f"{s.embed_model_main},{s.embed_model_alt}",
                     help="逗号分隔；默认取 .env 的 EMBED_MODEL_MAIN / EMBED_MODEL_ALT")
     ap.add_argument("--variant", default="d")
+    # 主基座（EMBED_MODEL_MAIN）必须复用生产 `base` 索引，不能套 `d_{slug}` 前缀。
+    #
+    # 踩过的坑：2026-10-13 重跑时 bge-m3 那组汇总显示"（无结果）"——
+    # 它的 variant 被算成 `d_BAAI_bge-m3`，而这个 collection 从来不存在
+    # （生产基座叫 `base`），于是查询打在空集合上。
+    # 这个对照组本来就有现成数据（实验 A 就是 base + EMBED_MODEL_MAIN），
+    # 另建一个同参数 collection 只会让"两个时期的数据"变成"两个索引的数据"。
+    ap.add_argument("--main-variant", default="base",
+                    help="主基座（EMBED_MODEL_MAIN）复用的 collection variant")
     ap.add_argument("--top-k", type=int, default=3)
     ap.add_argument("--labels", default="A0,A1,A2",
                     help="默认不跑 A3：rerank 是 bge 专用，换模型时开着会引入隐藏变量")
@@ -78,7 +87,8 @@ def main() -> None:
           f"（换向量模型时务必确认维度一致，否则查询侧会维度不匹配）")
     for model in models:
         slug = model.replace("/", "_")
-        variant = f"{args.variant}_{slug}"
+        # 主基座复用 base，对照组才用 d_{slug}
+        variant = args.main_variant if model == s.embed_model_main else f"{args.variant}_{slug}"
         t0 = time.perf_counter()
 
         if not args.skip_rebuild:

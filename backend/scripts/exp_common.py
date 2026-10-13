@@ -236,3 +236,55 @@ def save(results: Sequence[dict], name: str) -> Path:
     out.write_text(json.dumps(list(results), ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n结果已写入 {out}")
     return out
+
+
+def build_meta(args) -> dict:
+    """产物的出处块：脚本、时间、commit，以及**当时那个索引的规模**。
+
+    索引规模这一项不是可有可无的装饰。2026-10-13 踩过一次坑：
+    补抓角色页后 sr 索引 2306 -> 3932 chunk，跑 `exp_b.py --skip-rebuild`
+    时 B0 的产物文件还是补抓前写的，汇总表里 B0 显示 0.966 而 B1/B2/B3 是新数字 ——
+    **一行旧数据混在一张新表里，没有任何报错**。
+    靠文件 mtime 判不出来（改一下就变），所以规模必须写进产物内容里。
+
+    判据是能证明不一致才排除，所以取不到 collection 时降级为 None 而不是抛错：
+    老格式产物没有这个字段时，汇总方应当放行而不是把所有步骤都踢掉。
+    """
+    import datetime as _dt
+    import subprocess as _sp
+
+    meta = {
+        "script": Path(__file__).name,
+        "generated_at": _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
+        "experiment": getattr(args, "experiment", None),
+        "game": getattr(args, "game", None),
+        "variant": getattr(args, "variant", None),
+        "top_k": getattr(args, "top_k", None),
+        "labels": getattr(args, "labels", None),
+        "index_chunks": None,
+        "index_pages": None,
+    }
+    try:
+        commit = _sp.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(ROOT), capture_output=True, text=True, timeout=10,
+        )
+        if commit.returncode == 0:
+            meta["git_commit"] = commit.stdout.strip()
+    except Exception:
+        pass
+    try:
+        from app.core.config import get_settings
+        from app.store.vector_store import get_vector_store
+
+        s = get_settings()
+        game = meta["game"] or s.game_primary
+        model = getattr(args, "embed_model", None) or s.embed_model_main
+        col = get_vector_store(s).get_collection(game, model, meta["variant"] or "base")
+        data = col.get(include=["metadatas"])
+        metas = data.get("metadatas") or []
+        meta["index_chunks"] = len(data.get("ids") or [])
+        meta["index_pages"] = len({(m or {}).get("page_title", "") for m in metas} - {""})
+    except Exception:
+        pass
+    return meta

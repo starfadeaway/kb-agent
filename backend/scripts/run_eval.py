@@ -26,7 +26,7 @@ from app.eval.cases import cases_for  # noqa: E402
 from app.llm.client import get_llm  # noqa: E402
 from app.retrieval.hybrid import HybridRetriever, RetrievalConfig  # noqa: E402
 from app.store.vector_store import get_vector_store  # noqa: E402
-from exp_common import is_kept  # noqa: E402
+from exp_common import build_meta, is_kept  # noqa: E402
 
 logger = logging.getLogger("eval")
 
@@ -252,8 +252,21 @@ async def main() -> None:
 
     out = Path(args.out) if args.out else Path(__file__).resolve().parents[2] / "data" / "eval" / "exp_A.json"
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    # 产物必须自己记录**当时那个索引的规模**。
+    #
+    # 为什么：2026-10-13 又踩了一次静默混入两个时期数据的坑 ——
+    # 补抓角色页后 sr 索引从 2306 涨到 3932 chunk，跑 `exp_b.py --skip-rebuild`
+    # 时 B0 的产物文件还是补抓前写的，汇总表里 B0 显示 0.966 而 B1/B2/B3 是新数字，
+    # **一行旧数据混在一张新表里，没有任何报错**。
+    #
+    # 靠文件 mtime 判不出来（碰一下就变），所以规模直接写进产物里，
+    # 汇总方拿它和 collection 的实际行数一比就知道这份产物过没过期。
+    meta = build_meta(args)
+    results[0]["_meta"] = meta
     out.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n结果已写入 {out}")
+    print(f"\n结果已写入 {out}（索引 {meta['index_chunks']} chunk / "
+          f"{meta['index_pages']} 页 @ {meta['generated_at']}）")
 
     # 同时落 MySQL：eval_cases / eval_results 这两张表只有接上写入才不是摆设，
     # 落库之后才能做"改了分块参数再跑一遍，直接对比两次差多少"的回归。

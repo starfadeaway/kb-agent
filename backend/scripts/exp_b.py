@@ -55,6 +55,40 @@ def sh(cmd: list[str], label: str) -> int:
     return p.returncode
 
 
+def is_stale(path, cfg: dict, game: str) -> bool:
+    """产物记录的索引 chunk 数与当前 collection 不一致 → 它描述的是另一个索引。
+
+    为什么必须查这个：`--skip-rebuild` 下产物文件不会被刷新，
+    重建索引后旧产物仍在原地，汇总时就会把两个时期的数据并排放进一张表。
+    这类错误没有任何报错，表格看上去完全正常。
+
+    判据取自产物里的 `_meta.index_chunks`（由 `exp_common.build_meta` 写入）。
+    取不到时返回 False —— "能证明不一致才排除"，
+    老格式产物没有这个字段，不该把所有步骤都踢掉。
+    """
+    try:
+        blocks = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return True
+    meta = (blocks[0] or {}).get("_meta") if blocks else None
+    recorded = (meta or {}).get("index_chunks")
+    if recorded is None:
+        return False
+
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(BACKEND))
+        from app.core.config import get_settings
+        from app.store.vector_store import get_vector_store
+
+        s = get_settings()
+        col = get_vector_store(s).get_collection(game, s.embed_model_main, cfg["variant"])
+        actual = len(col.get(include=[])["ids"])
+    except Exception:
+        return False
+    return int(recorded) != actual
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--game", default="sr")
@@ -106,6 +140,7 @@ def main() -> None:
     # ---- 汇总 ----
     print(f"\n{'=' * 70}\n  实验 B 汇总（chunk / top_k={args.top_k}）\n{'=' * 70}")
     rows = []
+    stale: list[str] = []
     for step, cfg in STEPS.items():
         f = out_dir / f"exp_{step}_{args.game}_k{args.top_k}.json"
         # 原来 B0 被特殊处理去读写死的 `exp_A_k{k}_v2.json`：
@@ -118,6 +153,20 @@ def main() -> None:
                 print(f"  提示：缺 {f.name}，B0 需要先跑一次 --steps B0 --skip-rebuild")
             else:
                 print(f"  提示：缺 {f.name}，跳过 {step}")
+            continue
+        # 产物比索引还旧 → 这一行的数字来自另一个语料时期。
+        #
+        # 2026-10-13 又踩了一次：补抓角色页后 base 已到 3932 chunk，
+        # 跑 `exp_b.py --skip-rebuild` 时 B0 的产物文件还是补抓前写的，
+        # 汇总表里 B0 显示 0.966 而 B1/B2/B3 是新语料数字 ——
+        # **一行旧数据混在一张新表里，没有任何报错**。
+        #
+        # 判据不能用文件 mtime（碰一下就变），要用产物里记的索引 chunk 数：
+        # 它与实际 collection 行数一致才说明这份产物描述的是当前索引。
+        if is_stale(f, cfg, args.game):
+            stale.append(step)
+            print(f"  ⚠ {step} 的产物描述的不是当前索引，**已排除出汇总**"
+                  f"（跑一次 --steps {step} --skip-rebuild 重评测即可刷新）")
             continue
         for r in json.loads(f.read_text(encoding="utf-8")):
             if step != "B0" and r["config"].get("variant") != cfg["variant"]:

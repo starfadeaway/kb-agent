@@ -17,45 +17,47 @@
       "rerank_candidates": 0
     },
     "aggregate": {
-      "recall@3": 0.8276,
-      "recall@3_std": 0.3844,
-      "hit_rate": 0.8276,
-      "hit_rate_std": 0.3844,
-      "mrr": 0.7529,
-      "mrr_std": 0.3975,
-      "ndcg": 0.7722,
-      "ndcg_std": 0.3851,
+      "recall@3": 0.6207,
+      "recall@3_std": 0.4938,
+      "hit_rate": 0.6207,
+      "hit_rate_std": 0.4938,
+      "mrr": 0.5057,
+      "mrr_std": 0.4553,
+      "ndcg": 0.5353,
+      "ndcg_std": 0.4544,
       "n": 29,
-      "page_hit_rate": 0.8276,
-      "avg_latency_ms": 90
+      "page_hit_rate": 0.6207,
+      "avg_latency_ms": 139,
+      "errors": 0,
+      "n_ok": 29
     },
     "rows": [
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 0.5,
-        "ndcg": 0.6309,
+        "mrr": 1.0,
+        "ndcg": 1.0,
         "case_id": "sr-001",
         "page_hit": true,
-        "latency_ms": 2127,
+        "latency_ms": 3237,
         "top_titles": [
-          "晨曦啊，再抚映遥远地平",
           "「我」的诞生",
-          "如果时间是一朵花"
+          "Saber",
+          "晨曦啊，再抚映遥远地平"
         ]
       },
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "mrr": 0.5,
+        "ndcg": 0.6309,
         "case_id": "sr-002",
         "page_hit": true,
-        "latency_ms": 13,
+        "latency_ms": 26,
         "top_titles": [
+          "知更鸟/攻略",
           "太空封印站",
-          "劫火莲灯铸炼宫",
-          "苍穹战线格拉默"
+          "卡芙卡/攻略"
         ]
       },
       {
@@ -65,7 +67,7 @@
         "ndcg": 1.0,
         "case_id": "sr-003",
         "page_hit": true,
-        "latency_ms": 22,
+        "latency_ms": 28,
         "top_titles": [
           "凝滞虚影 • 巽风之形",
           "凝滞虚影 • 嗔怒之形",
@@ -79,25 +81,25 @@
         "ndcg": 1.0,
         "case_id": "sr-004",
         "page_hit": true,
-        "latency_ms": 8,
+        "latency_ms": 13,
         "top_titles": [
           "阿然",
-          "虫鸣秘闻•3.0",
-          "奔腾年代"
+          "奔腾年代",
+          "嘟嘟"
         ]
       },
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "mrr": 0.3333,
+        "ndcg": 0.5,
         "case_id": "sr-005",
         "page_hit": true,
-        "latency_ms": 19,
+        "latency_ms": 28,
         "top_titles": [
-          "不老者的仙舟",
-          "阿浮",
-          "劫火莲灯铸炼宫"
+          "开拓者•记忆/攻略",
+          "那刻夏/攻略",
+          "不老者的仙舟"
         ]
       },
       {
@@ -107,7 +109,7 @@
         "ndcg": 1.0,
         "case_id": "sr-006",
         "page_hit": true,
-        "latency_ms": 22,
+        "latency_ms": 32,
         "top_titles": [
           "凝滞虚影 • 空海之形",
           "凝滞虚影 • 嗔怒之形",
@@ -115,17 +117,17 @@
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-008",
-        "page_hit": true,
-        "latency_ms": 15,
+        "page_hit": false,
+        "latency_ms": 25,
         "top_titles": [
-          "太空封印站",
-          "太空封印站",
-          "苍穹战线格拉默"
+          "苍穹战线格拉默",
+          "卡芙卡/攻略",
+          "知更鸟/攻略"
         ]
       },
       {
@@ -135,39 +137,39 @@
         "ndcg": 0.0,
         "case_id": "sr-007",
         "page_hit": false,
-        "latency_ms": 18,
+        "latency_ms": 27,
         "top_titles": [
-          "无主荒星茨冈尼亚",
-          "沉欢醉饮的海隅",
-          "沉陆海域露莎卡"
+          "忘归人/攻略",
+          "卡芙卡/攻略",
+          "开拓者•记忆/攻略"
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-011",
-        "page_hit": true,
-        "latency_ms": 21,
+        "page_hit": false,
+        "latency_ms": 35,
         "top_titles": [
-          "繁星竞技场",
-          "繁星竞技场",
-          "天国@直播间"
+          "那刻夏/攻略",
+          "那刻夏/攻略",
+          "那刻夏/攻略"
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 0.3333,
-        "ndcg": 0.5,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-012",
-        "page_hit": true,
-        "latency_ms": 19,
+        "page_hit": false,
+        "latency_ms": 34,
         "top_titles": [
           "星体差分机",
-          "梦想之地匹诺康尼",
-          "折断的龙骨"
+          "加拉赫/攻略",
+          "知更鸟/攻略"
         ]
       },
       {
@@ -177,11 +179,11 @@
         "ndcg": 0.0,
         "case_id": "sr-013",
         "page_hit": false,
-        "latency_ms": 16,
+        "latency_ms": 28,
         "top_titles": [
           "阿克赛",
-          "无主荒星茨冈尼亚",
-          "宝箱啊，兀自承装下前尘"
+          "宝箱啊，兀自承装下前尘",
+          "无主荒星茨冈尼亚"
         ]
       },
       {
@@ -191,11 +193,11 @@
         "ndcg": 0.0,
         "case_id": "sr-014",
         "page_hit": false,
-        "latency_ms": 17,
+        "latency_ms": 26,
         "top_titles": [
-          "星体差分机",
-          "如果时间是一朵花",
-          "落日时起舞"
+          "星期日",
+          "托帕&账账",
+          "星体差分机"
         ]
       },
       {
@@ -205,25 +207,25 @@
         "ndcg": 0.0,
         "case_id": "sr-015",
         "page_hit": false,
-        "latency_ms": 18,
+        "latency_ms": 30,
         "top_titles": [
-          "「星核猎手」萨姆（完整）",
-          "步离战首•呼雷（完整）",
-          "炽燃徘徊者（错误）"
+          "远坂凛",
+          "腐烂或燃烧",
+          "魔阴身考在哪里"
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 0.5,
-        "ndcg": 0.6309,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-016",
-        "page_hit": true,
-        "latency_ms": 19,
+        "page_hit": false,
+        "latency_ms": 31,
         "top_titles": [
           "太空封印站",
-          "繁星竞技场",
-          "星体差分机"
+          "白厄/攻略",
+          "那刻夏/攻略"
         ]
       },
       {
@@ -233,7 +235,7 @@
         "ndcg": 1.0,
         "case_id": "sr-017",
         "page_hit": true,
-        "latency_ms": 17,
+        "latency_ms": 28,
         "top_titles": [
           "凝滞虚影 • 职司之形",
           "凝滞虚影 • 嗔怒之形",
@@ -247,7 +249,7 @@
         "ndcg": 1.0,
         "case_id": "sr-018",
         "page_hit": true,
-        "latency_ms": 17,
+        "latency_ms": 25,
         "top_titles": [
           "凝滞虚影 • 凛月之形",
           "凝滞虚影 • 嗔怒之形",
@@ -261,7 +263,7 @@
         "ndcg": 1.0,
         "case_id": "sr-019",
         "page_hit": true,
-        "latency_ms": 18,
+        "latency_ms": 25,
         "top_titles": [
           "凝滞虚影 • 天人之形",
           "凝滞虚影 • 嗔怒之形",
@@ -275,25 +277,25 @@
         "ndcg": 0.6309,
         "case_id": "sr-020",
         "page_hit": true,
-        "latency_ms": 10,
+        "latency_ms": 18,
         "top_titles": [
           "阿往",
           "阿来",
-          "阿克赛"
+          "银狼"
         ]
       },
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "mrr": 0.5,
+        "ndcg": 0.6309,
         "case_id": "sr-021",
         "page_hit": true,
-        "latency_ms": 14,
+        "latency_ms": 26,
         "top_titles": [
+          "佩拉/攻略",
           "生命的翁瓦克",
-          "沉陆海域露莎卡",
-          "梦想之地匹诺康尼"
+          "大丽花/攻略"
         ]
       },
       {
@@ -303,11 +305,11 @@
         "ndcg": 1.0,
         "case_id": "sr-022",
         "page_hit": true,
-        "latency_ms": 16,
+        "latency_ms": 34,
         "top_titles": [
           "奇想蕉乐园",
-          "妖精织梦的乐园",
-          "千星荟萃之城"
+          "遐蝶/攻略",
+          "景元/攻略"
         ]
       },
       {
@@ -317,11 +319,11 @@
         "ndcg": 0.0,
         "case_id": "sr-023",
         "page_hit": false,
-        "latency_ms": 18,
+        "latency_ms": 34,
         "top_titles": [
-          "蕃息",
+          "遐蝶/攻略",
           "将光阴织成黄金",
-          "那无数个春天"
+          "蕃息"
         ]
       },
       {
@@ -331,7 +333,7 @@
         "ndcg": 1.0,
         "case_id": "sr-024",
         "page_hit": true,
-        "latency_ms": 11,
+        "latency_ms": 19,
         "top_titles": [
           "凝滞虚影 • 炎华之形",
           "凝滞虚影 • 巽风之形",
@@ -341,15 +343,15 @@
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "mrr": 0.5,
+        "ndcg": 0.6309,
         "case_id": "sr-025",
         "page_hit": true,
-        "latency_ms": 25,
+        "latency_ms": 42,
         "top_titles": [
+          "开拓者•记忆/攻略",
           "折断的龙骨",
-          "星体差分机",
-          "梦想之地匹诺康尼"
+          "长夜月/攻略"
         ]
       },
       {
@@ -359,7 +361,7 @@
         "ndcg": 1.0,
         "case_id": "sr-026",
         "page_hit": true,
-        "latency_ms": 25,
+        "latency_ms": 42,
         "top_titles": [
           "凝滞虚影 • 空海之形",
           "凝滞虚影 • 嗔怒之形",
@@ -373,7 +375,7 @@
         "ndcg": 1.0,
         "case_id": "sr-027",
         "page_hit": true,
-        "latency_ms": 18,
+        "latency_ms": 30,
         "top_titles": [
           "凝滞虚影 • 凛月之形",
           "凝滞虚影 • 嗔怒之形",
@@ -387,53 +389,53 @@
         "ndcg": 1.0,
         "case_id": "sr-028",
         "page_hit": true,
-        "latency_ms": 25,
+        "latency_ms": 45,
         "top_titles": [
           "奇想蕉乐园",
-          "妖精织梦的乐园",
-          "劫火莲灯铸炼宫"
+          "景元/攻略",
+          "遐蝶/攻略"
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-029",
-        "page_hit": true,
-        "latency_ms": 15,
+        "page_hit": false,
+        "latency_ms": 30,
         "top_titles": [
-          "繁星竞技场",
-          "停转的萨尔索图",
-          "星体差分机"
+          "白厄/攻略",
+          "那刻夏/攻略",
+          "那刻夏/攻略"
         ]
       },
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "mrr": 0.3333,
+        "ndcg": 0.5,
         "case_id": "sr-030",
         "page_hit": true,
-        "latency_ms": 22,
+        "latency_ms": 34,
         "top_titles": [
-          "折断的龙骨",
-          "星体差分机",
-          "梦想之地匹诺康尼"
+          "开拓者•记忆/攻略",
+          "长夜月/攻略",
+          "折断的龙骨"
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-032",
-        "page_hit": true,
-        "latency_ms": 13,
+        "page_hit": false,
+        "latency_ms": 22,
         "top_titles": [
-          "太空封印站",
-          "苍穹战线格拉默",
-          "劫火莲灯铸炼宫"
+          "知更鸟/攻略",
+          "卡芙卡/攻略",
+          "那刻夏/攻略"
         ]
       }
     ],
@@ -442,15 +444,15 @@
         "comparison": "A0→A2",
         "n": 29,
         "metric": "mrr",
-        "mean_a": 0.8621,
-        "mean_b": 0.7529,
-        "mean_diff": 0.1092,
-        "sd_diff": 0.2195,
-        "std_err": 0.0408,
-        "t": 2.679,
+        "mean_a": 0.7874,
+        "mean_b": 0.5057,
+        "mean_diff": 0.2816,
+        "sd_diff": 0.3756,
+        "std_err": 0.0697,
+        "t": 4.038,
         "df": 28,
-        "p": 0.0074,
-        "cohens_d": 0.312,
+        "p": 0.0001,
+        "cohens_d": 0.677,
         "significant": true,
         "approx": "正态近似",
         "note": ""
@@ -459,20 +461,32 @@
         "comparison": "A2→A3",
         "n": 29,
         "metric": "mrr",
-        "mean_a": 0.8851,
-        "mean_b": 0.8621,
-        "mean_diff": 0.023,
-        "sd_diff": 0.1155,
-        "std_err": 0.0214,
-        "t": 1.072,
+        "mean_a": 0.8448,
+        "mean_b": 0.7874,
+        "mean_diff": 0.0575,
+        "sd_diff": 0.2195,
+        "std_err": 0.0408,
+        "t": 1.41,
         "df": 28,
-        "p": 0.2839,
-        "cohens_d": 0.082,
+        "p": 0.1585,
+        "cohens_d": 0.158,
         "significant": false,
         "approx": "正态近似",
         "note": ""
       }
-    ]
+    ],
+    "_meta": {
+      "script": "exp_common.py",
+      "generated_at": "2026-10-13T13:06:13+00:00",
+      "experiment": "A",
+      "game": "sr",
+      "variant": "b3",
+      "top_k": 3,
+      "labels": "A0,A2,A3",
+      "index_chunks": 3932,
+      "index_pages": 706,
+      "git_commit": "ffbf7bd"
+    }
   },
   {
     "label": "A2",
@@ -492,31 +506,33 @@
       "rerank_candidates": 0
     },
     "aggregate": {
-      "recall@3": 0.931,
-      "recall@3_std": 0.2579,
-      "hit_rate": 0.931,
-      "hit_rate_std": 0.2579,
-      "mrr": 0.8621,
-      "mrr_std": 0.2957,
-      "ndcg": 0.8801,
-      "ndcg_std": 0.2757,
+      "recall@3": 0.8621,
+      "recall@3_std": 0.3509,
+      "hit_rate": 0.8621,
+      "hit_rate_std": 0.3509,
+      "mrr": 0.7874,
+      "mrr_std": 0.3724,
+      "ndcg": 0.8066,
+      "ndcg_std": 0.3573,
       "n": 29,
-      "page_hit_rate": 0.931,
-      "avg_latency_ms": 238
+      "page_hit_rate": 0.8621,
+      "avg_latency_ms": 270,
+      "errors": 0,
+      "n_ok": 29
     },
     "rows": [
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 0.5,
-        "ndcg": 0.6309,
+        "mrr": 1.0,
+        "ndcg": 1.0,
         "case_id": "sr-001",
         "page_hit": true,
-        "latency_ms": 2527,
+        "latency_ms": 3234,
         "top_titles": [
-          "嘿，我在这儿",
           "「我」的诞生",
-          "今日好手气"
+          "今日好手气",
+          "回到大地的飞行"
         ]
       },
       {
@@ -526,11 +542,11 @@
         "ndcg": 1.0,
         "case_id": "sr-002",
         "page_hit": true,
-        "latency_ms": 140,
+        "latency_ms": 171,
         "top_titles": [
           "太空封印站",
-          "天国@直播间",
-          "折断的龙骨"
+          "卡芙卡/攻略",
+          "那刻夏/攻略"
         ]
       },
       {
@@ -540,7 +556,7 @@
         "ndcg": 1.0,
         "case_id": "sr-003",
         "page_hit": true,
-        "latency_ms": 181,
+        "latency_ms": 163,
         "top_titles": [
           "凝滞虚影 • 巽风之形",
           "凝滞虚影 • 凛月之形",
@@ -554,11 +570,11 @@
         "ndcg": 1.0,
         "case_id": "sr-004",
         "page_hit": true,
-        "latency_ms": 147,
+        "latency_ms": 149,
         "top_titles": [
           "阿然",
-          "阿合马",
-          "丹西"
+          "AAA送货私我",
+          "奔腾年代"
         ]
       },
       {
@@ -568,11 +584,11 @@
         "ndcg": 1.0,
         "case_id": "sr-005",
         "page_hit": true,
-        "latency_ms": 143,
+        "latency_ms": 164,
         "top_titles": [
           "不老者的仙舟",
-          "劫火莲灯铸炼宫",
-          "阿浮"
+          "那刻夏/攻略",
+          "开拓者•记忆/攻略"
         ]
       },
       {
@@ -582,11 +598,11 @@
         "ndcg": 1.0,
         "case_id": "sr-006",
         "page_hit": true,
-        "latency_ms": 152,
+        "latency_ms": 169,
         "top_titles": [
           "凝滞虚影 • 空海之形",
           "凝滞虚影 • 凛月之形",
-          "凝滞虚影 • 塞壬之形"
+          "凝滞虚影 • 天人之形"
         ]
       },
       {
@@ -596,7 +612,7 @@
         "ndcg": 1.0,
         "case_id": "sr-008",
         "page_hit": true,
-        "latency_ms": 137,
+        "latency_ms": 158,
         "top_titles": [
           "太空封印站",
           "太空封印站",
@@ -604,45 +620,45 @@
         ]
       },
       {
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "sr-007",
+        "page_hit": false,
+        "latency_ms": 166,
+        "top_titles": [
+          "卡芙卡/攻略",
+          "卡芙卡/攻略",
+          "白厄/攻略"
+        ]
+      },
+      {
         "recall@3": 1.0,
         "hit_rate": 1.0,
         "mrr": 0.5,
         "ndcg": 0.6309,
-        "case_id": "sr-007",
-        "page_hit": true,
-        "latency_ms": 147,
-        "top_titles": [
-          "奔狼的都蓝王朝",
-          "太空封印站",
-          "无主荒星茨冈尼亚"
-        ]
-      },
-      {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
         "case_id": "sr-011",
         "page_hit": true,
-        "latency_ms": 180,
+        "latency_ms": 173,
         "top_titles": [
+          "那刻夏/攻略",
           "繁星竞技场",
-          "天国@直播间",
-          "奔狼的都蓝王朝"
+          "白厄/攻略"
         ]
       },
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "mrr": 0.3333,
+        "ndcg": 0.5,
         "case_id": "sr-012",
         "page_hit": true,
-        "latency_ms": 141,
+        "latency_ms": 163,
         "top_titles": [
-          "折断的龙骨",
-          "繁星竞技场",
-          "天国@直播间"
+          "白厄/攻略",
+          "丹恒•腾荒/攻略",
+          "折断的龙骨"
         ]
       },
       {
@@ -652,25 +668,25 @@
         "ndcg": 0.0,
         "case_id": "sr-013",
         "page_hit": false,
-        "latency_ms": 190,
+        "latency_ms": 157,
         "top_titles": [
-          "坠星启航地",
-          "出云显世与高天神国",
-          "奔狼的都蓝王朝"
+          "卡芙卡/攻略",
+          "知更鸟/攻略",
+          "加拉赫/攻略"
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 0.5,
-        "ndcg": 0.6309,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-014",
-        "page_hit": true,
-        "latency_ms": 151,
+        "page_hit": false,
+        "latency_ms": 161,
         "top_titles": [
-          "太空封印站",
-          "奇想蕉乐园",
-          "如果时间是一朵花"
+          "星期日",
+          "繁星竞技场",
+          "托帕&账账"
         ]
       },
       {
@@ -680,24 +696,24 @@
         "ndcg": 0.0,
         "case_id": "sr-015",
         "page_hit": false,
-        "latency_ms": 157,
+        "latency_ms": 156,
         "top_titles": [
           "「星核猎手」萨姆（完整）",
-          "「星核猎手」萨姆",
-          "「星核猎手」萨姆"
+          "远坂凛",
+          "卡芙卡/攻略"
         ]
       },
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "mrr": 0.5,
+        "ndcg": 0.6309,
         "case_id": "sr-016",
         "page_hit": true,
-        "latency_ms": 156,
+        "latency_ms": 170,
         "top_titles": [
-          "繁星竞技场",
           "太空封印站",
+          "繁星竞技场",
           "星体差分机"
         ]
       },
@@ -708,7 +724,7 @@
         "ndcg": 1.0,
         "case_id": "sr-017",
         "page_hit": true,
-        "latency_ms": 148,
+        "latency_ms": 164,
         "top_titles": [
           "凝滞虚影 • 职司之形",
           "凝滞虚影 • 天人之形",
@@ -722,7 +738,7 @@
         "ndcg": 1.0,
         "case_id": "sr-018",
         "page_hit": true,
-        "latency_ms": 142,
+        "latency_ms": 160,
         "top_titles": [
           "凝滞虚影 • 凛月之形",
           "凝滞虚影 • 天人之形",
@@ -736,7 +752,7 @@
         "ndcg": 1.0,
         "case_id": "sr-019",
         "page_hit": true,
-        "latency_ms": 146,
+        "latency_ms": 161,
         "top_titles": [
           "凝滞虚影 • 天人之形",
           "凝滞虚影 • 凛月之形",
@@ -750,7 +766,7 @@
         "ndcg": 1.0,
         "case_id": "sr-020",
         "page_hit": true,
-        "latency_ms": 139,
+        "latency_ms": 154,
         "top_titles": [
           "阿来",
           "阿往",
@@ -760,15 +776,15 @@
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 1.0,
-        "ndcg": 1.0,
+        "mrr": 0.5,
+        "ndcg": 0.6309,
         "case_id": "sr-021",
         "page_hit": true,
-        "latency_ms": 141,
+        "latency_ms": 159,
         "top_titles": [
+          "佩拉/攻略",
           "生命的翁瓦克",
-          "沉陆海域露莎卡",
-          "生命的翁瓦克"
+          "长夜月/攻略"
         ]
       },
       {
@@ -778,7 +794,7 @@
         "ndcg": 1.0,
         "case_id": "sr-022",
         "page_hit": true,
-        "latency_ms": 141,
+        "latency_ms": 163,
         "top_titles": [
           "奇想蕉乐园",
           "妖精织梦的乐园",
@@ -788,14 +804,14 @@
       {
         "recall@3": 1.0,
         "hit_rate": 1.0,
-        "mrr": 0.5,
-        "ndcg": 0.6309,
+        "mrr": 1.0,
+        "ndcg": 1.0,
         "case_id": "sr-023",
         "page_hit": true,
-        "latency_ms": 143,
+        "latency_ms": 177,
         "top_titles": [
-          "蕃息",
           "「我」的诞生",
+          "蕃息",
           "嘿，我在这儿"
         ]
       },
@@ -806,7 +822,7 @@
         "ndcg": 1.0,
         "case_id": "sr-024",
         "page_hit": true,
-        "latency_ms": 132,
+        "latency_ms": 151,
         "top_titles": [
           "凝滞虚影 • 炎华之形",
           "凝滞虚影 • 巽风之形",
@@ -820,11 +836,11 @@
         "ndcg": 1.0,
         "case_id": "sr-025",
         "page_hit": true,
-        "latency_ms": 160,
+        "latency_ms": 189,
         "top_titles": [
           "折断的龙骨",
-          "星体差分机",
-          "零号关卡朋克洛德"
+          "加拉赫/攻略",
+          "缇宝/攻略"
         ]
       },
       {
@@ -834,11 +850,11 @@
         "ndcg": 1.0,
         "case_id": "sr-026",
         "page_hit": true,
-        "latency_ms": 149,
+        "latency_ms": 177,
         "top_titles": [
           "凝滞虚影 • 空海之形",
           "凝滞虚影 • 凛月之形",
-          "凝滞虚影 • 塞壬之形"
+          "凝滞虚影 • 焦炙之形"
         ]
       },
       {
@@ -848,11 +864,11 @@
         "ndcg": 1.0,
         "case_id": "sr-027",
         "page_hit": true,
-        "latency_ms": 155,
+        "latency_ms": 168,
         "top_titles": [
           "凝滞虚影 • 凛月之形",
           "凝滞虚影 • 天人之形",
-          "凝滞虚影 • 塞壬之形"
+          "凝滞虚影 • 烬日之形"
         ]
       },
       {
@@ -862,11 +878,11 @@
         "ndcg": 1.0,
         "case_id": "sr-028",
         "page_hit": true,
-        "latency_ms": 163,
+        "latency_ms": 183,
         "top_titles": [
           "奇想蕉乐园",
           "妖精织梦的乐园",
-          "太空封印站"
+          "景元/攻略"
         ]
       },
       {
@@ -876,11 +892,11 @@
         "ndcg": 1.0,
         "case_id": "sr-029",
         "page_hit": true,
-        "latency_ms": 152,
+        "latency_ms": 159,
         "top_titles": [
           "繁星竞技场",
           "太空封印站",
-          "星体差分机"
+          "白厄/攻略"
         ]
       },
       {
@@ -890,11 +906,11 @@
         "ndcg": 1.0,
         "case_id": "sr-030",
         "page_hit": true,
-        "latency_ms": 309,
+        "latency_ms": 164,
         "top_titles": [
           "折断的龙骨",
-          "星体差分机",
-          "奇想蕉乐园"
+          "加拉赫/攻略",
+          "星体差分机"
         ]
       },
       {
@@ -904,11 +920,11 @@
         "ndcg": 1.0,
         "case_id": "sr-032",
         "page_hit": true,
-        "latency_ms": 138,
+        "latency_ms": 157,
         "top_titles": [
           "太空封印站",
-          "折断的龙骨",
-          "天国@直播间"
+          "知更鸟/攻略",
+          "卡芙卡/攻略"
         ]
       }
     ]
@@ -931,17 +947,19 @@
       "rerank_candidates": 0
     },
     "aggregate": {
-      "recall@3": 0.9655,
-      "recall@3_std": 0.1857,
-      "hit_rate": 0.9655,
-      "hit_rate_std": 0.1857,
-      "mrr": 0.8851,
-      "mrr_std": 0.2676,
-      "ndcg": 0.9056,
-      "ndcg_std": 0.2325,
+      "recall@3": 0.8621,
+      "recall@3_std": 0.3509,
+      "hit_rate": 0.8621,
+      "hit_rate_std": 0.3509,
+      "mrr": 0.8448,
+      "mrr_std": 0.3562,
+      "ndcg": 0.8493,
+      "ndcg_std": 0.3524,
       "n": 29,
-      "page_hit_rate": 0.9655,
-      "avg_latency_ms": 683
+      "page_hit_rate": 0.8621,
+      "avg_latency_ms": 756,
+      "errors": 0,
+      "n_ok": 29
     },
     "rows": [
       {
@@ -951,7 +969,7 @@
         "ndcg": 1.0,
         "case_id": "sr-001",
         "page_hit": true,
-        "latency_ms": 2867,
+        "latency_ms": 3672,
         "top_titles": [
           "「我」的诞生",
           "让告别，更美一些",
@@ -965,11 +983,11 @@
         "ndcg": 1.0,
         "case_id": "sr-002",
         "page_hit": true,
-        "latency_ms": 542,
+        "latency_ms": 642,
         "top_titles": [
           "太空封印站",
-          "谧宁拾骨地",
-          "泛银河商业公司"
+          "那刻夏/攻略",
+          "卡芙卡/攻略"
         ]
       },
       {
@@ -979,7 +997,7 @@
         "ndcg": 1.0,
         "case_id": "sr-003",
         "page_hit": true,
-        "latency_ms": 508,
+        "latency_ms": 604,
         "top_titles": [
           "凝滞虚影 • 巽风之形",
           "凝滞虚影 • 役轮之形",
@@ -993,11 +1011,11 @@
         "ndcg": 1.0,
         "case_id": "sr-004",
         "page_hit": true,
-        "latency_ms": 662,
+        "latency_ms": 776,
         "top_titles": [
           "阿然",
-          "阿来",
-          "阿浮"
+          "艾丝妲",
+          "阿合马"
         ]
       },
       {
@@ -1007,11 +1025,11 @@
         "ndcg": 1.0,
         "case_id": "sr-005",
         "page_hit": true,
-        "latency_ms": 692,
+        "latency_ms": 628,
         "top_titles": [
           "不老者的仙舟",
-          "劫火莲灯铸炼宫",
-          "渊思寂虑的巨树"
+          "那刻夏/攻略",
+          "丹恒•腾荒/攻略"
         ]
       },
       {
@@ -1021,7 +1039,7 @@
         "ndcg": 1.0,
         "case_id": "sr-006",
         "page_hit": true,
-        "latency_ms": 506,
+        "latency_ms": 544,
         "top_titles": [
           "凝滞虚影 • 空海之形",
           "凝滞虚影 • 今宵之形",
@@ -1035,25 +1053,25 @@
         "ndcg": 1.0,
         "case_id": "sr-008",
         "page_hit": true,
-        "latency_ms": 652,
+        "latency_ms": 681,
         "top_titles": [
           "太空封印站",
-          "太空封印站",
-          "棺的回响"
+          "卡芙卡/攻略",
+          "卡芙卡/攻略"
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 0.5,
-        "ndcg": 0.6309,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-007",
-        "page_hit": true,
-        "latency_ms": 605,
+        "page_hit": false,
+        "latency_ms": 664,
         "top_titles": [
-          "苍穹战线格拉默",
-          "太空封印站",
-          "泛银河商业公司"
+          "卡芙卡/攻略",
+          "海瑟音/攻略",
+          "苍穹战线格拉默"
         ]
       },
       {
@@ -1063,11 +1081,11 @@
         "ndcg": 1.0,
         "case_id": "sr-011",
         "page_hit": true,
-        "latency_ms": 583,
+        "latency_ms": 686,
         "top_titles": [
           "繁星竞技场",
-          "星体差分机",
-          "停转的萨尔索图"
+          "那刻夏/攻略",
+          "黄泉/攻略"
         ]
       },
       {
@@ -1077,39 +1095,39 @@
         "ndcg": 1.0,
         "case_id": "sr-012",
         "page_hit": true,
-        "latency_ms": 615,
+        "latency_ms": 676,
         "top_titles": [
           "折断的龙骨",
-          "折断的龙骨",
-          "梦想之地匹诺康尼"
+          "加拉赫/攻略",
+          "丹恒•腾荒/攻略"
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 0.3333,
-        "ndcg": 0.5,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-013",
-        "page_hit": true,
-        "latency_ms": 580,
+        "page_hit": false,
+        "latency_ms": 686,
         "top_titles": [
           "宝箱啊，兀自承装下前尘",
           "无主荒星茨冈尼亚",
-          "生命的翁瓦克"
+          "佩拉/攻略"
         ]
       },
       {
-        "recall@3": 1.0,
-        "hit_rate": 1.0,
-        "mrr": 0.3333,
-        "ndcg": 0.5,
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
         "case_id": "sr-014",
-        "page_hit": true,
-        "latency_ms": 677,
+        "page_hit": false,
+        "latency_ms": 940,
         "top_titles": [
-          "繁星竞技场",
-          "星体差分机",
-          "奇想蕉乐园"
+          "星期日",
+          "星期日",
+          "托帕&账账"
         ]
       },
       {
@@ -1119,11 +1137,11 @@
         "ndcg": 0.0,
         "case_id": "sr-015",
         "page_hit": false,
-        "latency_ms": 721,
+        "latency_ms": 711,
         "top_titles": [
+          "流萤/攻略",
           "「星核猎手」萨姆（完整）",
-          "盗贼公国塔利亚",
-          "「身陷樊笼的往昔」（完整）"
+          "白厄/攻略"
         ]
       },
       {
@@ -1133,11 +1151,11 @@
         "ndcg": 1.0,
         "case_id": "sr-016",
         "page_hit": true,
-        "latency_ms": 584,
+        "latency_ms": 716,
         "top_titles": [
           "繁星竞技场",
-          "星体差分机",
-          "停转的萨尔索图"
+          "那刻夏/攻略",
+          "星体差分机"
         ]
       },
       {
@@ -1147,7 +1165,7 @@
         "ndcg": 1.0,
         "case_id": "sr-017",
         "page_hit": true,
-        "latency_ms": 651,
+        "latency_ms": 529,
         "top_titles": [
           "凝滞虚影 • 职司之形",
           "凝滞虚影 • 役轮之形",
@@ -1161,7 +1179,7 @@
         "ndcg": 1.0,
         "case_id": "sr-018",
         "page_hit": true,
-        "latency_ms": 489,
+        "latency_ms": 528,
         "top_titles": [
           "凝滞虚影 • 凛月之形",
           "凝滞虚影 • 偃偶之形",
@@ -1175,7 +1193,7 @@
         "ndcg": 1.0,
         "case_id": "sr-019",
         "page_hit": true,
-        "latency_ms": 550,
+        "latency_ms": 523,
         "top_titles": [
           "凝滞虚影 • 天人之形",
           "凝滞虚影 • 役轮之形",
@@ -1189,7 +1207,7 @@
         "ndcg": 1.0,
         "case_id": "sr-020",
         "page_hit": true,
-        "latency_ms": 675,
+        "latency_ms": 666,
         "top_titles": [
           "阿来",
           "阿往",
@@ -1203,11 +1221,11 @@
         "ndcg": 1.0,
         "case_id": "sr-021",
         "page_hit": true,
-        "latency_ms": 611,
+        "latency_ms": 648,
         "top_titles": [
           "生命的翁瓦克",
           "沉陆海域露莎卡",
-          "沉陆海域露莎卡"
+          "知更鸟/攻略"
         ]
       },
       {
@@ -1217,11 +1235,11 @@
         "ndcg": 1.0,
         "case_id": "sr-022",
         "page_hit": true,
-        "latency_ms": 605,
+        "latency_ms": 627,
         "top_titles": [
           "奇想蕉乐园",
-          "妖精织梦的乐园",
-          "谧宁拾骨地"
+          "景元/攻略",
+          "妖精织梦的乐园"
         ]
       },
       {
@@ -1231,7 +1249,7 @@
         "ndcg": 0.6309,
         "case_id": "sr-023",
         "page_hit": true,
-        "latency_ms": 682,
+        "latency_ms": 671,
         "top_titles": [
           "蕃息",
           "「我」的诞生",
@@ -1245,7 +1263,7 @@
         "ndcg": 1.0,
         "case_id": "sr-024",
         "page_hit": true,
-        "latency_ms": 490,
+        "latency_ms": 544,
         "top_titles": [
           "凝滞虚影 • 炎华之形",
           "凝滞虚影 • 巽风之形",
@@ -1259,11 +1277,11 @@
         "ndcg": 1.0,
         "case_id": "sr-025",
         "page_hit": true,
-        "latency_ms": 635,
+        "latency_ms": 715,
         "top_titles": [
           "折断的龙骨",
-          "谧宁拾骨地",
-          "星体差分机"
+          "开拓者•记忆/攻略",
+          "加拉赫/攻略"
         ]
       },
       {
@@ -1273,7 +1291,7 @@
         "ndcg": 1.0,
         "case_id": "sr-026",
         "page_hit": true,
-        "latency_ms": 513,
+        "latency_ms": 539,
         "top_titles": [
           "凝滞虚影 • 空海之形",
           "凝滞虚影 • 役轮之形",
@@ -1287,7 +1305,7 @@
         "ndcg": 1.0,
         "case_id": "sr-027",
         "page_hit": true,
-        "latency_ms": 561,
+        "latency_ms": 504,
         "top_titles": [
           "凝滞虚影 • 凛月之形",
           "凝滞虚影 • 役轮之形",
@@ -1301,11 +1319,11 @@
         "ndcg": 1.0,
         "case_id": "sr-028",
         "page_hit": true,
-        "latency_ms": 659,
+        "latency_ms": 702,
         "top_titles": [
           "奇想蕉乐园",
-          "谧宁拾骨地",
-          "星体差分机"
+          "景元/攻略",
+          "景元/攻略"
         ]
       },
       {
@@ -1315,11 +1333,11 @@
         "ndcg": 1.0,
         "case_id": "sr-029",
         "page_hit": true,
-        "latency_ms": 592,
+        "latency_ms": 674,
         "top_titles": [
           "繁星竞技场",
           "停转的萨尔索图",
-          "停转的萨尔索图"
+          "白厄/攻略"
         ]
       },
       {
@@ -1329,11 +1347,11 @@
         "ndcg": 1.0,
         "case_id": "sr-030",
         "page_hit": true,
-        "latency_ms": 694,
+        "latency_ms": 772,
         "top_titles": [
           "折断的龙骨",
-          "谧宁拾骨地",
-          "奔狼的都蓝王朝"
+          "开拓者•记忆/攻略",
+          "星体差分机"
         ]
       },
       {
@@ -1343,11 +1361,11 @@
         "ndcg": 1.0,
         "case_id": "sr-032",
         "page_hit": true,
-        "latency_ms": 610,
+        "latency_ms": 672,
         "top_titles": [
           "太空封印站",
-          "苍穹战线格拉默",
-          "泛银河商业公司"
+          "那刻夏/攻略",
+          "卡芙卡/攻略"
         ]
       }
     ]

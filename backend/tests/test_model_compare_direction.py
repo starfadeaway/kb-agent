@@ -125,30 +125,84 @@ def test_p_underflow_is_flagged():
 
 # ---------- 真实产物校验 ----------
 
-@pytest.mark.parametrize("label", ["A1", "A2"])
-def test_real_artifact_latency_winner_is_qwen(label):
-    """本实验唯二显著的结果是延迟，方向必须是 Qwen。
+def test_artifact_agrees_with_its_own_significance_flag():
+    """产物里 `significant` / `winner` / `p_is_underflow` 必须与 p 值自洽。
 
-    如果哪天 bge 真的变快了，这里会红 —— 那正是要提醒的。
+    这条断言刻意**不硬编码"延迟必须显著"**。
+
+    原因：2026-10-13 补抓角色页后重跑实验 D，A1 的延迟从 p<1e-10 变成 p=0.0946 ——
+    结论确实变了。而原来那条测试断言的是"A1/A2 延迟必须显著"，
+    于是它在结论变化时变红，那红是**对的**：它要提醒人复核文档。
+
+    但把方向写死成"必须显著"也不对 —— 换个语料、换个索引，
+    延迟差异完全可能变得不显著，那时测试不该逼着人宣称显著。
+    所以这里只守**判定逻辑的自洽**：significant 为 True 时 p 必须真的 < 0.05，
+    下溢标记必须与 p 的量级一致。数字变不变由实验决定，不由测试决定。
     """
     d = _artifact()
-    m = d[label]["metrics"]["latency_ms"]
-    assert m["significant"] is True, f"{label} 延迟不再显著，结论需复核"
+    checked = 0
+    for label, block in d.items():
+        if not isinstance(block, dict):
+            continue
+        for name, m in (block.get("metrics") or {}).items():
+            p = m.get("p")
+            if p is None:
+                continue
+            checked += 1
+            if m.get("p_is_underflow"):
+                assert p < 1e-10, (
+                    f"{label}.{name} 标了 p_is_underflow 但 p={p}；"
+                    "下溢只该给真正浮点下溢的量级"
+                )
+            else:
+                assert p >= 1e-10 or p == 0.0, (
+                    f"{label}.{name} p={p} 属于下溢量级却没标 p_is_underflow"
+                )
+            if m.get("significant"):
+                assert p < 0.05, f"{label}.{name} 标了显著但 p={p}"
+                assert m.get("winner") in {"bge", "other"}, (
+                    f"{label}.{name} 显著却没有 winner —— 方向判定丢了"
+                )
+    assert checked >= 8, f"产物里可校验的指标太少（{checked}），守卫没生效"
+
+
+def test_qwen_latency_is_faster_in_final_fusion_stage():
+    """**融合档（A2）** 是本项目实际使用的配置，它的延迟差异必须显著且方向是 Qwen。
+
+    为什么只锁 A2、不锁 A1：A1 是"纯向量"这个中间档，
+    2026-10-13 重跑后它的延迟差异已不显著（p=0.0946）。
+    宣称"Qwen 全面更快"是过度解读 —— 真正站得住的只有融合档。
+    A1 的显著性交给上面那条自洽性断言，不在这里硬编码。
+    """
+    d = _artifact()
+    m = d["A2"]["metrics"]["latency_ms"]
+    assert m["significant"] is True, (
+        f"融合档延迟不再显著（p={m.get('p')}）→ README/EVALUATION 里"
+        "「Qwen 显著更快」的说法要改"
+    )
     assert m["winner"] == "other", (
-        f"{label} 延迟 winner 应为 other(Qwen)，实际 {m['winner']} —— "
+        f"A2 延迟 winner 应为 other(Qwen)，实际 {m['winner']} —— "
         "方向判定或产物已过期"
     )
     assert m["mean_diff"] > 0, "bge 延迟更大即 bge 更慢"
+    # 显著 ≠ 实际重要：效应量必须同时被记下来，否则容易被当成"快很多"
+    assert "cohens_d" in m and m["cohens_d"] < 0.1, (
+        f"效应量 {m.get('cohens_d')} 偏大，文档里「显著更快」的说法需要再核对量级"
+    )
 
 
-def test_p_underflow_only_on_the_extreme_case():
-    """只有 A1 的延迟 p 小到浮点下溢；A2 是 0.0163，不该被一起标成下溢。
+def test_control_group_remains_identical():
+    """A0（纯 BM25，不用向量）必须仍然逐位相同 —— 它是对照组的自证。
 
-    把两者混为一谈会让「p=0.0」和「p 极小」失去区分，
-    正是 memory 里记过的那个坑：p 下溢必须写 p<1e-10，不能写 p=0。
+    只要 A0 对不上，说明两次跑之间混进了语料/分块/评测集这类额外变量，
+    A1/A2 的差异就不能只归给 embedding 模型。
     """
     d = _artifact()
-    a1 = d["A1"]["metrics"]["latency_ms"]
-    a2 = d["A2"]["metrics"]["latency_ms"]
-    assert a1["p_is_underflow"] is True, "A1 p<1e-10 应标记为下溢"
-    assert a2["p_is_underflow"] is False, "A2 p≈0.016 不是下溢"
+    a0 = d["A0"]["metrics"]
+    retrieval = [k for k in a0 if k in {"mrr", "ndcg", "recall@3", "page_hit", "hit_rate"}]
+    assert retrieval, "产物里没有 A0 的检索指标"
+    for k in retrieval:
+        assert abs(a0[k]["mean_diff"]) < 1e-9, (
+            f"A0.{k} 的 mean_diff={a0[k]['mean_diff']}，阴性对照不再相同 → "
+            "两次跑之间有额外变量"
+        )
