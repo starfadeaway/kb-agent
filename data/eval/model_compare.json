@@ -1,0 +1,233 @@
+{
+  "_meta": {
+    "script": "analyze_model_compare.py",
+    "note": "跨模型配对检验：同一批 case，只变 embedding 模型",
+    "bge_file": "exp_A.json",
+    "other_file": "exp_D_Qwen_Qwen3-Embedding-0.6B_sr_k3.json",
+    "labels": [
+      "A0",
+      "A1",
+      "A2"
+    ],
+    "a0_identical": true
+  },
+  "A0": {
+    "n_common": 29,
+    "n_bge": 29,
+    "n_other": 29,
+    "metrics": {
+      "mrr": {
+        "bge": 0.8506,
+        "other": 0.8506,
+        "mean_diff": 0.0,
+        "t": 0.0,
+        "p": 1.0,
+        "cohens_d": 0.0,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "ndcg": {
+        "bge": 0.8621,
+        "other": 0.8621,
+        "mean_diff": 0.0,
+        "t": 0.0,
+        "p": 1.0,
+        "cohens_d": 0.0,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "recall@3": {
+        "bge": 0.8966,
+        "other": 0.8966,
+        "mean_diff": 0.0,
+        "t": 0.0,
+        "p": 1.0,
+        "cohens_d": 0.0,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "page_hit": {
+        "bge": 0.8966,
+        "other": 0.8966,
+        "mean_diff": 0.0,
+        "t": 0.0,
+        "p": 1.0,
+        "cohens_d": 0.0,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "hit_rate": {
+        "bge": 0.8966,
+        "other": 0.8966,
+        "mean_diff": 0.0,
+        "t": 0.0,
+        "p": 1.0,
+        "cohens_d": 0.0,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "latency_ms": {
+        "bge": 88.1724,
+        "other": 88.931,
+        "mean_diff": -0.7586,
+        "t": -0.95,
+        "p": 0.3419,
+        "cohens_d": -0.002,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": false
+      }
+    }
+  },
+  "A1": {
+    "n_common": 29,
+    "n_bge": 29,
+    "n_other": 29,
+    "metrics": {
+      "mrr": {
+        "bge": 0.8276,
+        "other": 0.7759,
+        "mean_diff": 0.0517,
+        "t": 0.902,
+        "p": 0.3673,
+        "cohens_d": 0.133,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "ndcg": {
+        "bge": 0.8276,
+        "other": 0.7894,
+        "mean_diff": 0.0382,
+        "t": 0.64,
+        "p": 0.5222,
+        "cohens_d": 0.099,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "recall@3": {
+        "bge": 0.8276,
+        "other": 0.8276,
+        "mean_diff": 0.0,
+        "t": 0.0,
+        "p": 1.0,
+        "cohens_d": 0.0,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "page_hit": {
+        "bge": 0.8276,
+        "other": 0.8276,
+        "mean_diff": 0.0,
+        "t": 0.0,
+        "p": 1.0,
+        "cohens_d": 0.0,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "hit_rate": {
+        "bge": 0.8276,
+        "other": 0.8276,
+        "mean_diff": 0.0,
+        "t": 0.0,
+        "p": 1.0,
+        "cohens_d": 0.0,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "latency_ms": {
+        "bge": 161.7586,
+        "other": 124.1034,
+        "mean_diff": 37.6552,
+        "t": 4.376,
+        "p": 0.0,
+        "cohens_d": 0.393,
+        "n": 29,
+        "significant": true,
+        "higher_is_better": false
+      }
+    }
+  },
+  "A2": {
+    "n_common": 29,
+    "n_bge": 29,
+    "n_other": 29,
+    "metrics": {
+      "mrr": {
+        "bge": 0.8736,
+        "other": 0.8621,
+        "mean_diff": 0.0115,
+        "t": 0.226,
+        "p": 0.8215,
+        "cohens_d": 0.034,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "ndcg": {
+        "bge": 0.8793,
+        "other": 0.8621,
+        "mean_diff": 0.0172,
+        "t": 0.328,
+        "p": 0.7428,
+        "cohens_d": 0.052,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "recall@3": {
+        "bge": 0.8966,
+        "other": 0.8621,
+        "mean_diff": 0.0345,
+        "t": 0.571,
+        "p": 0.5683,
+        "cohens_d": 0.104,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "page_hit": {
+        "bge": 0.8966,
+        "other": 0.8621,
+        "mean_diff": 0.0345,
+        "t": 0.571,
+        "p": 0.5683,
+        "cohens_d": 0.104,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "hit_rate": {
+        "bge": 0.8966,
+        "other": 0.8621,
+        "mean_diff": 0.0345,
+        "t": 0.571,
+        "p": 0.5683,
+        "cohens_d": 0.104,
+        "n": 29,
+        "significant": false,
+        "higher_is_better": true
+      },
+      "latency_ms": {
+        "bge": 217.7241,
+        "other": 191.4138,
+        "mean_diff": 26.3103,
+        "t": 2.401,
+        "p": 0.0163,
+        "cohens_d": 0.076,
+        "n": 29,
+        "significant": true,
+        "higher_is_better": false
+      }
+    }
+  }
+}
