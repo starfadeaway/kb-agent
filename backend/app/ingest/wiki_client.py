@@ -373,6 +373,65 @@ class WikiClient:
                 )
         return out
 
+    async def recent_changes(
+        self, since: str, *, limit: int = 500, namespace: int = 0,
+    ) -> tuple[list[dict], str | None]:
+        """列出 `since` 之后被改动过的页面，返回 (记录列表, 续页游标)。
+
+        增量同步的第一级筛子：一次请求能列出整个时间窗内被编辑过的页面，
+        而不必逐页去问。实测它能穿过 EdgeOne（`probe_delta_sync.py` 阶段一）。
+
+        **它给的是"被编辑过"，不是"内容变了"** —— wiki 上改个错别字、
+        调一下排版都会进这个列表。真正的内容判定交给第二级（比对指纹），
+        两级分工是省 WAF 配额的关键：
+        第一级便宜（每请求 500 条），第二级贵（要取正文）。
+
+        `since` 用 MediaWiki 的时间戳格式（`2026-10-06T00:00:00Z`），
+        配合 `rcdir=older` 表示"从该时刻往回翻"。
+
+        翻页用返回的游标；**游标非空说明窗口没翻完**，调用方必须把它当
+        下界而不是精确值 —— 实测 7 天窗口在 WAF 下会被截断。
+        """
+        data = await self._get(
+            self.api,
+            {
+                "action": "query",
+                "list": "recentchanges",
+                "rcnamespace": str(namespace),
+                "rcstart": since,
+                "rcdir": "older",
+                "rclimit": str(limit),
+                "rcprop": "title|timestamp|ids",
+                "format": "json",
+                "formatversion": "2",
+            },
+        )
+        rows = data.get("query", {}).get("recentchanges", [])
+        cursor = data.get("continue", {}).get("rccontinue")
+        return rows, cursor
+
+    async def recent_changes_page(
+        self, since: str, cursor: str, *, limit: int = 500, namespace: int = 0,
+    ) -> tuple[list[dict], str | None]:
+        """`recent_changes` 的翻页版。"""
+        data = await self._get(
+            self.api,
+            {
+                "action": "query",
+                "list": "recentchanges",
+                "rcnamespace": str(namespace),
+                "rcstart": since,
+                "rcdir": "older",
+                "rclimit": str(limit),
+                "rcprop": "title|timestamp|ids",
+                "rccontinue": cursor,
+                "format": "json",
+                "formatversion": "2",
+            },
+        )
+        rows = data.get("query", {}).get("recentchanges", [])
+        return rows, data.get("continue", {}).get("rccontinue")
+
     async def search(self, keyword: str, limit: int = 10) -> list[str]:
         data = await self._get(
             self.api,
