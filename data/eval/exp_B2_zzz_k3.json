@@ -1,0 +1,749 @@
+[
+  {
+    "label": "A0",
+    "games": [
+      "zzz"
+    ],
+    "config": {
+      "game": "zzz",
+      "embed_model": null,
+      "variant": "b2",
+      "use_bm25": true,
+      "use_vector": false,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60,
+      "min_revision_ts": null,
+      "page_titles": null,
+      "rerank_candidates": 0
+    },
+    "configs": {
+      "zzz": {
+        "game": "zzz",
+        "embed_model": null,
+        "variant": "b2",
+        "use_bm25": true,
+        "use_vector": false,
+        "use_rerank": false,
+        "bm25_top": 20,
+        "vector_top": 20,
+        "final_top_k": 3,
+        "rrf_k": 60,
+        "min_revision_ts": null,
+        "page_titles": null,
+        "rerank_candidates": 0
+      }
+    },
+    "aggregate": {
+      "recall@3": 0.9,
+      "recall@3_std": 0.3162,
+      "hit_rate": 0.9,
+      "hit_rate_std": 0.3162,
+      "mrr": 0.8333,
+      "mrr_std": 0.36,
+      "ndcg": 0.85,
+      "ndcg_std": 0.3375,
+      "n": 10,
+      "page_hit_rate": 0.9,
+      "avg_latency_ms": 127,
+      "errors": 0,
+      "n_ok": 10,
+      "no_gold_pages": 2
+    },
+    "by_game": {
+      "zzz": {
+        "recall@3": 0.9,
+        "recall@3_std": 0.3162,
+        "hit_rate": 0.9,
+        "hit_rate_std": 0.3162,
+        "mrr": 0.8333,
+        "mrr_std": 0.36,
+        "ndcg": 0.85,
+        "ndcg_std": 0.3375,
+        "n": 10,
+        "page_hit_rate": 0.9,
+        "avg_latency_ms": 127,
+        "errors": 0,
+        "n_ok": 10
+      }
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 0.3333,
+        "ndcg": 0.5,
+        "case_id": "zzz-002",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 1247,
+        "top_titles": [
+          "「席德」",
+          "简",
+          "艾莲"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-003",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 3,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "艾莲"
+        ]
+      },
+      {
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "zzz-004",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": false,
+        "latency_ms": 3,
+        "top_titles": [
+          "「席德」",
+          "简",
+          "零号·安比"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-005",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 3,
+        "top_titles": [
+          "爱丽丝",
+          "赛维里安",
+          "爱丽丝"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-006",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 5,
+        "top_titles": [
+          "「电磁暴」-壹式",
+          "「电磁暴」-叁式",
+          "「电磁暴」-贰式"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-007",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 3,
+        "top_titles": [
+          "「电磁暴」-壹式",
+          "「电磁暴」-叁式",
+          "「电磁暴」-贰式"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-008",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 2,
+        "top_titles": [
+          "安比",
+          "零号·安比",
+          "安比"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-009",
+        "game": "zzz",
+        "category": "semantic",
+        "page_hit": true,
+        "latency_ms": 3,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "艾莲"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-010",
+        "game": "zzz",
+        "category": "semantic",
+        "page_hit": true,
+        "latency_ms": 5,
+        "top_titles": [
+          "爱丽丝",
+          "艾丝弥小姐",
+          "柚叶"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-011",
+        "game": "zzz",
+        "category": "numerical",
+        "page_hit": true,
+        "latency_ms": 4,
+        "top_titles": [
+          "艾莲",
+          "机巧心种",
+          "诺姆"
+        ]
+      }
+    ],
+    "significance": [
+      {
+        "comparison": "A0→A2",
+        "n": 10,
+        "metric": "mrr",
+        "mean_a": 0.85,
+        "mean_b": 0.8333,
+        "mean_diff": 0.0167,
+        "sd_diff": 0.4336,
+        "std_err": 0.1371,
+        "t": 0.122,
+        "df": 9,
+        "p": 0.9032,
+        "cohens_d": 0.048,
+        "significant": false,
+        "approx": "正态近似",
+        "note": "n<20，t 分布与正态偏离较大，p 值仅供参考"
+      },
+      {
+        "comparison": "A2→A3",
+        "n": 10,
+        "metric": "mrr",
+        "mean_a": 1.0,
+        "mean_b": 0.85,
+        "mean_diff": 0.15,
+        "sd_diff": 0.3375,
+        "std_err": 0.1067,
+        "t": 1.406,
+        "df": 9,
+        "p": 0.1599,
+        "cohens_d": 0.629,
+        "significant": false,
+        "approx": "正态近似",
+        "note": "n<20，t 分布与正态偏离较大，p 值仅供参考"
+      }
+    ],
+    "_meta": {
+      "script": "exp_common.py",
+      "generated_at": "2026-10-13T14:52:37+00:00",
+      "experiment": "A",
+      "game": "zzz",
+      "variant": "b2",
+      "top_k": 3,
+      "labels": "A0,A2,A3",
+      "index_chunks": 902,
+      "index_pages": 260,
+      "git_commit": "bc28d4d"
+    }
+  },
+  {
+    "label": "A2",
+    "games": [
+      "zzz"
+    ],
+    "config": {
+      "game": "zzz",
+      "embed_model": null,
+      "variant": "b2",
+      "use_bm25": true,
+      "use_vector": true,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60,
+      "min_revision_ts": null,
+      "page_titles": null,
+      "rerank_candidates": 0
+    },
+    "configs": {
+      "zzz": {
+        "game": "zzz",
+        "embed_model": null,
+        "variant": "b2",
+        "use_bm25": true,
+        "use_vector": true,
+        "use_rerank": false,
+        "bm25_top": 20,
+        "vector_top": 20,
+        "final_top_k": 3,
+        "rrf_k": 60,
+        "min_revision_ts": null,
+        "page_titles": null,
+        "rerank_candidates": 0
+      }
+    },
+    "aggregate": {
+      "recall@3": 0.9,
+      "recall@3_std": 0.3162,
+      "hit_rate": 0.9,
+      "hit_rate_std": 0.3162,
+      "mrr": 0.85,
+      "mrr_std": 0.3375,
+      "ndcg": 0.8631,
+      "ndcg_std": 0.3247,
+      "n": 10,
+      "page_hit_rate": 0.9,
+      "avg_latency_ms": 257,
+      "errors": 0,
+      "n_ok": 10,
+      "no_gold_pages": 2
+    },
+    "by_game": {
+      "zzz": {
+        "recall@3": 0.9,
+        "recall@3_std": 0.3162,
+        "hit_rate": 0.9,
+        "hit_rate_std": 0.3162,
+        "mrr": 0.85,
+        "mrr_std": 0.3375,
+        "ndcg": 0.8631,
+        "ndcg_std": 0.3247,
+        "n": 10,
+        "page_hit_rate": 0.9,
+        "avg_latency_ms": 257,
+        "errors": 0,
+        "n_ok": 10
+      }
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-002",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 1363,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "艾莲"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-003",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 131,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "艾莲"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 0.5,
+        "ndcg": 0.6309,
+        "case_id": "zzz-004",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 129,
+        "top_titles": [
+          "零号·安比",
+          "安比",
+          "零号·安比"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-005",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 122,
+        "top_titles": [
+          "爱丽丝",
+          "爱丽丝",
+          "爱丽丝"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-006",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 126,
+        "top_titles": [
+          "「电磁暴」-壹式",
+          "「电磁暴」-叁式",
+          "「电磁暴」-贰式"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-007",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 123,
+        "top_titles": [
+          "「电磁暴」-壹式",
+          "「电磁暴」-叁式",
+          "「电磁暴」-贰式"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-008",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 178,
+        "top_titles": [
+          "安比",
+          "零号·安比",
+          "零号·安比"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-009",
+        "game": "zzz",
+        "category": "semantic",
+        "page_hit": true,
+        "latency_ms": 128,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "艾莲"
+        ]
+      },
+      {
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "zzz-010",
+        "game": "zzz",
+        "category": "semantic",
+        "page_hit": false,
+        "latency_ms": 138,
+        "top_titles": [
+          "柚叶",
+          "艾丝弥小姐",
+          "真斗"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-011",
+        "game": "zzz",
+        "category": "numerical",
+        "page_hit": true,
+        "latency_ms": 136,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "星徽·比利"
+        ]
+      }
+    ]
+  },
+  {
+    "label": "A3",
+    "games": [
+      "zzz"
+    ],
+    "config": {
+      "game": "zzz",
+      "embed_model": null,
+      "variant": "b2",
+      "use_bm25": true,
+      "use_vector": true,
+      "use_rerank": true,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60,
+      "min_revision_ts": null,
+      "page_titles": null,
+      "rerank_candidates": 0
+    },
+    "configs": {
+      "zzz": {
+        "game": "zzz",
+        "embed_model": null,
+        "variant": "b2",
+        "use_bm25": true,
+        "use_vector": true,
+        "use_rerank": true,
+        "bm25_top": 20,
+        "vector_top": 20,
+        "final_top_k": 3,
+        "rrf_k": 60,
+        "min_revision_ts": null,
+        "page_titles": null,
+        "rerank_candidates": 0
+      }
+    },
+    "aggregate": {
+      "recall@3": 1.0,
+      "recall@3_std": 0.0,
+      "hit_rate": 1.0,
+      "hit_rate_std": 0.0,
+      "mrr": 1.0,
+      "mrr_std": 0.0,
+      "ndcg": 1.0,
+      "ndcg_std": 0.0,
+      "n": 10,
+      "page_hit_rate": 1.0,
+      "avg_latency_ms": 850,
+      "errors": 0,
+      "n_ok": 10,
+      "no_gold_pages": 2
+    },
+    "by_game": {
+      "zzz": {
+        "recall@3": 1.0,
+        "recall@3_std": 0.0,
+        "hit_rate": 1.0,
+        "hit_rate_std": 0.0,
+        "mrr": 1.0,
+        "mrr_std": 0.0,
+        "ndcg": 1.0,
+        "ndcg_std": 0.0,
+        "n": 10,
+        "page_hit_rate": 1.0,
+        "avg_latency_ms": 850,
+        "errors": 0,
+        "n_ok": 10
+      }
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-002",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 1950,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "「席德」"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-003",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 774,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "伊芙琳"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-004",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 692,
+        "top_titles": [
+          "安比",
+          "零号·安比",
+          "安比"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-005",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 691,
+        "top_titles": [
+          "爱丽丝",
+          "爱丽丝",
+          "爱丽丝"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-006",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 656,
+        "top_titles": [
+          "「电磁暴」-壹式",
+          "硫磺石",
+          "「电磁暴」-叁式"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-007",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 738,
+        "top_titles": [
+          "「电磁暴」-壹式",
+          "「电磁暴」-贰式",
+          "「电磁暴」-叁式"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-008",
+        "game": "zzz",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 731,
+        "top_titles": [
+          "安比",
+          "零号·安比",
+          "比利"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-009",
+        "game": "zzz",
+        "category": "semantic",
+        "page_hit": true,
+        "latency_ms": 765,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "艾莲"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-010",
+        "game": "zzz",
+        "category": "semantic",
+        "page_hit": true,
+        "latency_ms": 737,
+        "top_titles": [
+          "爱丽丝",
+          "柚叶",
+          "真斗"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "zzz-011",
+        "game": "zzz",
+        "category": "numerical",
+        "page_hit": true,
+        "latency_ms": 773,
+        "top_titles": [
+          "艾莲",
+          "艾莲",
+          "艾莲"
+        ]
+      }
+    ]
+  }
+]
