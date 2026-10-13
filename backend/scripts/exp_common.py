@@ -51,9 +51,37 @@ SUBSET_IDS = [
 ]
 
 
+JUDGE_ERROR_PREFIX = "judge_error"
+
+
+def judge_failed(row: dict) -> bool:
+    """这条 case 是不是败在 Judge 侧（超时 / 限流 / 输出解析失败）。
+
+    为什么必须单独认出来：`is_kept` 早先只看 `error` 字段，而那是 **Agent
+    侧**的异常。Judge 自己失败时 `error` 是空的，但 `judge_score` 已经被
+    `score()` 兜成了 0 分，于是这个 0 会被当成「模型答得一塌糊涂」算进均值。
+
+    实测踩到的例子（实验 E 的 E1 档 sr-008）：
+        judge_score = 0.0
+        judge_reason = "judge_error:APITimeoutError"
+        error        = None
+    DeepSeek 那条其实答得不错，是 Judge 的一次 APITimeout 把它判成 0 分。
+    混进均值后 E1 从 4.60 掉到 4.30 —— 看起来像 DeepSeek 能力不行，
+    实际是评测链路抖了一下。**这种分不能进能力指标。**
+
+    `score()` 里空回答走的是「空回答」、Judge 调不通走的是
+    `judge_error:<异常名>`，两者前缀不同，所以按前缀判定不会误伤空回答。
+    """
+    return str(row.get("judge_reason") or "").startswith(JUDGE_ERROR_PREFIX)
+
+
 def is_kept(row: dict) -> bool:
-    """默认的"这条结果算不算数"：只看 `error` 字段。"""
-    return not row.get("error")
+    """默认的「这条结果算不算数」：Agent 与 Judge 两侧都没失败才算。
+
+    早先只判 `error`（Agent 侧），漏掉了 Judge 侧失败 —— 见 judge_failed
+    的说明。只算 Agent 侧，会让链路故障伪装成能力差距。
+    """
+    return not row.get("error") and not judge_failed(row)
 
 
 def aggregate_rows(rows: Sequence[dict], *, exclude=None) -> dict:
@@ -72,8 +100,12 @@ def aggregate_rows(rows: Sequence[dict], *, exclude=None) -> dict:
     现在统一走这里，避免**同一份数据被两个脚本算出两个均值**。
     """
     keep = exclude if exclude is not None else is_kept
-    ok = [r for r in rows if keep(r)] or list(rows)
+    kept = [r for r in rows if keep(r)]
+    # 全部被排除时退回全量，避免除零；但必须留下 all_failed 标记 ——
+    # 否则「评测链路全挂」会被读成「模型全答错」，方向完全相反。
+    ok = kept or list(rows)
     n_ok = len(ok) or 1
+    all_failed = not kept and bool(rows)
 
     def avg(key: str, cast=float, default=0):
         vals = [cast(r[key]) for r in ok if r.get(key) is not None]
@@ -93,6 +125,10 @@ def aggregate_rows(rows: Sequence[dict], *, exclude=None) -> dict:
         "ref_coverage": round(sum(1 for r in ok if r.get("has_refs")) / n_ok, 4),
         "avg_latency_ms": int(avg("latency_ms")),
         "errors": sum(1 for r in rows if r.get("error")),
+        # Judge 侧失败单列：它是评测链路的健康度，不是被测系统的能力，
+        # 但确实会拉低均值，必须能一眼看出某个 0 分是「答错」还是「没评成」
+        "judge_errors": sum(1 for r in rows if judge_failed(r)),
+        "all_failed": all_failed,
         "n": len(rows),
         "n_ok": len(ok),
     }
@@ -156,20 +192,29 @@ def print_category_matrix(results: Sequence[dict], *, metric: str = "judge_score
         print(f"{cat:<14}" + "".join(cells))
 
 
-def paired_scores(results: Sequence[dict], metric: str = "judge_score") -> dict | None:
+def paired_scores(results: Sequence[dict], metric: str = "judge_score",
+                  *, exclude=None) -> dict | None:
     """相邻两档之间的配对比较（首尾对比）。
 
     用「首尾」而不是「相邻」：实验 C 的问题就是「有 RAG vs 没 RAG」，
     中间那档只是过渡。首尾对比最能说明项目存在的理由。
+
+    **样本集必须和 aggregate_rows 用同一个谓词。**
+    早先这里硬编码 `not r.get("error")`，只认 Agent 侧异常，于是
+    aggregate_rows 剔除的 Judge 侧失败（judge_error:*）在这里又被算了回来：
+    均值按 n=14 算、配对检验按 n=15 算，两份数字来自不同样本集，
+    Δ 和 p 却会被当成同一份数据的结论写进文档 —— 这类不自洽很难事后发现，
+    因为两个数字单独看都「正常」。
     """
     from app.eval.metrics import paired_test
 
     if len(results) < 2:
         return None
+    keep = exclude if exclude is not None else is_kept
     first, last = results[0], results[-1]
-    common = [r for r in first["rows"] if not r.get("error")]
+    common = [r for r in first["rows"] if keep(r)]
     common_ids = {r["case_id"] for r in common}
-    last_rows = [r for r in last["rows"] if r["case_id"] in common_ids and not r.get("error")]
+    last_rows = [r for r in last["rows"] if r["case_id"] in common_ids and keep(r)]
     if len(last_rows) < 3:
         return None
     return paired_test(

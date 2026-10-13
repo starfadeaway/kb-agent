@@ -48,6 +48,7 @@ from exp_common import (  # noqa: E402
 )
 from exp_common import (
     aggregate_rows,
+    is_kept,
     load_cases,
     paired_scores,
     print_summary,
@@ -63,6 +64,21 @@ MODELS = {
 # 子集就必须来自同一个来源，所以复用 exp_common.SUBSET_IDS，不在这里抄一份。
 # 抄一份的后果是：哪天给 C 换子集，E 还停在旧子集上，对比结论悄悄失效。
 SUBSET_IDS = _SUBSET_IDS
+
+
+def is_counted(row) -> bool:
+    """这条 case 的分数能不能进 E 的能力指标。
+
+    `is_kept` 已经挡住 Agent 报错与 Judge 侧失败（judge_error:*）两种情况。
+    这里再补一条 E 特有的：模型侧限流（429）时 Agent 会把模型异常写进
+    `answer` 文本，而 `error` 字段是空的 —— 靠读答案文本猜不可靠，
+    于是用 `prompt_tokens == 0` 作为「压根没调通模型」的判据。
+    这种 0 分是额度问题，不是模型能力问题。
+
+    aggregate_rows 与 paired_scores 必须共用这一个谓词，否则两者会算出
+    不同样本集上的均值与 Δ（见 paired_scores 的 docstring）。
+    """
+    return is_kept(row) and (row.get("prompt_tokens") or 0) > 0
 
 _THINK = re.compile(r"<think>.*?</think>", re.S)
 _JSON_CALL = re.compile(r"\{[\s\S]*\}")
@@ -262,7 +278,7 @@ async def run_one(label: str, case_list, judge: Judge, *, concurrency: int = 2) 
 
     # 聚合口径统一在 exp_common.aggregate_rows —— 与实验 C 共用同一个函数
     return {"label": label, "model": model_name, "concurrency": concurrency,
-            "aggregate": aggregate_rows(rows), "rows": rows}
+            "aggregate": aggregate_rows(rows, exclude=is_counted), "rows": rows}
 
 
 async def main() -> None:
@@ -307,7 +323,7 @@ async def main() -> None:
     for r in results:
         print(f"  {r['label']:<5}{r.get('model') or ''}")
 
-    t = paired_scores(results)
+    t = paired_scores(results, exclude=is_counted)
     if t:
         print(f"\n--- 配对检验 E1 → E2（metric=judge_score，n={t['n']}）---")
         print(f"  Δ={t['mean_diff']:+.4f}  t={t['t']}  p={t['p']}  Cohen's d={t['cohens_d']}")
