@@ -8,7 +8,7 @@
 
 2. **成对比较必须交换位置跑两遍**。
    LLM Judge 对"先出现的答案"有稳定偏好，单次 A/B 的胜负有一半是位置带来的。
-   `judge_pairwise` 会正反各跑一次，只有两次都指向同一方才算赢。
+   `Judge.pairwise` 会正反各跑一次，只有两次都指向同一方才算赢。
 
 3. **给出上下文再问忠实度**。
    不给证据就问"这段话有幻觉吗"，Judge 只能凭常识猜，测的是它自己的知识而不是系统的事实性。
@@ -153,8 +153,23 @@ class Judge:
 
         结论取 A / B / TIE。只有两次都选同一个才判该方获胜，
         不一致说明差异在噪声内，直接判 TIE —— 不硬凑出"我们更优"。
+
+        **"拿不到结论"不等于"打平"。**
+        Judge 输出无法解析时（模型没按 JSON 输出、响应被截断），
+        早先的实现写的是 `_parse_json(raw) or {}`，于是 `winner` 取默认值
+        "TIE" —— 一次基础设施失败被伪装成"A 和 B 一样好"，而且连日志都没有。
+
+        后果不只是噪声：正反两次里只要有一次解析失败，r1 就是 TIE，
+        后面 `if r1 == "TIE"` 直接返回平局，**把另一次可能明确的胜负一起盖掉**。
+        于是系统性故障反而会制造出"两档没差别"的假象 —— 正好是评测最该避免的结论。
+
+        所以这里用 None 表示"本次没拿到有效结论"，与真实的 TIE 分开：
+        只要有一次无效，整体判 TIE 但原因里标死 `judge_parse_error`，
+        下游能统计、能告警，不会把故障读成结论。
+        同文件的 score() 早就是 `if not data: return ... "judge 输出无法解析"`，
+        两处口径必须一致，否则同一套 Judge 会按两套标准计分。
         """
-        results: list[str] = []
+        results: list[str | None] = []
         reasons: list[str] = []
         for first, second in ((answer_a, answer_b), (answer_b, answer_a)):
             prompt = PAIRWISE_PROMPT.format(
@@ -168,11 +183,21 @@ class Judge:
                 raw = await self.llm.judge(prompt, model=self.model)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Judge 成对比较失败: %s", exc)
-                return "TIE", f"judge_error:{type(exc).__name__}"
-            data = _parse_json(raw) or {}
-            winner = str(data.get("winner", "TIE")).upper()
+                return "TIE", f"judge_error:{type(exc).__name__}（未得到有效结论，非真实平局）"
+
+            data = _parse_json(raw)
+            if not data or "winner" not in data:
+                logger.warning("Judge 成对比较输出无法解析，原始输出: %s", (raw or "")[:200])
+                reasons.append("parse_error")
+                results.append(None)
+                continue
+
+            winner = str(data["winner"]).upper()
             reasons.append(str(data.get("reason", ""))[:80])
             results.append("A" if winner == "A" else "B" if winner == "B" else "TIE")
+
+        if any(r is None for r in results):
+            return "TIE", "judge_parse_error（未得到有效结论，非真实平局）：" + " / ".join(reasons)
 
         r1, r2 = results
         if r1 == "TIE" or r2 == "TIE":

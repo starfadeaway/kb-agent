@@ -30,6 +30,7 @@ import json
 import re
 import sys
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parent.parent
@@ -103,27 +104,62 @@ def repair_tool_calls(content: str) -> list[dict]:
     return []
 
 
-async def chat_with(label: str, model_name: str | None, messages: list[dict],
-                    tools: list[dict], timeout: float = 120.0) -> dict:
-    """单次调用，带 MiniMax 适配与工具调用修复。"""
+@asynccontextmanager
+async def _client_for(label: str):
+    """E2 的 client 整个 label 只建一次，且异常路径也一定关闭。
+
+    之前每次 chat_with 都新建一个 AsyncOpenAI，而 close() 写在 return 之前、
+    并不在 finally 里 —— 于是任何一次异常（429、超时、网络抖动）都会泄漏
+    一个 httpx 连接池和 TLS 会话。ReAct 每步都调一次，泄漏累积到 socket
+    耗尽后新连接再也建不出去，协程就永久挂在 await 上。
+
+    实测症状（2026-10-13 那次跑挂了 65 分钟就是这个）：
+      - CPU 增量 0s、读入增量 0KB、内存不变，连续 90s 纹丝不动
+      - py-spy dump 出来主线程停在 select，13 个 asyncio_* 线程全部 idle
+      - 同一时刻全进程只有 1 条 Established，看不出在忙什么
+
+    E1 走全局单例 get_llm()，本来就不归本脚本关，所以 yield None。
+    """
+    if label == "E1":
+        yield None
+        return
     s = get_settings()
+    if not s.minimax_api_key:
+        raise RuntimeError("MINIMAX_API_KEY 未配置")
+    c = AsyncOpenAI(api_key=s.minimax_api_key, base_url=s.minimax_base_url)
+    try:
+        yield c
+    finally:
+        await c.close()
+
+
+async def chat_with(label: str, model_name: str | None, messages: list[dict],
+                    tools: list[dict], client=None,
+                    timeout: float = 120.0) -> dict:
+    """单次调用，带 MiniMax 适配与工具调用修复。
+
+    timeout 是真的生效的（asyncio.wait_for），不是摆设 —— 声明了却不接上，
+    等于单点故障可以无限期挂住整个实验，而实验通常跑在无人值守的后台里。
+    """
     llm = get_llm()
 
     if label == "E1":
-        out = await llm.chat(messages, model=model_name, tools=tools,
-                             temperature=0.0, max_tokens=1024)
+        out = await asyncio.wait_for(
+            llm.chat(messages, model=model_name, tools=tools,
+                     temperature=0.0, max_tokens=1024),
+            timeout=timeout,
+        )
         return {"content": out["content"], "tool_calls": out["tool_calls"], "usage": out["usage"]}
 
-    # E2：MiniMax 走独立 client（不同 base_url / key）
-    if not s.minimax_api_key:
-        raise RuntimeError("MINIMAX_API_KEY 未配置")
-
-    client = AsyncOpenAI(api_key=s.minimax_api_key, base_url=s.minimax_base_url)
+    # E2：MiniMax 走独立 client（不同 base_url / key），由 _client_for 统一持有
+    if client is None:
+        raise RuntimeError("E2 必须在 _client_for 里传入共享 client，不能临时新建")
     kwargs = {"model": model_name, "messages": messages, "temperature": 0.0, "max_tokens": 1024}
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
-    r = await client.chat.completions.create(**kwargs)
+    r = await asyncio.wait_for(
+        client.chat.completions.create(**kwargs), timeout=timeout)
     msg = r.choices[0].message
     content = strip_think(msg.content or "")
 
@@ -141,12 +177,11 @@ async def chat_with(label: str, model_name: str | None, messages: list[dict],
         "prompt_tokens": r.usage.prompt_tokens if r.usage else 0,
         "completion_tokens": r.usage.completion_tokens if r.usage else 0,
     }
-    await client.close()
     return {"content": content, "tool_calls": calls, "usage": usage}
 
 
 async def run_case(case, *, label: str, model_name: str, judge: Judge, tools,
-                   ctx, sem: asyncio.Semaphore) -> dict:
+                   ctx, sem: asyncio.Semaphore, client=None) -> dict:
     """跑单条 case。每条自己建/关 client，不共享可变状态，并发安全。"""
     s = get_settings()
     # 证据固定：两个模型看到完全一样的检索结果，
@@ -161,7 +196,8 @@ async def run_case(case, *, label: str, model_name: str, judge: Judge, tools,
     # 全部走生产代码本身 —— 不在脚本里抄一份副本。
     # 抄一份的话，测出来的就不是线上真正在跑的东西。
     async def chat_fn(messages, **kw):
-        return await chat_with(label, model_name, messages, kw.get("tools") or tools)
+        return await chat_with(label, model_name, messages, kw.get("tools") or tools,
+                               client=client)
 
     agent = ReActAgent(settings=s, llm=get_llm(), tools=tools, chat_fn=chat_fn)
 
@@ -211,11 +247,13 @@ async def run_one(label: str, case_list, judge: Judge, *, concurrency: int = 2) 
         ToolContext.build(case.game)
 
     sem = asyncio.Semaphore(max(1, concurrency))
-    rows = list(await asyncio.gather(*[
-        run_case(case, label=label, model_name=model_name, judge=judge, tools=tools,
-                 ctx=ToolContext.build(case.game), sem=sem)
-        for case in case_list
-    ]))
+    # 整个 label 共用一个 client，finally 保证异常路径也关闭
+    async with _client_for(label) as client:
+        rows = list(await asyncio.gather(*[
+            run_case(case, label=label, model_name=model_name, judge=judge, tools=tools,
+                     ctx=ToolContext.build(case.game), sem=sem, client=client)
+            for case in case_list
+        ]))
 
     for r in rows:
         print(f"  [{label}] {r['case_id']:<8} score={r['judge_score']:<6} "
@@ -247,12 +285,22 @@ async def main() -> None:
 
     results = []
     judge = Judge(get_llm())
+    out_name = args.out or f"exp_E{'' if len(case_list) == 15 else f'_{len(case_list)}'}.json"
+    # 中间产物另存为 .partial.json，绝不占用正式文件名 ——
+    # 否则半截结果会被后续读取当成完整实验，静默污染结论。
+    stem = out_name[:-5] if out_name.endswith(".json") else out_name
+    partial_name = f"{stem}.partial.json"
+
     for label in args.labels.split(","):
         label = label.strip().upper()
         print(f"=== 运行 {label}（{_label_of(label)}）===", flush=True)
         results.append(await run_one(label, case_list, judge, concurrency=args.concurrency))
+        # 每档一落盘：E1 跑完就写，不必等 E2。上次 E2 挂死把 E1 的有效结果
+        # 一起带走了，正是因为 save() 只在两档全跑完之后才调用 ——
+        # 65 分钟的 API 花费，磁盘上一个字节都没留下。
+        save(results, partial_name)
 
-    save(results, args.out or f"exp_E{'' if len(case_list) == 15 else f'_{len(case_list)}'}.json")
+    save(results, out_name)
     print_summary(results, f"实验 E：Chat 基座对比（冻结 temperature/tools/prompt/评测集，n={len(case_list)}）")
 
     print("--- 各档 Chat 基座 ---")

@@ -39,3 +39,6 @@ dist/
 # 临时截图（调试用，不进仓库）
 screenshot-github-login.png
 _git_*.png
+
+# 实验产物：可由 backend/scripts/exp_*.py 重新生成，含答案正文，体积大不入库
+backend/experiments/
