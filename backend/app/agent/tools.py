@@ -110,7 +110,11 @@ async def search_kb(args: dict, ctx: ToolContext) -> str:
     query = str(args.get("query", "")).strip()
     if not query:
         return "[错误] query 不能为空。"
-    top_k = min(int(args.get("top_k") or 5), 10)
+    s = ctx.settings
+    # top_k 的默认值取自 `.env`，不是写死的 5。
+    # 写死的话改 .env 完全不生效，而且**不报任何错** ——
+    # 恰好 .env 的默认值就是 5，测的时候根本看不出来（假绿）。
+    top_k = min(int(args.get("top_k") or s.retrieve_top_k), 10)
     game = str(args.get("game") or ctx.game)
     available = ctx.settings.games
     if game not in available:
@@ -119,7 +123,13 @@ async def search_kb(args: dict, ctx: ToolContext) -> str:
             f"{' / '.join(available.values())}。"
         )
 
-    cfg = RetrievalConfig(game=game, final_top_k=top_k)
+    # 从 .env 派生候选池与 rrf_k；显式的 final_top_k 压过 .env。
+    # 早先这里是 `RetrievalConfig(game=game, final_top_k=top_k)`，
+    # 其余字段全走 dataclass 默认值 —— 于是 RETRIEVE_CANDIDATE / RRF_K
+    # 在 Agent 这条路径上是**死的**，改 .env 检索照常跑、不报任何错。
+    # （`/api/retrieve` 早就改用 from_settings 了，所以 check_config_wiring.py
+    #  验不出来 —— 它只验 API 路径，正好漏掉这条。）
+    cfg = RetrievalConfig.from_settings(settings=s, game=game, final_top_k=top_k)
     t0 = time.perf_counter()
     try:
         hits = await ctx.retriever.retrieve(query, cfg)
