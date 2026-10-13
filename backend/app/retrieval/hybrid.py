@@ -11,8 +11,10 @@
 """
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import logging
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
@@ -177,6 +179,9 @@ class HybridRetriever:
         self.store = store or get_vector_store(self.s)
         self._bm25_cache: dict[tuple, BM25Index] = {}
         self._text_cache: dict[tuple, tuple] = {}
+        # 必须 RLock 而不是 Lock：_get_bm25 的慢路径会在持锁状态下调用
+        # _load_corpus（它自己也要取同一把锁），普通非重入锁在并发下必然死锁。
+        self._cache_lock = threading.RLock()
         # 这两个缓存都无上限：_cache_key 含 page_titles / min_revision_ts，
         # 理论上可以无限膨胀（一份全量语料 + 一个 BM25 索引 ≈ 几十 MB）。
         # 当前只有 sr / zzz 两个库、page_titles 实际不常用，所以够用。
@@ -200,41 +205,60 @@ class HybridRetriever:
         实验规模（万级 chunk）下一次性拉全量是可接受的；
         所以实验报告里注明「稀疏检索未做工程优化，
         目标是隔离检索策略本身的差异」。
+
+        注意这是同步阻塞调用（实测 sr 全量约 800ms），会占住一条线程；
+        请求路径必须经 `asyncio.to_thread` 进入，否则整个事件循环会被卡住。
         """
         key = self._cache_key(cfg)
-        if key in self._text_cache:
-            ids, corpus, meta = self._text_cache[key]
-            return ids, corpus, meta
+        with self._cache_lock:
+            cached = self._text_cache.get(key)
+        if cached is not None:
+            return cached
 
-        col = self.store.get_collection(cfg.game, cfg.embed_model, cfg.variant)
-        where = self.store.build_where(
-            game=cfg.game,
-            page_titles=cfg.page_titles,
-            min_revision_ts=cfg.min_revision_ts,
-        )
-        data = col.get(where=where, include=["documents", "metadatas"])
-        ids = list(data.get("ids") or [])
-        docs = list(data.get("documents") or [""] * len(ids))
-        metas = list(data.get("metadatas") or [{}] * len(ids))
-        mapping = {
-            cid: RetrievedChunk(chunk_id=cid, text=doc, score=1.0, metadata=dict(m or {}))
-            for cid, doc, m in zip(ids, docs, metas, strict=False)
-        }
-        self._text_cache[key] = (ids, docs, mapping)
-        # 淘汰必须放在这里而不是只在 _get_bm25 里：
-        # 关掉 BM25 的配置（A1/A2）只走 _load_corpus，
-        # 放错位置的话那条路径的语料副本永远不会被回收。
-        self._evict_locked()
-        return ids, docs, mapping
+        # 双检：并发首次加载时只有一个线程真的去拉全量，
+        # 其余线程在锁外等，避免把快路径也塞进临界区。
+        with self._cache_lock:
+            cached = self._text_cache.get(key)
+            if cached is not None:
+                return cached
+            col = self.store.get_collection(cfg.game, cfg.embed_model, cfg.variant)
+            where = self.store.build_where(
+                game=cfg.game,
+                page_titles=cfg.page_titles,
+                min_revision_ts=cfg.min_revision_ts,
+            )
+            data = col.get(where=where, include=["documents", "metadatas"])
+            ids = list(data.get("ids") or [])
+            docs = list(data.get("documents") or [""] * len(ids))
+            metas = list(data.get("metadatas") or [{}] * len(ids))
+            mapping = {
+                cid: RetrievedChunk(chunk_id=cid, text=doc, score=1.0, metadata=dict(m or {}))
+                for cid, doc, m in zip(ids, docs, metas, strict=False)
+            }
+            self._text_cache[key] = (ids, docs, mapping)
+            # 淘汰必须放在这里而不是只在 _get_bm25 里：
+            # 关掉 BM25 的配置（A1/A2）只走 _load_corpus，
+            # 放错位置的话那条路径的语料副本永远不会被回收。
+            self._evict_locked()
+            return ids, docs, mapping
 
     def _get_bm25(self, cfg: RetrievalConfig) -> BM25Index:
         key = self._cache_key(cfg)
-        if key not in self._bm25_cache:
-            ids, docs, _ = self._load_corpus(cfg)
-            self._bm25_cache[key] = BM25Index.build(ids, docs, tokenize)
+        with self._cache_lock:
+            idx = self._bm25_cache.get(key)
+        if idx is not None:
+            return idx
+
+        with self._cache_lock:
+            idx = self._bm25_cache.get(key)
+            if idx is not None:
+                return idx
+            ids, docs, _ = self._load_corpus(cfg)  # 同一把 RLock，重入安全
+            idx = BM25Index.build(ids, docs, tokenize)
+            self._bm25_cache[key] = idx
             self._evict_locked()
             logger.info("BM25 索引: %d chunks (game=%s)", len(ids), cfg.game)
-        return self._bm25_cache[key]
+            return idx
 
     def _evict_locked(self) -> None:
         """超量时丢最早建的索引。
@@ -254,23 +278,31 @@ class HybridRetriever:
             self._bm25_cache.pop(k, None)
 
     def invalidate(self) -> None:
-        self._bm25_cache.clear()
-        self._text_cache.clear()
+        with self._cache_lock:
+            self._bm25_cache.clear()
+            self._text_cache.clear()
 
     def stats(self) -> dict:
-        return {"bm25_cached": len(self._bm25_cache), "corpus_cached": len(self._text_cache)}
+        with self._cache_lock:
+            return {"bm25_cached": len(self._bm25_cache), "corpus_cached": len(self._text_cache)}
 
     # ---------------- 检索 ----------------
     async def retrieve(self, query: str, cfg: RetrievalConfig) -> list[RetrievalHit]:
         if not query.strip():
             return []
-        _, _, mapping = self._load_corpus(cfg)
+        # 全量语料扫描（~800ms）和 BM25 建索引（~1.9s）都是同步阻塞调用。
+        # 直接在协程里调会把事件循环整个卡住 —— 这期间所有并发的
+        # /api/chat、/api/retrieve 都在排队，连健康检查都答不了。
+        # 所以丢进线程池；缓存加了锁之后线程之间不会重复建索引。
+        _, _, mapping = await asyncio.to_thread(self._load_corpus, cfg)
         if not mapping:
             return []
 
         bm25_hits: list[tuple[str, float, int]] = []
         if cfg.use_bm25:
-            bm25_hits = self._get_bm25(cfg).search(tokenize(query), cfg.bm25_top)
+            bm25_hits = (await asyncio.to_thread(self._get_bm25, cfg)).search(
+                tokenize(query), cfg.bm25_top
+            )
 
         vec_hits: list[RetrievedChunk] = []
         if cfg.use_vector:
