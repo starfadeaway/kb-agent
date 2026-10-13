@@ -35,6 +35,7 @@ from app.agent.tools import (
 )
 from app.core.config import Settings, get_settings
 from app.llm.client import LLMClient, get_llm
+from app.security.guard import INSTRUCTION_NOTICE, scan_and_wrap
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,9 @@ SYSTEM_PROMPT = """你是一个游戏知识库助手，知识库覆盖这些游�
 约束：
 - 知识库之外的最新版本改动、B站攻略作者观点，一律说明"知识库未收录"。
 - 各游戏术语不要混用：{terms}
-- 最后用中文回答，简洁分点。"""
+- 最后用中文回答，简洁分点。
+
+{security}"""
 
 
 def build_system_prompt(covered: dict[str, str], terms: dict[str, str]) -> str:
@@ -62,6 +65,7 @@ def build_system_prompt(covered: dict[str, str], terms: dict[str, str]) -> str:
     return SYSTEM_PROMPT.format(
         covered="、".join(covered.values()) or "（未配置任何游戏）",
         terms="；".join(terms.values()) or "按各游戏官方叫法",
+        security=INSTRUCTION_NOTICE,
     )
 
 FINALIZE_PROMPT = """已达安全阀上限。请停止调用工具，基于已经拿到的信息给出最终回答；
@@ -213,6 +217,41 @@ class AgentState:
     #: 单独存一份而不是塞进 stop_reason，是为了让评测能把"越界拒答"
     #: 和"检索不到"统计成两件不同的事 —— 前者是正确行为，后者是缺陷。
     uncovered_game: str | None = None
+    #: 本次运行里从工具结果中检出的疑似注入，[(tool_name, ScanResult), ...]。
+    #: 只留摘要不进答案、不进引用 —— 检测结果既不是知识库内容也不是用户诉求，
+    #: 把它当答案的一部分复述出去，等于二次执行攻击。
+    injections: list[tuple[str, object]] = field(default_factory=list)
+
+    def note_injection(self, tool_name: str, result) -> None:
+        """记账只记真命中。
+
+        防御性判断放在方法内部而不是只靠调用方：
+        一个"没有命中也记账"的接口，会让 suspect_tools 这个数
+        变成"扫过多少次"而不是"命中多少次"，指标当场失去意义。
+        """
+        if not result.suspect:
+            return
+        self.injections.append((tool_name, result))
+        logger.warning(
+            "工具结果命中注入规则 tool=%s severity=%s rules=%s",
+            tool_name, result.severity, result.summary()["rules"],
+        )
+
+    def injection_summary(self) -> dict:
+        """给 `/api/chat` 响应与评测产物用的计数视图。"""
+        if not self.injections:
+            return {"suspect_tools": 0, "severity": "none", "rules": []}
+        rules: set[str] = set()
+        worst = "warn"
+        for _name, res in self.injections:
+            rules.update(res.summary()["rules"])
+            if res.severity == "block":
+                worst = "block"
+        return {
+            "suspect_tools": len(self.injections),
+            "severity": worst,
+            "rules": sorted(rules),
+        }
 
     def tool_call_count(self) -> int:
         return len(self.steps)
@@ -484,9 +523,28 @@ class ReActAgent:
         state.steps.append(rec)
         return text, rec
 
-    def _tool_result_message(self, call: dict, text: str) -> dict:
-        """工具结果消息。tool_call_id 必须与 assistant 里的 id 一致，否则消息链断掉。"""
-        return {"role": "tool", "tool_call_id": call["id"], "name": call["name"], "content": text}
+    def _tool_result_message(self, call: dict, text: str, state: AgentState) -> dict:
+        """工具结果消息。tool_call_id 必须与 assistant 里的 id 一致，否则消息链断掉。
+
+        这里同时是**间接 Prompt 注入的唯一入口**：search_kb / get_page 的返回
+        是外部正文（wiki 页面），一旦某页被投毒，它的祈使句会带着指令语法进上下文。
+        所以工具结果一律经 `scan_and_wrap`：扫描留痕 + 包进 `<retrieved_data>` 数据区，
+        系统提示里已声明该区内是数据、不得执行。
+
+        注意是**包裹**不是删除：命中就丢掉内容，等于亲手造出
+        「检索到了却不给看」那种假阴性（见 docs/injection_guard.md）。
+
+        `state` 必须显式传进来 —— `self.last_state` 在这一步还指着上一次运行，
+        用它记账会把本次的命中记到上一个 run_id 上。
+        """
+        content, result = scan_and_wrap(call["name"], text)
+        state.note_injection(call["name"], result)
+        return {
+            "role": "tool",
+            "tool_call_id": call["id"],
+            "name": call["name"],
+            "content": content,
+        }
 
     # ------------------------------------------------------------------ #
     async def _run_once(
@@ -550,7 +608,7 @@ class ReActAgent:
             #    检索不到和报错的处理路径不一样，直接抛异常中断会丢掉模型自我调整的机会。
             for call in out["tool_calls"]:
                 text, _ = await self._exec_call(call, context, guard, state)
-                messages.append(self._tool_result_message(call, text))
+                messages.append(self._tool_result_message(call, text, state))
 
         # 只有走到安全阀才会到这里
         state.messages = messages
@@ -621,7 +679,7 @@ class ReActAgent:
                         "event": "tool_end",
                         "data": {"name": call["name"], "ok": rec.ok, "ms": rec.latency_ms, "chars": rec.result_chars},
                     }
-                    messages.append(self._tool_result_message(call, text))
+                    messages.append(self._tool_result_message(call, text, state))
         except Exception as exc:  # noqa: BLE001
             logger.exception("流式运行失败")
             yield {"event": "error", "data": {"message": f"{type(exc).__name__}: {exc}"}}
@@ -640,6 +698,7 @@ class ReActAgent:
                     "stop_reason": state.stop_reason,
                     "elapsed_ms": state.elapsed_ms,
                     "guard": state.guard_stats(),
+                    "injection": state.injection_summary(),
                     "prompt_tokens": state.prompt_tokens,
                     "completion_tokens": state.completion_tokens,
                     "refs": state.refs,

@@ -312,6 +312,7 @@ async def chat(req: ChatRequest) -> dict:
         "elapsed_ms": state.elapsed_ms,
         "usage": {"prompt": state.prompt_tokens, "completion": state.completion_tokens},
         "guard": state.guard_stats(),
+        "injection": state.injection_summary(),
         "refs": state.refs,
         "trace": [
             {"step": s.step, "tool": s.tool_name, "args": s.args, "ok": s.ok, "ms": s.latency_ms}
