@@ -28,37 +28,49 @@ if str(BACKEND) not in sys.path:
 
 from app.ingest import delta_sync as ds  # noqa: E402
 from app.ingest.fingerprint import page_hash  # noqa: E402
-from app.ingest.wiki_client import PageContent  # noqa: E402
+from app.ingest.wiki_client import PageContent, WAFBlocked  # noqa: E402
 
 SINCE = datetime(2026, 10, 6, tzinfo=UTC)
 
 
 class FakeWiki:
-    """记录每一次调用，用来断言"哪些级别被触发了"。"""
+    """记录每一次调用，用来断言"哪些级别被触发了"。
 
-    def __init__(self, changes, metas, pages, *, cursor=None, second_empty=True):
+    `fail_at` 模拟 WAF 在某一级的第 N 次请求抛异常 —— 实测撞过：
+    翻页第 6 页吃满 4 次退避后抛 WAFBlocked，前面积累的 2500 条记录全丢。
+    """
+
+    def __init__(self, changes, metas, pages, *, cursor=None, fail_at=None):
         self._changes = changes
         self._metas = metas
         self._pages = pages
         self._cursor = cursor
-        self._second_empty = second_empty
+        self._fail_at = fail_at
         self.calls: list[str] = []
+
+    def _maybe_fail(self, stage: str) -> None:
+        if self._fail_at == stage:
+            raise WAFBlocked(f"假 WAF：{stage}")
 
     async def recent_changes(self, since, **kw):
         self.calls.append("L1")
+        self._maybe_fail("L1")
         return self._changes, self._cursor
 
     async def recent_changes_page(self, since, cursor, **kw):
         self.calls.append("L1+")
+        self._maybe_fail("L1+")
         # 翻页时继续给数据、游标保持非空 —— 用来模拟"窗口还有更多页"
         return (self._changes, self._cursor)
 
     async def fetch_page_meta(self, titles, batch=20):
         self.calls.append(f"L2:{len(titles)}")
+        self._maybe_fail("L2")
         return [self._metas[t] for t in titles if t in self._metas]
 
     async def fetch_pages(self, titles, batch=10):
         self.calls.append(f"L3:{','.join(titles)}")
+        self._maybe_fail("L3")
         return [self._pages[t] for t in titles if t in self._pages]
 
     async def aclose(self):
@@ -254,3 +266,69 @@ async def test_request_counts_are_reported(monkeypatch):
     assert d["requests"]["level3_content"] == 1
     assert d["changed_count"] == 1
     assert d["revision_only_count"] == 0
+
+
+# --------------------------------------------------------------------------
+# WAF 中断：已读到的数据不能跟着一起丢
+# --------------------------------------------------------------------------
+# 这组守卫来自一次真实事故：翻页第 6 页吃满 4 次退避后抛 WAFBlocked，
+# 前面 5 页共 2500 条变更记录全部作废，整轮检测白跑。
+# 「基础设施失败不该带走有效结果」在这份评测报告里写过好几遍，
+# 这次轮到增量检测自己犯 —— 所以必须用测试钉住。
+
+@pytest.mark.asyncio
+async def test_waf_on_first_page_does_not_crash(monkeypatch):
+    _local(monkeypatch, {"三月七": {"page_id": 1, "content_hash": "h",
+                                   "revision_ts": "2026-10-01T00:00:00Z"}})
+    wiki = FakeWiki(changes=[], metas={}, pages={}, fail_at="L1")
+    rep = await ds.detect_changes("sr", SINCE, wiki=wiki)   # 不抛异常即为通过
+    assert rep.waf_hits >= 1
+
+
+@pytest.mark.asyncio
+async def test_waf_on_paging_keeps_already_read_pages(monkeypatch):
+    """翻页被拦时，第一页读到的变更页必须保留，并自报是下界。"""
+    local = {f"P{i}": {"page_id": i, "content_hash": "h", "revision_ts": "t"}
+             for i in range(3)}
+    _local(monkeypatch, local)
+    wiki = FakeWiki(
+        changes=[{"title": "P0"}, {"title": "P1"}, {"title": "P2"}],
+        metas={}, pages={},
+        cursor="more", fail_at="L1+",
+    )
+    rep = await ds.detect_changes("sr", SINCE, wiki=wiki)
+
+    assert rep.unique_changed_site == 3, "翻页被拦把已读到的页弄丢了"
+    assert rep.intersect == 3
+    assert rep.window_exhausted is False, "中断被当成了「窗口已翻完」"
+    assert rep.as_dict()["lower_bound"] is True
+
+
+@pytest.mark.asyncio
+async def test_waf_on_level2_keeps_level1_result(monkeypatch):
+    """第 2 级被拦不该让第 1 级的交集结果消失。"""
+    _local(monkeypatch, {"三月七": {"page_id": 1, "content_hash": "h",
+                                   "revision_ts": "2026-10-01T00:00:00Z"}})
+    wiki = FakeWiki(changes=[{"title": "三月七"}], metas={}, pages={}, fail_at="L2")
+    rep = await ds.detect_changes("sr", SINCE, wiki=wiki)
+
+    assert rep.intersect == 1, "第 2 级失败把第 1 级的结果也带走了"
+    assert rep.changed == []          # 无法判定内容变没变 -> 不得谎报"没变"
+
+
+@pytest.mark.asyncio
+async def test_waf_on_level3_does_not_lose_level12(monkeypatch):
+    """第 3 级被拦：第 1/2 级的结果仍在，只是无法判定正文指纹。"""
+    local = {"三月七": {"page_id": 1, "content_hash": "oldhash",
+                        "revision_ts": "2026-10-01T00:00:00Z"}}
+    _local(monkeypatch, local)
+    wiki = FakeWiki(
+        changes=[{"title": "三月七"}],
+        metas={"三月七": _meta("三月七", "2026-10-12T00:00:00Z")},
+        pages={}, fail_at="L3",
+    )
+    rep = await ds.detect_changes("sr", SINCE, wiki=wiki)
+
+    assert rep.intersect == 1
+    assert rep.changed == [], "取不到正文时不得凭空报出变更页"
+    assert rep.waf_hits >= 1

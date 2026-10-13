@@ -33,19 +33,26 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 
 from sqlalchemy import select
 
 from app.core.config import Settings, get_settings
 from app.ingest.fingerprint import is_stale, page_hash
-from app.ingest.wiki_client import PageContent, WikiClient
+from app.ingest.wiki_client import PageContent, WAFBlocked, WikiClient
 from app.store.db import init_db, session_scope
 from app.store.models import Page
 
 logger = logging.getLogger(__name__)
+
+# 翻页中断的哨兵：**不是** None。
+# None 在这个循环里表示「窗口已翻完」，用它表示中断会把一次失败的检测
+# 报成一次完整扫描 —— 那比报错更危险。
+_INTERRUPTED = "__waf_interrupted__"
 
 
 @dataclass
@@ -147,10 +154,25 @@ async def detect_changes(
         titles: set[str] = set()
         for _ in range(max_level1_pages):
             if first_page:
-                rows, cursor = await client.recent_changes(since)
                 first_page = False
-            elif cursor:
-                rows, cursor = await client.recent_changes_page(since, cursor)
+                try:
+                    rows, cursor = await client.recent_changes(since)
+                except WAFBlocked as exc:
+                    # 已翻到的页要留下，不能因为后面被拦就整堆丢掉 ——
+                    # 实测撞过：翻页第 6 页吃满 4 次退避后抛异常，
+                    # 前面 2500 条已读到的变更记录全部作废。
+                    logger.warning("第 1 级中断（WAF）：%s", exc)
+                    rep.waf_hits += 1
+                    cursor = _INTERRUPTED
+                    break
+            elif cursor and cursor != _INTERRUPTED:
+                try:
+                    rows, cursor = await client.recent_changes_page(since, cursor)
+                except WAFBlocked as exc:
+                    logger.warning("第 1 级翻页中断（WAF）：%s", exc)
+                    rep.waf_hits += 1
+                    cursor = _INTERRUPTED
+                    break
             else:
                 cursor = None      # 没有续页游标 = 窗口已翻完
                 break
@@ -174,7 +196,12 @@ async def detect_changes(
             return rep
 
         # ---- 第 2 级：批量查 revision，不取正文 ----
-        metas = await client.fetch_page_meta(hit, batch=20)
+        try:
+            metas = await client.fetch_page_meta(hit, batch=20)
+        except WAFBlocked as exc:
+            logger.warning("第 2 级中断（WAF），本轮只能报第 1 级的结果：%s", exc)
+            rep.waf_hits += 1
+            metas = []
         rep.requests_level2 += max(1, -(-len(hit) // 20))
 
         suspects: list[tuple[str, PageContent]] = []
@@ -191,7 +218,13 @@ async def detect_changes(
         suspects = suspects[:max_level3_pages]
         fetched: list[PageContent] = []
         if suspects:
-            fetched = await client.fetch_pages([t for t, _ in suspects], batch=10)
+            try:
+                fetched = await client.fetch_pages([t for t, _ in suspects], batch=10)
+            except WAFBlocked as exc:
+                # 同样的道理：第 3 级被拦不该让第 1/2 级的结果一起消失。
+                # 取到一半也保留 —— fetch_pages 是按批次的，已成功的批次有效。
+                logger.warning("第 3 级中断（WAF），只报告取到正文的那些页：%s", exc)
+                rep.waf_hits += 1
             rep.requests_level3 += max(1, -(-len(suspects) // 10))
 
         for m in fetched:
@@ -237,6 +270,12 @@ async def main(game: str, days: int) -> int:
         print("  ⚠️ 窗口未翻完，以上均为**下界**")
     for c in d["changed"][:10]:
         print(f"    {c['title'][:28]}  {c['old_hash']} -> {c['new_hash']}")
+
+    # 产物必须落盘：这些数字要写进文档与简历，只留在终端输出里等于无法追溯。
+    out = Path(__file__).resolve().parents[2] / "data" / "eval" / f"delta_sync_{game}_{days}d.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n产物已写 {out.name}")
     return 0
 
 

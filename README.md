@@ -450,7 +450,7 @@ cd kb-agent\backend
 | 并发 | 实测 1/4/8 并发：4 并发吞吐 3.40x，8 并发 5.18x；同 query 各并发度下 top5 完全一致。冷缓存并发从"8 次重复建索引"降到 1 次（`docs/concurrency.md`） |
 | 安全 | 间接 Prompt 注入：11 条规则分两级，10843 chunk 真实语料误报 **0**、攻击样本召回 **13/13**；工具结果一律包进不受信任数据区（`docs/injection_guard.md`） |
 | 可用性 | Chat 降级链：只对 429/5xx/超时降级，400/401 不重试；降级在响应 `fallback` 字段与 `/api/health` 留痕（`docs/fallback_chain.md`） |
-| 数据时效 | 版本更新：实测 wiki `recentchanges` 可穿过 WAF；近 7 天变更页 ∩ 已收录 = **148/707 页（20.9%）**，增量省 79% embedding。⚠️ 全站口径 1157 页会得出"增量无意义"的**相反结论**。内容指纹已落库（1401 页 + 10843 chunk 100% 覆盖），归一化把格式误判从 **100% 压到 0**（`docs/delta_sync.md`） |
+| 数据时效 | 版本更新：实测 wiki `recentchanges` 可穿过 WAF；近 7 天变更页 ∩ 已收录 = **162/706 页（23.0%）**，检测只花 **15 次请求**（全量重抓要 71 次）。⚠️ 全站口径 1157 页会得出"增量无意义"的**相反结论**。内容指纹已落库（1401 页 + 10843 chunk 100% 覆盖），归一化把格式误判从 **100% 压到 0**（`docs/delta_sync.md`） |
 | Agent | 手搓 ReAct，4 工具 + 4 道安全阀 + 熔断；不可答问题从 7 步/30317 token 降到 4 步/6514 token |
 | 多库路由 | 三态（库内/越界/未提及）；越界走无工具单轮，实测 0 步 / 1.1s，库内 3–5 步 / 5–8s |
 | 后端 | FastAPI，`/api/health` `/api/retrieve` `/api/chat` `/api/chat/stream` `/api/runs` `/api/ingest` `/api/stats` |
