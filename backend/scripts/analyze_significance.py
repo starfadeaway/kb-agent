@@ -15,7 +15,14 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from exp_common import EVAL_DIR, aggregate_rows, paired_scores, print_category_matrix
+from exp_common import (
+    EVAL_DIR,
+    aggregate_rows,
+    is_kept,
+    judge_failed,
+    paired_scores,
+    print_category_matrix,
+)
 
 
 def load(name: str) -> list[dict]:
@@ -36,6 +43,9 @@ def is_infra_failure(row: dict) -> bool:
     判据用 `prompt_tokens == 0`：模型根本没被调用成功过，
     不可能有真实 token 消耗。这是能被客观验证的，不靠看答案文本猜。
     """
+    # ⚠️ 本函数只管模型侧。Judge 侧失败由 exp_common.is_kept 统一处理，
+    # 这里不重复实现 —— 早先两件事混在同一个谓词里，导致同一个脚本里
+    # 配对检验剔了 Judge 失败、均值却没剔，同一份 exp_C.json 打出两个均值。
     return (row.get("prompt_tokens") or 0) == 0 and (row.get("completion_tokens") or 0) == 0
 
 
@@ -49,25 +59,34 @@ def main() -> None:
         labels = [d["label"] for d in data]
         pairs = [(labels[i], labels[i + 1]) for i in range(len(labels) - 1)]
 
-    # ---- 先报基础设施失败，避免把基础设施问题当成模型能力差 ----
+    # ---- 先报两类失败，避免把链路问题当成模型能力差 ----
     infra = {lab: [r["case_id"] for r in by_label[lab]["rows"] if is_infra_failure(r)]
              for lab in by_label}
-    if any(infra.values()):
+    judge_broken = {lab: [r["case_id"] for r in by_label[lab]["rows"] if judge_failed(r)]
+                    for lab in by_label}
+    if any(infra.values()) or any(judge_broken.values()):
         print("=" * 78)
-        print("  ⚠️ 基础设施失败（已从下方均值与检验中剔除）")
+        print("  ⚠️ 链路失败（已从下方均值与检验中剔除）")
         print("=" * 78)
         for lab, ids in infra.items():
             if ids:
-                print(f"  {lab}: {', '.join(ids)}  —— 模型调用未成功，与答得好不好无关")
+                print(f"  {lab} [模型侧]: {', '.join(ids)}  —— 模型调用未成功，与答得好不好无关")
+        for lab, ids in judge_broken.items():
+            if ids:
+                print(f"  {lab} [Judge 侧]: {', '.join(ids)}  —— 评分链路失败，不代表答错")
 
+    # 统一走 exp_common.is_kept（Agent 侧 + Judge 侧）。
+    # 早先这里只用 is_infra_failure 过滤，于是 paired_scores 内部又按 is_kept
+    # 剔了一遍（配对 n 正确），但均值与题型矩阵拿的是未剔干净的 rows ——
+    # 同一份 exp_C.json 因此打出两个 judge 均值：4.77（这里）与 4.13。
     clean = {
-        lab: {**d, "rows": [r for r in d["rows"] if not is_infra_failure(r)]}
+        lab: {**d, "rows": [r for r in d["rows"] if is_kept(r)]}
         for lab, d in by_label.items()
     }
     clean_by_label = {lab: d for lab, d in clean.items()}
 
     print("\n" + "=" * 78)
-    print(f"  配对检验 · {name}（剔除基础设施失败后）")
+    print(f"  配对检验 · {name}（剔除链路失败后）")
     print("=" * 78)
     for a, b in pairs:
         t = paired_scores([clean_by_label[a], clean_by_label[b]])
@@ -89,27 +108,24 @@ def main() -> None:
                 print(f"    {a} → {b}   Δ={t['mean_diff']:+.4f}  p={t['p']:.4f}  n={t['n']}")
 
     print("\n" + "=" * 78)
-    print("  各档均值（已剔除基础设施失败）")
+    print("  各档均值（已剔除链路失败）")
     print("=" * 78)
-    # 均值改走 exp_common.aggregate_rows —— 以前这里是手写的 4 行 sum/len，
-    # 和 aggregate_rows 的"只统计未报错 case"口径是两份独立实现。
-    # 两份实现一旦漂移，同一份 exp_C.json 会算出两个 judge 均值，
-    # 而且没人会发现 —— 这个数字是要写进简历的。
+    # 均值走 exp_common.aggregate_rows，且**不再传 exclude** ——
+    # rows 在上面已按 is_kept 过滤过，再传一个只认模型侧的谓词等于又加了一层
+    # 与配对检验不一致的过滤（这正是 4.77 vs 4.13 的来源）。
     for lab, d in clean_by_label.items():
         rows = d["rows"]
         if not rows:
             continue
-        a = aggregate_rows(rows, exclude=lambda r: not is_infra_failure(r))
+        a = aggregate_rows(rows)
         print(f"  {lab:<4} judge={a['judge_score']:.2f}  n={a['n_ok']}  步数={a['avg_steps']:.1f}  "
               f"prompt tok={a['avg_prompt_tokens']}  延迟={a['avg_latency_ms']}ms")
 
     print("\n" + "=" * 78)
     print("  按题型")
     print("=" * 78)
-    # 按题型矩阵同样改调 exp_common 里的实现（列宽 10 是这里的历史版式）
-    print_category_matrix(
-        list(clean_by_label.values()), exclude=lambda r: not is_infra_failure(r), width=10
-    )
+    # 按题型矩阵同样走 exp_common 里的实现，且同样不传 exclude（口径与均值一致）
+    print_category_matrix(list(clean_by_label.values()), width=10)
 
 
 if __name__ == "__main__":
