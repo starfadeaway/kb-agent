@@ -276,18 +276,28 @@ def test_pre_change_snapshot_lacks_multigame_support():
     在旧代码上会红。如果旧代码也能通过，说明这些断言测的是
     「本来就有」的东西，对本次改动没有约束力。
 
-    用 git worktree 取 HEAD 版本，不改动当前工作区。
+    用 git worktree 取**改造前的固定 commit**，不改动当前工作区。
+
+    为什么锁 commit 而不是 HEAD ——
+    这条守卫第一次跑的时候，多库改造还没提交，HEAD 就是「修复前」；
+    改造一提交，HEAD 变成了「修复后」，断言立刻反过来失败
+    （`assert "by_game" not in old_src` 报「HEAD 版已含 by_game」）。
+    双向验证的快照必须是**一个不会随提交移动的锚点**，否则它自己就会失效。
+    浅克隆或 gc 掉该 commit 时会 skip，而不是误报失败。
     """
     import shutil
     import subprocess
     import tempfile
 
+    # 改造前最后一个不含多库能力的提交（死代码清理那笔）。
+    BEFORE_REF = "17f285f"
+
     # parents: [0]=tests, [1]=backend, [2]=仓库根
     root = Path(__file__).resolve().parents[2]
     with tempfile.TemporaryDirectory() as td:
-        wt = Path(td) / "head_copy"
+        wt = Path(td) / "pre_change_copy"
         r = subprocess.run(
-            ["git", "worktree", "add", "--detach", str(wt), "HEAD"],
+            ["git", "worktree", "add", "--detach", str(wt), BEFORE_REF],
             cwd=str(root), capture_output=True, timeout=180,
             # 显式指定 utf-8：Windows 上 text=True 会用 GBK 解码 git 的输出，
             # 遇到中文路径（这个仓库路径里就有中文）直接抛 UnicodeDecodeError，
@@ -296,15 +306,15 @@ def test_pre_change_snapshot_lacks_multigame_support():
         )
         if r.returncode != 0:
             err = (r.stderr or b"").decode("utf-8", "replace") if isinstance(r.stderr, bytes) else r.stderr
-            pytest.skip(f"无法创建 HEAD worktree（{str(err).strip()[:120]}）")
+            pytest.skip(f"无法检出改造前的提交 {BEFORE_REF}（{str(err).strip()[:120]}）")
         try:
             old = wt / "backend" / "scripts" / "run_eval.py"
-            assert old.is_file(), f"HEAD 里找不到 {old}"
+            assert old.is_file(), f"{BEFORE_REF} 里找不到 {old}"
             old_src = old.read_text(encoding="utf-8")
 
             # 旧版没有 by_game / no_gold_pages / 多库文件名
-            assert "by_game" not in old_src, "HEAD 版已含 by_game，双向验证前提不成立"
-            assert "no_gold_pages" not in old_src, "HEAD 版已含 no_gold_pages，前提不成立"
+            assert "by_game" not in old_src, f"{BEFORE_REF} 已含 by_game，双向验证前提不成立"
+            assert "no_gold_pages" not in old_src, f"{BEFORE_REF} 已含 no_gold_pages，前提不成立"
 
             # 旧版 run_one 的签名只有单个 game，且返回结构里没有 by_game
             tree = ast.parse(old_src)
@@ -314,8 +324,8 @@ def test_pre_change_snapshot_lacks_multigame_support():
             for n in ast.walk(run_one):
                 if (isinstance(n, ast.Return) and isinstance(n.value, ast.Dict)):
                     ret_keys |= {k.value for k in n.value.keys if isinstance(k, ast.Constant)}
-            assert "by_game" not in ret_keys, "HEAD 版 run_one 已返回 by_game"
-            assert "games" not in ret_keys, "HEAD 版 run_one 已返回 games"
+            assert "by_game" not in ret_keys, f"{BEFORE_REF} 的 run_one 已返回 by_game"
+            assert "games" not in ret_keys, f"{BEFORE_REF} 的 run_one 已返回 games"
 
             # 实跑一次旧版，确认它确实做不到多库（返回结构里没有分库聚合）
             spec = importlib.util.spec_from_file_location("run_eval_old", old)
@@ -334,9 +344,9 @@ def test_pre_change_snapshot_lacks_multigame_support():
                 label="A0", game="all", top_k=3, variant="base",
                 embed_model=None, rerank_candidates=0, retriever=_Good(),
             ))
-            assert "by_game" not in res, "旧版居然支持了 by_game，需要重新评估守卫"
+            assert "by_game" not in res, f"{BEFORE_REF} 居然支持了 by_game，需要重新评估守卫"
             # 旧版拿 "all" 当库名去 cases_for("all")，一条题都跑不到
-            assert res["rows"] == [], "旧版对 game=all 的行为与预期不符，需复核"
+            assert res["rows"] == [], f"{BEFORE_REF} 对 game=all 的行为与预期不符，需复核"
         finally:
             shutil.rmtree(td, ignore_errors=True)
             subprocess.run(["git", "worktree", "remove", "--force", str(wt)],

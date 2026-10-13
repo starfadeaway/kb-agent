@@ -2,6 +2,7 @@
   "_meta": {
     "script": "analyze_model_compare.py",
     "note": "跨模型配对检验：同一批 case，只变 embedding 模型",
+    "game": "sr",
     "bge_file": "exp_D_BAAI_bge-m3_sr_k3.json",
     "other_file": "exp_D_Qwen_Qwen3-Embedding-0.6B_sr_k3.json",
     "labels": [
@@ -9,7 +10,8 @@
       "A1",
       "A2"
     ],
-    "a0_identical": true
+    "a0_identical": true,
+    "a0_diff_case_ids": []
   },
   "A0": {
     "n_common": 29,

@@ -33,10 +33,6 @@ from app.eval.metrics import paired_test  # noqa: E402
 
 EVAL_DIR = ROOT / "data" / "eval"
 
-# (文件, 该文件代表哪个 embedding 模型)
-BGE_FILE = EVAL_DIR / "exp_A.json"
-QWEN_GLOB = "exp_D_Qwen_Qwen3-Embedding-0.6B_sr_k3.json"
-
 METRICS = [
     ("mrr", "MRR"),
     ("ndcg", "NDCG"),
@@ -81,27 +77,38 @@ def _mean(rows: list[dict], key: str) -> float:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--bge", default=str(BGE_FILE))
-    ap.add_argument("--other", default=str(EVAL_DIR / QWEN_GLOB))
+    ap.add_argument("--game", default="sr",
+                    help="目标库。产物文件名里带库名，三库必须分别跑 —— "
+                         "混着跑等于拿不同批次的均值相减")
+    ap.add_argument("--bge", default=None)
+    ap.add_argument("--other", default=None)
     ap.add_argument("--labels", default="A0,A1,A2",
                     help="A3 只有 bge 有（重排后 embedding 影响被掩盖），默认不参与")
-    ap.add_argument("--out", default="model_compare.json")
+    ap.add_argument("--out", default=None,
+                    help="相对 data/eval/；默认按库命名，不覆盖别的库的结果")
     args = ap.parse_args()
 
-    bge = _load(Path(args.bge))
-    other = _load(Path(args.other))
+    game = args.game
+    bge_path = Path(args.bge) if args.bge else EVAL_DIR / f"exp_D_BAAI_bge-m3_{game}_k3.json"
+    other_path = Path(args.other) if args.other else (
+        EVAL_DIR / f"exp_D_Qwen_Qwen3-Embedding-0.6B_{game}_k3.json")
+
+    bge = _load(bge_path)
+    other = _load(other_path)
 
     labels = [x.strip().upper() for x in args.labels.split(",") if x.strip()]
+    out_name = args.out or f"model_compare_{game}.json"
     report: dict = {"_meta": {
         "script": "analyze_model_compare.py",
         "note": "跨模型配对检验：同一批 case，只变 embedding 模型",
-        "bge_file": Path(args.bge).name,
-        "other_file": Path(args.other).name,
+        "game": game,
+        "bge_file": bge_path.name,
+        "other_file": other_path.name,
         "labels": labels,
     }}
 
     print("=" * 100)
-    print("  跨模型配对检验：bge-m3  vs  Qwen3-Embedding-0.6B")
+    print(f"  跨模型配对检验（{game}）：bge-m3  vs  Qwen3-Embedding-0.6B")
     print("  唯一变量 = embedding 模型；语料/分块/BM25/RRF/rerank/top_k/评测集全部冻结")
     print("=" * 100)
     print(f"{'档位':<6}{'指标':<12}{'bge':>10}{'Qwen':>10}{'Δ(bge-Qwen)':>14}"
@@ -164,19 +171,36 @@ def main() -> None:
         print()
 
     # A0 阴性对照专项：理论上应当逐位相同
+    a0_ok: bool | None = None
     if "A0" in labels and "A0" in bge and "A0" in other:
-        same = all(
-            {r["case_id"]: r["mrr"] for r in bge["A0"]}[c]
-            == {r["case_id"]: r["mrr"] for r in other["A0"]}[c]
-            for c in sorted({r["case_id"] for r in bge["A0"]}
-                            & {r["case_id"] for r in other["A0"]})
-        )
-        print(f"阴性对照 A0（纯 BM25，不用向量）逐位相同: {same}")
-        report["_meta"]["a0_identical"] = bool(same)
-        if same:
+        a0b = {r["case_id"]: r["mrr"] for r in bge["A0"]}
+        a0o = {r["case_id"]: r["mrr"] for r in other["A0"]}
+        shared = sorted(set(a0b) & set(a0o))
+        diff = [c for c in shared if a0b[c] != a0o[c]]
+        a0_ok = not diff
+        report["_meta"]["a0_identical"] = a0_ok
+        report["_meta"]["a0_diff_case_ids"] = diff
+        if a0_ok:
+            print(f"阴性对照 A0（纯 BM25，不用向量）逐位相同: True"
+                  f"（{len(shared)} 条全同）")
             print("  → 其余档位的差异确实来自 embedding 模型，没有第二个隐藏变量。\n")
+        else:
+            # 这里必须显式失败，不能只打一行。
+            #
+            # A0 是纯 BM25，两侧**根本没用向量**，逐位相同是「除了 embedding
+            # 以外没有第二个变量在动」的唯一自证。一旦它不相等，说明语料版本、
+            # BM25 参数、top_k、评测集样本这些里有东西没冻住 ——
+            # 此时 A1/A2 那些 p 值全都不能当作「embedding 模型造成的差异」来读，
+            # 但表格照样会把它们打出来，看起来和正常结果一模一样。
+            #
+            # 2026-10-13 实测踩到：三库版跑完后默认拿 sr 的老产物去比，
+            # A0 对不上却仍打出了「bge 显著更优 p=0.0142」。
+            print(f"❌ 阴性对照 A0 不成立：{len(diff)}/{len(shared)} 条逐位不同 → {diff[:10]}")
+            print("   纯 BM25 两侧不该有任何差异，这说明**还有第二个隐藏变量没冻住**")
+            print("   （常见原因：两侧产物不是同一次语料版本 / 不是同一个 top_k / 评测集样本集不同）。")
+            print("   在查清之前，上表 A1/A2 的 p 值**不能**读作 embedding 模型造成的差异。\n")
 
-    out = EVAL_DIR / args.out
+    out = EVAL_DIR / out_name
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"结果已写入 {out}")
 

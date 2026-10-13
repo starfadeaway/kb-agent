@@ -457,8 +457,9 @@ cd kb-agent\backend
 | 前端 | React + Vite + TS，SSE 流式、工具时间线、引用、检索调试面板、双主题、背景图、移动端抽屉 |
 | 存储 | MySQL 语料三表与向量库**逐条一致**（`backfill_mysql.py` 剪枝后核对）：pages 1401（sr 706 / zzz 260 / ys 435）/ chunks 10843（3932 / 1498 / 5413）/ facts 25111（15017 / 4976 / 5118）。唯一差异是 ys 的「角色投稿测试（先说对不起）」正文长度为 0，被 `page_filter` 挡在索引外但 MySQL 记了"抓到了"；另有 runs / tool_calls / eval_cases / eval_results / sessions / messages |
 | 评测 | 评测集 **56 条三库全覆盖**（星铁 32 / 绝区零 12 / 原神 12）；实验 A/B/C/D/E 均已出真实数据 |
+| 检索实验覆盖 | **A / B / D 均已扩到三库**（sr 29 / ys 9 / zzz 10 = 48 条有 gold 的题），汇总按库分节、逐库配对检验，不混口径 |
 | 已知偏差 | `eval_cases` 表仍是 32 条，评测集已扩到 56 条，重跑一次评测即可同步 |
-| 工程 | pytest **73 项**全绿 + smoke 自检 41 项；ruff 全清；GitHub Actions 跑 pytest + ruff + 前端构建 + 密钥卫生 |
+| 工程 | pytest **444 项**全绿 + smoke 自检 41 项；ruff 全清；GitHub Actions 跑 pytest + ruff + 前端构建 + 密钥卫生 |
 
 一条命令自检：
 
@@ -592,14 +593,18 @@ embedding / rerank / judge **同时失效**，但：
 
 按"投入产出比 × 简历可信度"排序。每项都写清**为什么还没做**，避免看起来像是漏了。
 
-1. ~~**把评测集扩到三库，再重跑一遍实验 A–E**~~ ✅ 已完成检索侧（A/B）
-   `run_eval.py` 新增 `--game all` 多库路径，检索实验已从 sr 的 29 条扩到
-   **三库 48 条**（sr 29 / ys 9 / zzz 10），产物 `data/eval/exp_A_all_k3.json`。
+1. ~~**把评测集扩到三库，再重跑一遍实验 A–E**~~ ✅ 检索侧（A/B/D）已完成
+   `run_eval.py` 新增 `--game all` 多库路径，A/B/D 已从 sr 的 29 条扩到
+   **三库 48 条**（sr 29 / ys 9 / zzz 10），产物 `data/eval/exp_A_all_k3.json`
+   与 `model_compare_{sr,ys,zzz}.json`。
    汇总按库分节，不混口径 —— 三库 chunk 数 3932 / 5413 / 1498 差得很远，
    合成一个均值等于把「语料规模」和「分块粒度」两个隐藏变量塞进结论。
    **仍待做**：生成侧实验 C/E 还在 sr 的 15 条子集上（每条一次 Judge 调用，
    扩到三库 48 条意味着 3 档 × 48 次 ≈ 96 分钟，成本比检索侧高一个量级）。
-   实验 D（embedding 模型对比）待三库跑完 B 后继续。
+
+   三库跑完还推翻了一条原本当成跨库稳健的结论：「embed_mode=title 优于 text」
+   在 zzz 上 A0 侧**一题都没差别**（逐题 diff 后只有 1 题受影响），
+   目前只有 sr 有样本支撑（+0.230，10/29 题）。
 
 2. **评测集继续加量**
    12 条/库只够验证"路由没错"，统计功效仍然不足

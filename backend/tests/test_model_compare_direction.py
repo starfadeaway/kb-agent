@@ -43,11 +43,18 @@ def _load():
     return mod
 
 
-def _artifact():
+def _artifact(game: str = "sr"):
     import json
-    p = SCRIPT.parents[2] / "data" / "eval" / "model_compare.json"
+    # 产物现在按库命名（model_compare_sr.json 等）。
+    #
+    # 早先这里读的是不带库名的 model_compare.json —— 而那份产物是用
+    # **旧默认路径 exp_A.json**（sr 的实验 A，可能停在旧语料）配 Qwen 产物算出来的，
+    # A0 阴性对照根本对不上（mean_diff=0.1149），整份检验的前提就不成立。
+    # 守卫却还在拿它断言「A2 延迟显著更快」——
+    # **等于用一份无效产物给结论背书**，比没有守卫更危险。
+    p = SCRIPT.parents[2] / "data" / "eval" / f"model_compare_{game}.json"
     if not p.is_file():
-        pytest.skip("model_compare.json 尚未生成")
+        pytest.skip(f"model_compare_{game}.json 尚未生成")
     return json.loads(p.read_text(encoding="utf-8"))
 
 
@@ -189,6 +196,39 @@ def test_qwen_latency_is_faster_in_final_fusion_stage():
     assert "cohens_d" in m and m["cohens_d"] < 0.1, (
         f"效应量 {m.get('cohens_d')} 偏大，文档里「显著更快」的说法需要再核对量级"
     )
+
+
+@pytest.mark.parametrize("game", ["sr", "ys", "zzz"])
+def test_fusion_latency_direction_holds_in_every_game(game):
+    """「融合档 Qwen 更快」这条必须在**三库每一库**都成立。
+
+    为什么加这条：原守卫只看默认那一份产物，于是 sr 上成立就被当成全局结论。
+    实测三库里 ys 的 A2 延迟差异 p=0.5788 —— **只有两库显著**。
+    文档若写「三库均显著」就是过度外推，所以这里逐库锁，
+    让「哪些库支持」在测试里就是显式的。
+    """
+    d = _artifact(game)
+    m = d["A2"]["metrics"]["latency_ms"]
+    if m["significant"]:
+        assert m["winner"] == "other", (
+            f"{game} 的 A2 延迟显著时，方向必须是 Qwen 更快，实际 {m['winner']}"
+        )
+        assert m["mean_diff"] > 0, f"{game} 的 A2：bge 延迟更大即 bge 更慢"
+
+
+def test_guards_refuse_to_run_on_failed_control():
+    """阴性对照不成立的产物，这些守卫必须拒绝据此下结论。"""
+    for game in ("sr", "ys", "zzz"):
+        p = SCRIPT.parents[2] / "data" / "eval" / f"model_compare_{game}.json"
+        if not p.is_file():
+            continue
+        import json
+        meta = json.loads(p.read_text(encoding="utf-8")).get("_meta", {})
+        assert meta.get("a0_identical") is True, (
+            f"{game} 的 A0 阴性对照不成立（差异 case：{meta.get('a0_diff_case_ids')}）—— "
+            "这份产物里除 embedding 外还有第二个变量在动，"
+            "任何基于它的显著性结论都不能成立"
+        )
 
 
 def test_control_group_remains_identical():

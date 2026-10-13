@@ -1,0 +1,701 @@
+[
+  {
+    "label": "A0",
+    "games": [
+      "ys"
+    ],
+    "config": {
+      "game": "ys",
+      "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+      "variant": "d_Qwen_Qwen3-Embedding-0.6B",
+      "use_bm25": true,
+      "use_vector": false,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60,
+      "min_revision_ts": null,
+      "page_titles": null,
+      "rerank_candidates": 0
+    },
+    "configs": {
+      "ys": {
+        "game": "ys",
+        "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+        "variant": "d_Qwen_Qwen3-Embedding-0.6B",
+        "use_bm25": true,
+        "use_vector": false,
+        "use_rerank": false,
+        "bm25_top": 20,
+        "vector_top": 20,
+        "final_top_k": 3,
+        "rrf_k": 60,
+        "min_revision_ts": null,
+        "page_titles": null,
+        "rerank_candidates": 0
+      }
+    },
+    "aggregate": {
+      "recall@3": 0.8889,
+      "recall@3_std": 0.3333,
+      "hit_rate": 0.8889,
+      "hit_rate_std": 0.3333,
+      "mrr": 0.8333,
+      "mrr_std": 0.3536,
+      "ndcg": 0.8479,
+      "ndcg_std": 0.3406,
+      "n": 9,
+      "page_hit_rate": 0.8889,
+      "avg_latency_ms": 532,
+      "errors": 0,
+      "n_ok": 9,
+      "no_gold_pages": 3
+    },
+    "by_game": {
+      "ys": {
+        "recall@3": 0.8889,
+        "recall@3_std": 0.3333,
+        "hit_rate": 0.8889,
+        "hit_rate_std": 0.3333,
+        "mrr": 0.8333,
+        "mrr_std": 0.3536,
+        "ndcg": 0.8479,
+        "ndcg_std": 0.3406,
+        "n": 9,
+        "page_hit_rate": 0.8889,
+        "avg_latency_ms": 532,
+        "errors": 0,
+        "n_ok": 9
+      }
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 0.5,
+        "ndcg": 0.6309,
+        "case_id": "ys-001",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 4605,
+        "top_titles": [
+          "说明：草神瞳共鸣石",
+          "散失的草神瞳",
+          "说明：岩神瞳共鸣石"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-002",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 23,
+        "top_titles": [
+          "散失的草神瞳",
+          "说明：草神瞳共鸣石",
+          "散失的月神瞳"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-003",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 21,
+        "top_titles": [
+          "岩之印",
+          "暗涌",
+          "暗涌"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-004",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 16,
+        "top_titles": [
+          "岩之印",
+          "光界之印",
+          "风之印"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-005",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 22,
+        "top_titles": [
+          "冒险家",
+          "「冒险家」的能力极限",
+          "逐月符"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-006",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 22,
+        "top_titles": [
+          "冒险家",
+          "回声之林夜话",
+          "血红之证"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-007",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 22,
+        "top_titles": [
+          "冒险家",
+          "渡过烈火的贤人",
+          "【V3.2】萌新想要探索大世界，有哪些好用的四星角色？又该如何培养自己抽到的四星角色？【主C篇】"
+        ]
+      },
+      {
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "ys-008",
+        "game": "ys",
+        "category": "multi_hop",
+        "page_hit": false,
+        "latency_ms": 20,
+        "top_titles": [
+          "伊涅芙",
+          "【V3.2】萌新想要探索大世界，有哪些好用的四星角色？又该如何培养？【副C、辅助篇】【蒙德角色篇】",
+          "绝缘刷不出？雷国四星凑不齐没命座？不如拜入种门！"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-009",
+        "game": "ys",
+        "category": "semantic",
+        "page_hit": true,
+        "latency_ms": 43,
+        "top_titles": [
+          "散失的草神瞳",
+          "散失的雷神瞳",
+          "散失的冰神瞳"
+        ]
+      }
+    ],
+    "significance": [
+      {
+        "comparison": "A0→A1",
+        "n": 9,
+        "metric": "mrr",
+        "mean_a": 0.7778,
+        "mean_b": 0.8333,
+        "mean_diff": -0.0556,
+        "sd_diff": 0.5833,
+        "std_err": 0.1944,
+        "t": -0.286,
+        "df": 8,
+        "p": 0.7751,
+        "cohens_d": -0.155,
+        "significant": false,
+        "approx": "正态近似",
+        "note": "n<20，t 分布与正态偏离较大，p 值仅供参考"
+      },
+      {
+        "comparison": "A1→A2",
+        "n": 9,
+        "metric": "mrr",
+        "mean_a": 1.0,
+        "mean_b": 0.7778,
+        "mean_diff": 0.2222,
+        "sd_diff": 0.3632,
+        "std_err": 0.1211,
+        "t": 1.835,
+        "df": 8,
+        "p": 0.0665,
+        "cohens_d": 0.865,
+        "significant": false,
+        "approx": "正态近似",
+        "note": "n<20，t 分布与正态偏离较大，p 值仅供参考"
+      }
+    ],
+    "_meta": {
+      "script": "exp_common.py",
+      "generated_at": "2026-10-13T15:03:26+00:00",
+      "experiment": "A",
+      "game": "ys",
+      "variant": "d_Qwen_Qwen3-Embedding-0.6B",
+      "top_k": 3,
+      "labels": "A0,A1,A2",
+      "index_chunks": 5413,
+      "index_pages": 434,
+      "git_commit": "acbb64f"
+    }
+  },
+  {
+    "label": "A1",
+    "games": [
+      "ys"
+    ],
+    "config": {
+      "game": "ys",
+      "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+      "variant": "d_Qwen_Qwen3-Embedding-0.6B",
+      "use_bm25": false,
+      "use_vector": true,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60,
+      "min_revision_ts": null,
+      "page_titles": null,
+      "rerank_candidates": 0
+    },
+    "configs": {
+      "ys": {
+        "game": "ys",
+        "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+        "variant": "d_Qwen_Qwen3-Embedding-0.6B",
+        "use_bm25": false,
+        "use_vector": true,
+        "use_rerank": false,
+        "bm25_top": 20,
+        "vector_top": 20,
+        "final_top_k": 3,
+        "rrf_k": 60,
+        "min_revision_ts": null,
+        "page_titles": null,
+        "rerank_candidates": 0
+      }
+    },
+    "aggregate": {
+      "recall@3": 0.8889,
+      "recall@3_std": 0.3333,
+      "hit_rate": 0.8889,
+      "hit_rate_std": 0.3333,
+      "mrr": 0.7778,
+      "mrr_std": 0.3632,
+      "ndcg": 0.8069,
+      "ndcg_std": 0.3422,
+      "n": 9,
+      "page_hit_rate": 0.8889,
+      "avg_latency_ms": 183,
+      "errors": 0,
+      "n_ok": 9,
+      "no_gold_pages": 3
+    },
+    "by_game": {
+      "ys": {
+        "recall@3": 0.8889,
+        "recall@3_std": 0.3333,
+        "hit_rate": 0.8889,
+        "hit_rate_std": 0.3333,
+        "mrr": 0.7778,
+        "mrr_std": 0.3632,
+        "ndcg": 0.8069,
+        "ndcg_std": 0.3422,
+        "n": 9,
+        "page_hit_rate": 0.8889,
+        "avg_latency_ms": 183,
+        "errors": 0,
+        "n_ok": 9
+      }
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-001",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 793,
+        "top_titles": [
+          "散失的草神瞳",
+          "散失的风神瞳",
+          "散失的水神瞳"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-002",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 103,
+        "top_titles": [
+          "散失的草神瞳",
+          "散失的风神瞳",
+          "散失的水神瞳"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-003",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 111,
+        "top_titles": [
+          "岩之印",
+          "雷之印",
+          "草之印"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-004",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 106,
+        "top_titles": [
+          "岩之印",
+          "雷之印",
+          "雷之印"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-005",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 106,
+        "top_titles": [
+          "冒险家",
+          "保证",
+          "「冒险家」的能力极限"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 0.5,
+        "ndcg": 0.6309,
+        "case_id": "ys-006",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 105,
+        "top_titles": [
+          "游医",
+          "冒险家",
+          "沉沦之心"
+        ]
+      },
+      {
+        "recall@3": 0.0,
+        "hit_rate": 0.0,
+        "mrr": 0.0,
+        "ndcg": 0.0,
+        "case_id": "ys-007",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": false,
+        "latency_ms": 106,
+        "top_titles": [
+          "烬城勇者绘卷",
+          "悠古的磐岩",
+          "被怜爱的少女"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-008",
+        "game": "ys",
+        "category": "multi_hop",
+        "page_hit": true,
+        "latency_ms": 105,
+        "top_titles": [
+          "冒险家",
+          "「冒险家」的能力极限",
+          "光界之印"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 0.5,
+        "ndcg": 0.6309,
+        "case_id": "ys-009",
+        "game": "ys",
+        "category": "semantic",
+        "page_hit": true,
+        "latency_ms": 113,
+        "top_titles": [
+          "旅行者/草",
+          "旅行者/草",
+          "散失的草神瞳"
+        ]
+      }
+    ]
+  },
+  {
+    "label": "A2",
+    "games": [
+      "ys"
+    ],
+    "config": {
+      "game": "ys",
+      "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+      "variant": "d_Qwen_Qwen3-Embedding-0.6B",
+      "use_bm25": true,
+      "use_vector": true,
+      "use_rerank": false,
+      "bm25_top": 20,
+      "vector_top": 20,
+      "final_top_k": 3,
+      "rrf_k": 60,
+      "min_revision_ts": null,
+      "page_titles": null,
+      "rerank_candidates": 0
+    },
+    "configs": {
+      "ys": {
+        "game": "ys",
+        "embed_model": "Qwen/Qwen3-Embedding-0.6B",
+        "variant": "d_Qwen_Qwen3-Embedding-0.6B",
+        "use_bm25": true,
+        "use_vector": true,
+        "use_rerank": false,
+        "bm25_top": 20,
+        "vector_top": 20,
+        "final_top_k": 3,
+        "rrf_k": 60,
+        "min_revision_ts": null,
+        "page_titles": null,
+        "rerank_candidates": 0
+      }
+    },
+    "aggregate": {
+      "recall@3": 1.0,
+      "recall@3_std": 0.0,
+      "hit_rate": 1.0,
+      "hit_rate_std": 0.0,
+      "mrr": 1.0,
+      "mrr_std": 0.0,
+      "ndcg": 1.0,
+      "ndcg_std": 0.0,
+      "n": 9,
+      "page_hit_rate": 1.0,
+      "avg_latency_ms": 608,
+      "errors": 0,
+      "n_ok": 9,
+      "no_gold_pages": 3
+    },
+    "by_game": {
+      "ys": {
+        "recall@3": 1.0,
+        "recall@3_std": 0.0,
+        "hit_rate": 1.0,
+        "hit_rate_std": 0.0,
+        "mrr": 1.0,
+        "mrr_std": 0.0,
+        "ndcg": 1.0,
+        "ndcg_std": 0.0,
+        "n": 9,
+        "page_hit_rate": 1.0,
+        "avg_latency_ms": 608,
+        "errors": 0,
+        "n_ok": 9
+      }
+    },
+    "rows": [
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-001",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 4435,
+        "top_titles": [
+          "散失的草神瞳",
+          "说明：草神瞳共鸣石",
+          "散失的风神瞳"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-002",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 134,
+        "top_titles": [
+          "散失的草神瞳",
+          "散失的月神瞳",
+          "散失的风神瞳"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-003",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 130,
+        "top_titles": [
+          "岩之印",
+          "暗涌",
+          "雷之印"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-004",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 120,
+        "top_titles": [
+          "岩之印",
+          "风之印",
+          "光界之印"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-005",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 121,
+        "top_titles": [
+          "冒险家",
+          "「冒险家」的能力极限",
+          "「冒险家」的能力极限"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-006",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 127,
+        "top_titles": [
+          "冒险家",
+          "游医",
+          "「闪焰的驻足」角色活动祈愿"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-007",
+        "game": "ys",
+        "category": "single_hop",
+        "page_hit": true,
+        "latency_ms": 127,
+        "top_titles": [
+          "冒险家",
+          "炽烈的炎之魔女",
+          "回声之林夜话"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-008",
+        "game": "ys",
+        "category": "multi_hop",
+        "page_hit": true,
+        "latency_ms": 124,
+        "top_titles": [
+          "冒险家",
+          "「冒险家」的能力极限",
+          "伊涅芙"
+        ]
+      },
+      {
+        "recall@3": 1.0,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "ndcg": 1.0,
+        "case_id": "ys-009",
+        "game": "ys",
+        "category": "semantic",
+        "page_hit": true,
+        "latency_ms": 154,
+        "top_titles": [
+          "散失的草神瞳",
+          "旅行者/草",
+          "散失的雷神瞳"
+        ]
+      }
+    ]
+  }
+]

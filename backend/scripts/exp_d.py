@@ -102,7 +102,11 @@ def main() -> None:
             ] + (["--embed-model", model] if model != "BAAI/bge-m3" else []),
                 f"重建索引：{model} → collection kb_{args.game}_{slug}_{variant}")
             if rc != 0:
-                print(f"{model} 重建失败(rc={rc})，跳过")
+                # 明确说「这一档没跑成」，并给出最常见的原因。
+                # 不写清楚的话，汇总表里那一行只会被读成"这个模型指标差"。
+                print(f"⚠️ {model} 索引重建失败(rc={rc})，本档**未跑成**，"
+                      f"不参与任何对比结论。常见原因：模型已下线"
+                      f"（接口返回 Model does not exist）、额度用尽、网络中断。")
                 continue
             print(f"[{model}] 重建耗时 {time.perf_counter() - t0:.0f}s")
 
@@ -121,17 +125,30 @@ def main() -> None:
     # ---- 汇总 ----
     print(f"\n{'=' * 78}\n  实验 D 汇总：embedding 模型对比（不含重排，双侧归一化，top_k={args.top_k}）\n{'=' * 78}")
     print(f"{'模型':<20}{'配置':>6}{'recall@k':>10}{'mrr':>8}{'ndcg':>8}{'延迟ms':>9}{'n':>5}")
+    missing: list[str] = []
     for model in models:
         slug = model.replace("/", "_")
         f = out_dir / f"exp_D_{slug}_{args.game}_k{args.top_k}.json"
         if not f.is_file():
-            print(f"{model:<20}{'（无结果）':>20}")
+            # 「没有产物文件」有两种完全不同的原因，必须分开报：
+            #   1. 索引重建失败（模型被下线 / 额度耗尽 / 网络断）—— 没跑成
+            #   2. 根本没跑到这一档 —— 同样是没跑成
+            # 之前这里统一打「（无结果）」，和「这个模型指标很差」在表里长得一样，
+            # 读者会读成后者。2026-10-13 实测踩到：EMBED_MODEL_ALT=embo-01
+            # 已被 SiliconFlow 下线，接口返回 `Model does not exist`，
+            # 汇总表里 embo-01 一行「（无结果）」，很容易被当成"对比下来 embo-01 很差"。
+            missing.append(model)
+            print(f"{model:<20}{'（未跑成，见下方说明）':>26}")
             continue
         for r in json.loads(f.read_text(encoding="utf-8")):
             a = r["aggregate"]
             print(f"{model:<20}{r['label']:>6}{a.get(f'recall@{args.top_k}', 0):>10.3f}"
                   f"{a['mrr']:>8.3f}{a['ndcg']:>8.3f}{a['avg_latency_ms']:>9}{a['n']:>5}")
     print("=" * 78)
+    if missing:
+        print(f"⚠️ 以下模型本轮**没有出数**（不是指标差，是没跑成）：{', '.join(missing)}")
+        print("   常见原因：模型已被下线（接口返回 Model does not exist）、额度用尽、索引重建失败。")
+        print("   这些模型**不能**参与任何对比结论 —— 单变量对比要求两档都真的跑过。")
     print("注：两套模型的向量维度不同，collection 完全隔离，未做任何跨模型混算。")
 
 
