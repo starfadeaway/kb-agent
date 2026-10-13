@@ -45,6 +45,7 @@ from app.llm.client import get_llm  # noqa: E402
 from app.retrieval.hybrid import RetrievalConfig  # noqa: E402
 from exp_common import (  # noqa: E402
     aggregate_rows,
+    fmt_p,
     load_cases,
     paired_scores,
     parse_games,
@@ -233,7 +234,7 @@ async def main() -> None:
     t = paired_scores(results)
     if t:
         print(f"\n--- 配对检验 C0 → C2（metric=judge_score，n={t['n']}）---")
-        print(f"  Δ={t['mean_diff']:+.4f}  t={t['t']}  p={t['p']}  Cohen's d={t['cohens_d']}")
+        print(f"  Δ={t['mean_diff']:+.4f}  t={t['t']}  p={fmt_p(t['p'])}  Cohen's d={t['cohens_d']}")
 
 
 if __name__ == "__main__":

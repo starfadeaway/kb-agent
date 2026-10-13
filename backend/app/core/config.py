@@ -145,16 +145,6 @@ class Settings:
     #: **配置注释里的实验数字必须能追到具体产物**，否则它就是个传闻。
     agent_tools: str = field(default_factory=lambda: _env("AGENT_TOOLS", "search_kb"))
 
-    #: 工具传输方式：`builtin`（进程内直调，默认） / `mcp`（走 MCP 协议）。
-    #:
-    #: 默认 builtin 是刻意的：MCP 是给**外部 MCP host**（Claude Code / Cursor）
-    #: 用的。本项目的 Agent 调自己的函数时，绕一圈 stdio/网络只增加延迟与故障面，
-    #: 等于给主链路凭空加一个单点。
-    #:
-    #: 两条路径的输出一致性由 `backend/tests/test_mcp_parity.py` 实跑保证
-    #: （真 mcp.Client 连真 server，逐字符比对），不是靠"我们没改逻辑"这种说法。
-    tool_transport: str = field(default_factory=lambda: _env("TOOL_TRANSPORT", "builtin"))
-
     #: Chat 降级链，逗号分隔的基座名（如 "minimax"），空 = 不降级。
     #: 只对**可重试**故障生效（429 / 5xx / 超时 / 连接失败）；
     #: 400 参数错、401 鉴权错、内容过滤这类确定性失败一律不重试 ——
@@ -232,8 +222,12 @@ class Settings:
     #: repr 里要打码的字段。dataclass 的自动 repr 会把所有字段原样打出来，
     #: 于是任何一个断言失败、任何一个 traceback、任何一次 pytest 输出 fixture
     #: 都会把 API Key 和数据库密码写进日志 —— CI 上就是明文泄漏。
-    _SECRET_FIELDS = ("deepseek_api_key", "siliconflow_api_key", "minimax_api_key",
-                      "judge_api_key", "mysql_password")
+    #:
+    #: 这里曾经列过一个 `judge_api_key`，但 Settings 上从来没有这个字段 ——
+    #: Judge 复用 `siliconflow_api_key`。打码名单里多一个不存在的名字，
+    #: 会让人以为"Judge 有独立的 Key 可以单独轮换"。已删。
+    _SECRET_FIELDS = ("deepseek_api_key", "siliconflow_api_key",
+                      "minimax_api_key", "mysql_password")
 
     def __repr__(self) -> str:
         parts = []

@@ -215,7 +215,7 @@ def games(self) -> dict[str, str]:   # slug → 显示名
 | 接口 | 用途 |
 |---|---|
 | `list_category_pages` | 按「分类:」枚举页面（注意是中文命名空间，不是 `Category:`） |
-| `get_pages` | 批量取 wikitext，**一次 10 页** |
+| `fetch_pages` | 批量取 wikitext，**一次 10 页** |
 | `fetch_page_meta` | 取修订号和时间戳 → 版本感知检索的基础 |
 
 ### 为什么这么调
@@ -389,7 +389,7 @@ A0 五个检索指标 Δ 全为 0.0000（纯 BM25 不依赖 embedding），
 | 工具 | 什么时候用 | 调用点 |
 |---|---|---|
 | `search_kb` | 查游戏内数值、机制、角色信息 | 混合检索 |
-| `get_page` | 检索片段不够，需要全文 | 读 MySQL 侧车元数据 |
+| `get_page` | 检索片段不够，需要全文 | **现抓 wiki**（不读向量库），见下 |
 | `calculator` | 检索到系数后要算数 | AST 白名单，**不用 eval** |
 | `list_games` | 需要确认知识库范围 | 路由 |
 

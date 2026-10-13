@@ -401,12 +401,16 @@ class Ingestor:
         cfg: IngestConfig,
         *,
         limit: int = 60,
-        on_progress=None,
     ) -> IngestStats:
         """抓一个分类下的页面并入库。
 
-        抓取请求严格串行（节流器保证间隔），只对 embedding 走批量并发 —— 
+        抓取请求严格串行（节流器保证间隔），只对 embedding 走批量并发 ——
         抓取并发只会招来 WAF，不会更快。
+
+        进度通过 `logger.info` 输出。早先这里有个 `on_progress` 回调参数，
+        函数体里实现了两处回调点，但**没有任何调用方传入** ——
+        留着一个永远不触发的回调，等于留了一条没人验证的分支。
+        真需要前端看进度，走日志或 SSE，不要在这里预留没人用的钩子。
         """
         stats = IngestStats()
         t0 = time.perf_counter()
@@ -418,8 +422,6 @@ class Ingestor:
         ) as wc:
             titles = await wc.list_category_pages(category, limit=limit)
             logger.info("分类 %s 取到 %d 个页面", category, len(titles))
-            if on_progress:
-                on_progress({"stage": "listed", "category": category, "titles": len(titles)})
 
             pages: list[PageContent] = []
             for title in titles:
@@ -429,8 +431,6 @@ class Ingestor:
                     logger.warning("抓取失败 %s: %s", title, exc)
                     stats.failed.append(title)
                     continue
-                if on_progress:
-                    on_progress({"stage": "fetched", "title": title, "done": len(pages)})
             stats.waf_hits = wc.waf_hits
 
         sub = await self.ingest_pages(

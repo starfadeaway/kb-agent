@@ -86,9 +86,6 @@ class RetrievedChunk:
     def source_url(self) -> str:
         return str(self.metadata.get("source_url", ""))
 
-    def cite(self) -> str:
-        return f"{self.page_title}｜{self.metadata.get('section', '')}".strip("｜")
-
 
 class LanceCollection:
     def __init__(self, root: Path, name: str, metadata: dict[str, Any] | None = None, ann: bool = False) -> None:

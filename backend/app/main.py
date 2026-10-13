@@ -143,7 +143,10 @@ class IngestRequest(BaseModel):
     game: str = "sr"
     category: str
     limit: int = 30
-    interval: float = 5.0
+    # 早先这里有 interval: float = 5.0 —— 收下后**从未使用**：
+    # WikiClient 的 min_interval 来自 settings.wiki_min_interval，
+    # 所以改这个字段不生效也不报错。CLI 的 crawl.py 有自己的 --interval，
+    # 那个是真在用的，别混为一谈。
     variant: str = "base"
     embed_mode: str = "title"
 
@@ -322,13 +325,6 @@ async def chat(req: ChatRequest) -> dict:
             for s in state.steps
         ],
     }
-
-
-@api_router.get("/sessions")
-async def sessions(limit: int = 20) -> list[dict]:
-    from app.store.persist import list_sessions
-
-    return await list_sessions(limit=limit, settings=_settings)
 
 
 @api_router.post("/chat/stream")

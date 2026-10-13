@@ -13,7 +13,7 @@
 | Chat 基座对比（n=14/14，DeepSeek⇄MiniMax） | 质量 **4.79 vs 4.29，p=0.0848 未达显著**（不敢说谁更强）；token **1.85×**。⚠️ 延迟结论本轮作废（E1 工具失败率 0→0.222，WAF 配额被打满）。两者失败模式**互补** | [`data/eval/exp_E.json`](data/eval/exp_E.json) |
 | 代价 | 挂知识库 = prompt token **×20.2**、延迟 3.5 倍（串行实测口径）；C2 比 C1 多花 **23%** token，judge 只涨 0.14 且 p=0.16 未达显著 | [`docs/cost_latency_quality.md`](docs/cost_latency_quality.md) |
 | 并发（真实问题压测） | 并发 4 吞吐 **×3.40**（4.10 req/s），1/4/8 三档 top-5 结果**逐条一致** | [`docs/concurrency.md`](docs/concurrency.md) |
-| 流式 | TTFT **860ms** vs 非流式 3410ms（感知延迟 −75%），总耗时仅差 264ms | [`data/eval/probe_stream_latency.json`](data/eval) |
+| 流式 | 首个 SSE 事件 **860ms** vs 非流式全量 3410ms，总耗时仅差 264ms。⚠ **不是「第一个字」**：上游无 token 级流式，是拿完整答案后切片推送；且为单次测量 | [`data/eval/probe_stream_latency.json`](data/eval) |
 | 失败模式 | 4 类，含「答案全对但引用了不存在的页面」 | [`docs/failure_analysis.md`](docs/failure_analysis.md) |
 
 ## 📌 所有数字可复现
@@ -385,14 +385,31 @@ cd kb-agent\backend
 - DeepSeek 的缓存**自动生效**，`usage.prompt_cache_hit_tokens` 直接可见，命中率 80%+，墙钟降约 50%。
 - **但它省的是费用，不是延迟** —— 同一模型下首 token 延迟稳定在 100–350ms，总耗时主要由生成 token 数决定。
 
-真正有效的杠杆是**流式**（已实现）：
+真正有效的杠杆是**流式反馈**（口径见下方说明，别当成「第一个字」）：
 
-| 方式 | 耗时 | 用户看到第一个字 |
+| 方式 | 总耗时 | 第一个 SSE 事件到达 |
 |---|---|---|
-| 非流式 `/api/chat` | 4716ms | 4716ms 后 |
-| 流式 `/api/chat/stream` | 全部 3927ms | **721ms** |
+| 非流式 `/api/chat` | 3410ms | 3410ms 后（全部完成才有反馈） |
+| 流式 `/api/chat/stream` | 3147ms | **860ms** |
 
-**感知延迟 −85%，总耗时几乎不变。** 详见 `EVALUATION.md` 延迟章节的完整优先级排序。
+> ⚠ **三点限定，引用时请一起带上：**
+>
+> 1. **上游没有 token 级流式。** `/api/chat/stream` 的机制是 Agent 拿到
+>    **完整答案**后 `_split_for_stream()` 按中文标点切片推送
+>    （`app/agent/react.py`）。所以真正的"第一个字"时刻 ≈ 生成完成时刻，
+>    不比非流式早多少。
+> 2. **860ms 是第一个 SSE 事件的到达时间**——很可能是 `tool_start`，
+>    也就是"用户第一次看到系统有反应"，不是"第一个字"。探针脚本
+>    `probe_stream_latency.py` 的 `measure_stream()` 记录的是首个事件，
+>    而它自己的打印文案就写着「用户第一次看到反馈」而非「首字」。
+> 3. **这是单次测量。** 产物 `probe_stream_latency.json` 自己的 `note` 就写着
+>    「TTFT 为单次测量，波动大，结论请看多次重跑的中位数」。
+>
+> （`LLMClient.chat_stream()` 这个真·上游流式方法**已删除**：写了 48 行含跨
+> chunk 的 `<think>` 处理，全仓从未被调用过一次。留着它只会让"流式已实现"
+> 这句话更难说准 —— 和本项目删掉的 `TOOL_TRANSPORT` 是同一类问题。）
+>
+> 详见 `EVALUATION.md` 延迟章节的完整优先级排序。
 
 ---
 
@@ -453,7 +470,7 @@ cd kb-agent\backend
 | 数据时效 | 版本更新：实测 wiki `recentchanges` 可穿过 WAF；近 7 天变更页 ∩ 已收录 = **162/706 页（23.0%）**，检测只花 **15 次请求**（全量重抓要 71 次）。⚠️ 全站口径 1157 页会得出"增量无意义"的**相反结论**。内容指纹已落库（1401 页 + 10843 chunk 100% 覆盖），归一化把格式误判从 **100% 压到 0**（`docs/delta_sync.md`） |
 | Agent | 手搓 ReAct，4 工具 + 4 道安全阀 + 熔断；不可答问题从 7 步/30317 token 降到 4 步/6514 token |
 | 多库路由 | 三态（库内/越界/未提及）；越界走无工具单轮，实测 0 步 / 1.1s，库内 3–5 步 / 5–8s |
-| MCP | 4 个工具以标准 MCP（SDK 2.3.0）暴露给外部 host，stdio 传输；**内置路径与 MCP 路径输出逐字符一致由守卫实跑保证**（16 项，真 `mcp.Client` 连真 server）。默认走 builtin——MCP 是出口不是入口，见 [docs/mcp.md](docs/mcp.md) |
+| MCP | 4 个工具以标准 MCP（SDK 2.3.0）暴露给外部 host，stdio 传输；**适配层与内置实现输出逐字符一致由守卫实跑保证**（16 项，真 `mcp.Client` 连真 server）。MCP 是**独立 server 入口**，本项目 Agent 始终走进程内直调，**两者之间没有运行时开关**（曾经有过 `TOOL_TRANSPORT`，核实发现无任何代码分支读它，已删），见 [docs/mcp.md](docs/mcp.md) |
 | 后端 | FastAPI，`/api/health` `/api/retrieve` `/api/chat` `/api/chat/stream` `/api/runs` `/api/ingest` `/api/stats` |
 | 前端 | React + Vite + TS，SSE 流式、工具时间线、引用、检索调试面板、双主题、背景图、移动端抽屉 |
 | 存储 | MySQL 语料三表与向量库**逐条一致**（`backfill_mysql.py` 剪枝后核对）：pages 1401（sr 706 / zzz 260 / ys 435）/ chunks 10843（3932 / 1498 / 5413）/ facts 25111（15017 / 4976 / 5118）。唯一差异是 ys 的「角色投稿测试（先说对不起）」正文长度为 0，被 `page_filter` 挡在索引外但 MySQL 记了"抓到了"；另有 runs / tool_calls / eval_cases / eval_results / sessions / messages |

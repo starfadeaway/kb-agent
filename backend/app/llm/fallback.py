@@ -41,11 +41,6 @@ from openai import (
     RateLimitError,
 )
 
-
-class NotRetryable(Exception):
-    """显式标记「别降级」。包装底层异常，让调用方不必重复判定。"""
-
-
 #: 明确不可降级的异常类型。这里必须**枚举**，不能写"其余都算可重试" ——
 #: 新增一个 openai SDK 的异常类型时，默认必须落在安全的一侧。
 _FATAL: tuple[type[Exception], ...] = (

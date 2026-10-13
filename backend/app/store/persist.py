@@ -93,18 +93,6 @@ async def save_turn(
         return False
 
 
-async def list_sessions(limit: int = 20, settings: Settings | None = None) -> list[dict]:
-    s = settings or get_settings()
-    try:
-        async with session_scope(s) as session:
-            stmt = select(Session).order_by(Session.id.desc()).limit(limit)
-            rows = (await session.execute(stmt)).scalars().all()
-    except MySQLUnavailable:
-        return []
-    return [{"session_key": r.session_key, "game": r.game,
-             "created_at": r.created_at.isoformat() if r.created_at else None} for r in rows]
-
-
 # --------------------------------------------------------------------------- #
 # 评测结果落库
 # --------------------------------------------------------------------------- #

@@ -48,6 +48,7 @@ from exp_common import (  # noqa: E402
 )
 from exp_common import (
     aggregate_rows,
+    fmt_p,
     is_kept,
     load_cases,
     paired_scores,
@@ -365,7 +366,7 @@ async def main() -> None:
     t = paired_scores(results, exclude=is_counted)
     if t:
         print(f"\n--- 配对检验 E1 → E2（metric=judge_score，n={t['n']}）---")
-        print(f"  Δ={t['mean_diff']:+.4f}  t={t['t']}  p={t['p']}  Cohen's d={t['cohens_d']}")
+        print(f"  Δ={t['mean_diff']:+.4f}  t={t['t']}  p={fmt_p(t['p'])}  Cohen's d={t['cohens_d']}")
 
 
 if __name__ == "__main__":

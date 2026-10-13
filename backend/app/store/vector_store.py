@@ -50,9 +50,6 @@ class RetrievedChunk:
     def source_url(self) -> str:
         return str(self.metadata.get("source_url", ""))
 
-    def cite(self) -> str:
-        return f"{self.page_title}｜{self.metadata.get('section', '')}".strip("｜")
-
 
 def _match_where(meta: dict, where: dict | None) -> bool:
     """支持 $and / $in / $gte 三种条件，够用且不会静默漏条件。"""

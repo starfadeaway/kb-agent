@@ -192,6 +192,22 @@ def print_summary(results: Sequence[dict], title: str) -> None:
         print_category_matrix(results)
 
 
+def fmt_p(p: float) -> str:
+    """p 值的显示格式：下溢写 `<1e-10`，**不要**写成 `0.0` / `0.0000`。
+
+    为什么：`p=0` 不是结论，是「浮点下溢了，算不出更小的数」。
+    写成 0 等于把「算不出来」说成「恰好为零」—— 与把 p=0.058 写成
+    「p<0.05」是同一性质的谎。
+
+    实测踩到（2026-10）：实验 C 三库版 C0→C2 配对检验 t=11.482，
+    直接 `f"{p}"` 打出 `p=0.0`。同项目的 `analyze_model_compare.py`
+    早就处理对了（`ptxt = "<1e-10" if underflow else ...`），
+    而 exp_c / exp_e / analyze_significance 三处漏了 —— 口径分叉。
+    统一收口到这里。
+    """
+    return "<1e-10" if p == 0.0 else f"{p:.4f}"
+
+
 def category_means(results: Sequence[dict], *, metric: str = "judge_score",
                    exclude=None) -> dict[str, list[float | None]]:
     """题型 × 各档label 的均值矩阵。抽出来是为了让 print_summary 和

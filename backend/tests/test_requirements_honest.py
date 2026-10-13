@@ -99,22 +99,23 @@ _TRANSIITIVE: dict[str, str] = {
     "certifi": "httpx 带入",
     "sniffio": "httpx / anyio 带入",
     "click": "uvicorn 带入",
-    "uvloop": "uvicorn[standard] 在 Windows 上不装，其他平台可选",
     "watchfiles": "uvicorn[standard] 带入",
     "websockets": "uvicorn[standard] 带入",
-    "python_dotenv": "dotenv 的包名别名",
     "pyarrow": "lancedb 带入",
-    "deprecated": "lancedb 带入",
     "pydantic_core": "pydantic 带入",
     "annotated_types": "pydantic 带入",
     "typing_extensions": "pydantic / fastapi 带入",
     "distro": "openai 带入",
     "jiter": "openai 带入",
     "tqdm": "openai 带入",
-    "rpds": "jsonschema 带入（mcp SDK 依赖）",
     "referencing": "jsonschema 带入（mcp SDK 依赖）",
     "attrs": "jsonschema 带入（mcp SDK 依赖）",
 }
+# 早先这里还列过 uvloop / deprecated / rpds / python_dotenv，四项都**已删除**：
+# 它们在本环境根本不存在（uvloop 是 Windows 不装），而 app/ 与 scripts/ 里
+# 也没有任何地方 import 它们 —— 也就是说这些白名单项从来没起过作用，
+# 只是让「白名单里的东西都是真的」这个前提悄悄失效了。
+# 由 test_transitive_allowlist_entries_are_real_packages 把住这个前提。
 
 
 #: 开发工具：扫描范围**不含 tests/**，所以它们天然不会被 app/ scripts/ import。

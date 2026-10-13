@@ -189,18 +189,45 @@ def test_every_mcp_tool_exists_in_registry():
 # 开关
 # --------------------------------------------------------------------------- #
 
-def test_mcp_is_not_default_transport():
-    """MCP 必须默认关闭。
+def test_no_runtime_transport_switch():
+    """**不存在**运行时传输开关 —— 而且这条断言要能证明「不存在」。
 
-    理由：MCP 是给外部 host 用的。本项目的 Agent 自己调自己的函数时，
-    绕一圈子进程/网络只增加延迟和故障面。默认开启等于给主链路
-    凭空加一个单点。
+    这里原来叫 `test_mcp_is_not_default_transport`，断言的是
+    `getattr(s, "tool_transport", "builtin") != "mcp"`：
+    只读了一个**配置值**。而全仓没有任何代码分支读这个字段，
+    所以它既没锁住默认值，也没锁住任何行为 —— 字段根本是死的。
+
+    换成断言两件真正该成立的事：
+    1. `Settings` 上不存在 `tool_transport` 字段；
+    2. `app/` 与 `scripts/` 下**任何**文件都不出现这个词，
+       防止以后再加一个同样不生效的假开关回来。
+
+    ⚠ 本条**不能**做双向验证：断言的是"字段与分支都不存在"，
+    而改造前的快照里字段是存在的，双向验证在这里语义不成立。
+    它的有效性来自上面第 2 条的全仓扫描 —— 如果有人偷偷接了分支，
+    扫描会立刻红，而不是等到"改了 .env 没效果"才发现。
     """
-    from app.core.config import get_settings
+    import dataclasses
+    from pathlib import Path
 
-    s = get_settings()
-    assert getattr(s, "tool_transport", "builtin") != "mcp", (
-        "MCP 不应是默认传输方式；本项目的 Agent 不需要绕一圈调自己的工具"
+    from app.core.config import Settings
+
+    assert "tool_transport" not in {f.name for f in dataclasses.fields(Settings)}, (
+        "又加回了 tool_transport。若要做成真开关，必须在 call_tool 里真的分支，"
+        "并加一条端到端守卫断言走 mcp 分支时的返回值 —— "
+        "不要再重复「定义了但没人读」这个错。"
+    )
+
+    root = Path(__file__).resolve().parents[1]
+    hits = [
+        p.relative_to(root).as_posix()
+        for sub in ("app", "scripts")
+        for p in (root / sub).rglob("*.py")
+        if "tool_transport" in p.read_text(encoding="utf-8")
+    ]
+    assert not hits, (
+        f"这些文件里出现了 tool_transport：{hits}\n"
+        f"要么是接了一半，要么又是一个改了 .env 不生效的假开关。"
     )
 
 

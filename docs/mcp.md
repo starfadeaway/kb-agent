@@ -69,16 +69,28 @@ async with Client(server) as client:
 用 mock 测协议适配，测的是 mock 自己。
 
 守卫还锁住了：schema 参数名与内置一致、每个工具注册独立
-（专治闭包捕获循环变量）、MCP 不是默认传输方式、starlette 版本兼容。
+（专治闭包捕获循环变量）、**不存在运行时传输开关**、starlette 版本兼容。
 
-## 开关
+## 与 Agent 主链路的关系：没有运行时开关
 
-`TOOL_TRANSPORT`：
+本项目的 Agent **始终**走 `tools.py` 的进程内直调（`call_tool`），代码里没有分支。
+MCP 是**独立的 server 入口**（`backend/scripts/mcp_stdio_entry.py`），
+供外部 MCP host 连入 —— 两者不在同一条调用链上，因此也不需要开关。
 
-- `builtin`（默认）—— 进程内直调，本项目 Agent 走这条
-- `mcp` —— 走 MCP 协议
+> 曾经有过一个 `TOOL_TRANSPORT` 配置项，并在这里被描述成
+> 「`mcp` —— 走 MCP 协议」。核实后发现 `app/` 与 `scripts/` 里**没有任何一处
+> 代码分支读它**，改 `.env` 完全不生效且不报错。已连同配置项一起删除。
+>
+> 删除的理由：一个宣称能用、实际不能的开关比没有开关更糟。
+> 它经不起一次追问，而当时的守卫 `test_mcp_is_not_default_transport`
+> 只断言了那个**配置值**不是 `mcp`，没有断言任何运行时行为 —— 对一个
+> 根本没人读的配置值做这种断言，等于什么都没测。
+> 现在换成 `test_no_runtime_transport_switch`，断言的是「字段不存在」
+> 且「app/ 与 scripts/ 里任何地方都不出现它」。
 
-默认 `builtin` 是刻意的，守卫 `test_mcp_is_not_default_transport` 锁住它。
+上面那条一致性守卫的含义也要说准：它是**在测试里分别直调两条路径**
+（真 `mcp.Client` 连真 server vs 直接调函数）断言逐字符一致，
+证明「适配层没有偷偷改工具逻辑」；**不是**证明运行时可以切换传输方式。
 
 ## 踩过的坑（都留了守卫）
 

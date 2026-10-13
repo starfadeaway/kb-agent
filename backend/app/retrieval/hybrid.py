@@ -182,11 +182,11 @@ class HybridRetriever:
         # 必须 RLock 而不是 Lock：_get_bm25 的慢路径会在持锁状态下调用
         # _load_corpus（它自己也要取同一把锁），普通非重入锁在并发下必然死锁。
         self._cache_lock = threading.RLock()
-        # 这两个缓存都无上限：_cache_key 含 page_titles / min_revision_ts，
-        # 理论上可以无限膨胀（一份全量语料 + 一个 BM25 索引 ≈ 几十 MB）。
-        # 当前只有 sr / zzz 两个库、page_titles 实际不常用，所以够用。
-        # 一旦要支持"按页面过滤检索"或"按版本时间过滤"，必须换成有界 LRU ——
-        # 这里显式记下来，因为这是个会悄悄吃掉内存的地方，不是崩溃那种明显的坏。
+        # 缓存是**有界**的：最多留 `_max_cached_indexes` 份，超出走 FIFO 淘汰
+        # （见 `_evict_locked`）。
+        # 这里显式写下来，是因为这段注释曾经**是反的**：它宣称「无上限、够用、
+        # 将来要做按页面过滤时必须换 LRU」，而紧挨着的下一行就是上限与淘汰逻辑。
+        # 一段连自己实现都不描述的注释，比没有注释更容易误导下一个人。
         self._max_cached_indexes = 4
 
     # ---------------- 语料加载 ----------------

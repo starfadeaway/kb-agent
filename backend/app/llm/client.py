@@ -481,55 +481,6 @@ class LLMClient:
         return {"content": content, "tool_calls": calls, "usage": usage,
                 "model": model_name, "backend": (backend or "deepseek").lower()}
 
-    async def chat_stream(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        backend: str | None = None,
-        model: str | None = None,
-        **kwargs: Any,
-    ):
-        """SSE 流式，供前端打字机效果。
-
-        逐 token 剥 <think>：推理块整段丢弃，且不会因为半截标签
-        （"thi" + "nk>" 跨两个 chunk）而漏出前缀。
-        """
-        provider, model_name = self._chat_provider(backend, model)
-        kwargs.setdefault("temperature", 0.0)
-        stream = await provider.chat.completions.create(
-            model=model_name, messages=messages, stream=True, **kwargs
-        )
-        in_think = False
-        buf = ""
-        async for chunk in stream:
-            if not chunk.choices:
-                continue
-            piece = chunk.choices[0].delta.content
-            if not piece:
-                continue
-            buf += piece
-            # 只在缓冲区里已出现闭合标签或明显不是推理时才吐字
-            while True:
-                if in_think:
-                    end = buf.find(_THINK_CLOSE)
-                    if end == -1:
-                        buf = buf[-len(_THINK_CLOSE) :]  # 留住可能跨 chunk 的标签尾巴
-                        break
-                    buf, in_think = buf[end + len(_THINK_CLOSE) :], False
-                    continue
-                start = buf.find(_THINK_OPEN)
-                if start == -1:
-                    keep = len(_THINK_OPEN) - 1  # 留住可能跨 chunk 的标签开头
-                    if len(buf) > keep:
-                        yield buf[:-keep] if keep else buf
-                        buf = buf[-keep:] if keep else ""
-                    break
-                if start > 0:
-                    yield buf[:start]
-                buf, in_think = buf[start + len(_THINK_OPEN) :], True
-        if buf and not in_think:
-            yield buf
-
     # ---------------- Embedding ----------------
     async def embed(
         self,
@@ -593,10 +544,6 @@ class LLMClient:
             if len(texts) > batch_size:
                 await asyncio.sleep(0.15)
         return out
-
-    async def embed_dim(self, model: str | None = None) -> int:
-        vecs = await self.embed(["维度探测"], model=model)
-        return len(vecs[0])
 
     # ---------------- Rerank ----------------
     async def rerank(

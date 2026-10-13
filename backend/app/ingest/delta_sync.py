@@ -63,7 +63,6 @@ class DeltaReport:
     since: str
     changed: list[dict] = field(default_factory=list)
     revision_only: list[str] = field(default_factory=list)
-    new_pages: list[str] = field(default_factory=list)
     local_pages: int = 0
     scanned_changes: int = 0
     unique_changed_site: int = 0
@@ -85,7 +84,10 @@ class DeltaReport:
             "changed": self.changed,
             "changed_count": len(self.changed),
             "revision_only_count": len(self.revision_only),
-            "new_pages_count": len(self.new_pages),
+            # 早先这里有 "new_pages_count": len(self.new_pages)，而 new_pages
+            # 全仓没有任何 .append —— 恒为 0。一个恒零的统计项写进了要写进
+            # 简历的证据文件，读的人却要花时间确认「0 是不是真没新增页」。
+            # 真的没有就删掉，不要留一个占位数字。
             "requests": {
                 "level1_recentchanges": self.requests_level1,
                 "level2_revision_meta": self.requests_level2,
@@ -126,11 +128,13 @@ async def detect_changes(
     wiki: WikiClient | None = None,
     max_level1_pages: int = 8,
     max_level3_pages: int = 40,
-    dry_run: bool = True,
 ) -> DeltaReport:
     """检测 `[since, now]` 区间内**内容实质变化**的页面。
 
-    `dry_run=True` 时只检测不落任何状态 —— 步 3 才允许真正写入。
+    只检测、不写任何状态 —— 写入是步 3 的事。
+    早先这里有个 `dry_run: bool = True` 参数，函数体里从未读取，
+    11 处调用也全部不传它：一个「看起来能控制写入、其实控制不了」的开关。
+    与其留一个假参数，不如让函数签名直接说明它不写。
     """
     s = settings or get_settings()
     rep = DeltaReport(game=game, since=_iso(since))

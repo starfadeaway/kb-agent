@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from exp_common import (
     EVAL_DIR,
     aggregate_rows,
+    fmt_p,
     is_kept,
     judge_failed,
     paired_scores,
@@ -105,7 +106,7 @@ def main() -> None:
             continue
         verdict = "显著" if t["p"] < 0.05 else "**未达显著**"
         print(
-            f"  {a} → {b}   Δ={t['mean_diff']:+.4f}  t={t['t']:.3f}  p={t['p']:.4f}  "
+            f"  {a} → {b}   Δ={t['mean_diff']:+.4f}  t={t['t']:.3f}  p={fmt_p(t['p'])}  "
             f"Cohen's d={t['cohens_d']:+.3f}  n={t['n']}  →  {verdict}"
         )
 
@@ -115,7 +116,7 @@ def main() -> None:
         for a, b in pairs:
             t = paired_scores([by_label[a], by_label[b]])
             if t:
-                print(f"    {a} → {b}   Δ={t['mean_diff']:+.4f}  p={t['p']:.4f}  n={t['n']}")
+                print(f"    {a} → {b}   Δ={t['mean_diff']:+.4f}  p={fmt_p(t['p'])}  n={t['n']}")
 
     print("\n" + "=" * 78)
     print("  各档均值（已剔除链路失败）")

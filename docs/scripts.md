@@ -45,6 +45,7 @@
 | 脚本 | 作用 |
 |---|---|
 | `run_eval.py` | 检索侧评测，支持 `--game all` |
+| `exp_common.py` | **不是可执行脚本**，是实验脚本的公共底座：评测子集、结果聚合、表格打印。抽它的理由不是省代码，是让 A/B/C/D/E 的**统计口径只有一份** |
 | `exp_b.py` / `exp_c.py` / `exp_d.py` / `exp_e.py` | 消融实验 B/C/D/E |
 | `merge_exp_e.py` | 合并 E 的分档产物 |
 | `analyze_model_compare.py` | 模型对比，**显式输出 winner / verdict** |
@@ -72,7 +73,9 @@
 | `probe_concurrency_consistency.py` | 并发下单例状态是否串 |
 | `probe_stream_latency.py` / `probe_run_trace.py` | 流式首字延迟与单次运行轨迹 |
 | `probe_delta_sync.py` / `probe_fingerprint_precision.py` | 增量同步收益与指纹精度 |
-| `probe_version_entry/filter/story.py` | 版本过滤的三条路径 |
+| `probe_version_entry.py` | 版本过滤：入口层（`/api/retrieve` 的 `min_revision_ts`） |
+| `probe_version_filter.py` | 版本过滤：检索层（两个 store 的 `$gte` 条件是否真的生效） |
+| `probe_version_story.py` | **把「通用 RAG 在会过期的语料上会失效」量化**：实测 sr 库 518 页横跨 2023-07 → 2026-10，其中 155 页（**30%**）是两年前的内容；用户问当前版本，检索却可能把两年前的条目排进来 |
 | `probe_minimax.py` / `probe_minimax_endpoints.py` | MiniMax 端点可用性与延迟 |
 | `probe_io.py` | 读写 IO 开销 |
 | `bench_latency.py` / `bench_concurrency.py` / `profile_latency.py` | 延迟、并发、火焰图 |
@@ -82,7 +85,7 @@
 | 脚本 | 作用 |
 |---|---|
 | `smoke.py` | 端到端冒烟 |
-| `smoke_refactor.py` | 重构回归自检：模块可导入、`strip_think`、`parse_inline_tool_calls`、工具超时文案、熔断两条路径一致性。**不依赖外部 API** |
+| `smoke_refactor.py` | 重构回归自检：模块可导入、`strip_think`、`parse_inline_tool_calls`、工具超时文案、熔断两条路径一致性。⚠ **只有前 6 项不依赖外部 API**，第 7 项会真调一次检索 → 打 SiliconFlow |
 | `scan_corpus_injection.py` | 在真实语料上跑注入规则，报的是**误报率**而不是命中率 |
 | `verify_ys_expansion.py` | 原神扩充后的端到端验收（三个新分类必须命中） |
 | `compare_corpus_shift.py` | 语料版本前后的检索结果差异 |
