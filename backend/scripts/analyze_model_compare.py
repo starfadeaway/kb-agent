@@ -45,8 +45,27 @@ METRICS = [
     ("hit_rate", "hit_rate"),
     ("latency_ms", "延迟ms"),
 ]
-# higher_is_better=False 的指标，差值方向相反才叫"更好"
+# 这些指标越小越好：mean_diff > 0 意味着「A 更慢」，
+# 也就是 **B 更好**。不显式处理方向，就会把
+# 「bge 慢 37.7ms，p<1e-10」写成「bge 更好」——正负号刚好反着。
 LOWER_IS_BETTER = {"latency_ms"}
+
+
+def _winner(mean_diff: float, higher_is_better: bool) -> str:
+    """给定差值与方向，返回谁更好。
+
+    为什么必须有这个函数：`significant=True` 只说明「差异不是噪声」，
+    不说明「谁赢」。裸看 mean_diff=+37.7 / p<1e-10，
+    对延迟这种越低越好的指标，含义恰恰是 **bge 更差**。
+    输出里不给 winner，读者就得自己反推符号 ——
+    而本实验唯二显著的结果**全是延迟**，正好落在这个陷阱里。
+    这和 `judge.pairwise` 把解析失败静默算成 TIE 是同一类错误：
+    把需要语义判断的信息编码成要读者自己解码的裸值。
+    """
+    if mean_diff == 0:
+        return "tie"
+    bge_is_better = (mean_diff > 0) if higher_is_better else (mean_diff < 0)
+    return "bge" if bge_is_better else "other"
 
 
 def _load(p: Path) -> dict[str, list[dict]]:
@@ -86,7 +105,8 @@ def main() -> None:
     print("  唯一变量 = embedding 模型；语料/分块/BM25/RRF/rerank/top_k/评测集全部冻结")
     print("=" * 100)
     print(f"{'档位':<6}{'指标':<12}{'bge':>10}{'Qwen':>10}{'Δ(bge-Qwen)':>14}"
-          f"{'t':>10}{'p':>12}{'d':>9}")
+          f"{'t':>10}{'p':>12}{'d':>9}   结论")
+    print("  （Δ 为正 = bge 数值更大；对延迟这类越低越好的指标，Δ 为正意味着 **bge 更慢**）")
 
     for label in labels:
         if label not in bge or label not in other:
@@ -115,17 +135,30 @@ def main() -> None:
             t = paired_test(a, b, key)
             mbv, mov = _mean(a, key), _mean(b, key)
             p = t["p"]
-            ptxt = "<1e-10" if p == 0 else f"{p:.4f}"
-            dtxt = f"{t['cohens_d']:.3f}"
+            underflow = p == 0.0
+            ptxt = "<1e-10" if underflow else f"{p:.4f}"
+            hi = key not in LOWER_IS_BETTER
+            win = _winner(t["mean_diff"], hi)
+            if win == "tie":
+                verdict = "-"
+            elif t.get("significant"):
+                verdict = f"{'bge' if win == 'bge' else 'Qwen'} 显著更优"
+            else:
+                verdict = f"{'bge' if win == 'bge' else 'Qwen'} 略优(未显著)"
             print(f"{label:<6}{name:<12}{mbv:>10.4f}{mov:>10.4f}"
-                  f"{t['mean_diff']:>+14.4f}{t['t']:>10.3f}{ptxt:>12}{dtxt:>9}")
+                  f"{t['mean_diff']:>+14.4f}{t['t']:>10.3f}{ptxt:>12}"
+                  f"{t['cohens_d']:>9.3f}   {verdict}")
             entry["metrics"][key] = {
                 "bge": round(mbv, 4), "other": round(mov, 4),
                 "mean_diff": round(t["mean_diff"], 4), "t": round(t["t"], 3),
-                "p": p, "cohens_d": round(t["cohens_d"], 3),
+                "p": p, "p_is_underflow": underflow,
+                "cohens_d": round(t["cohens_d"], 3),
                 "n": t["n"],
                 "significant": bool(t.get("significant")),
-                "higher_is_better": key not in LOWER_IS_BETTER,
+                "higher_is_better": hi,
+                # 谁更好，显式给出，避免读者自己反推符号
+                "winner": win,
+                "verdict": verdict,
             }
         report[label] = entry
         print()

@@ -22,10 +22,13 @@
         "mean_diff": 0.0,
         "t": 0.0,
         "p": 1.0,
+        "p_is_underflow": false,
         "cohens_d": 0.0,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "tie",
+        "verdict": "-"
       },
       "ndcg": {
         "bge": 0.8621,
@@ -33,10 +36,13 @@
         "mean_diff": 0.0,
         "t": 0.0,
         "p": 1.0,
+        "p_is_underflow": false,
         "cohens_d": 0.0,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "tie",
+        "verdict": "-"
       },
       "recall@3": {
         "bge": 0.8966,
@@ -44,10 +50,13 @@
         "mean_diff": 0.0,
         "t": 0.0,
         "p": 1.0,
+        "p_is_underflow": false,
         "cohens_d": 0.0,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "tie",
+        "verdict": "-"
       },
       "page_hit": {
         "bge": 0.8966,
@@ -55,10 +64,13 @@
         "mean_diff": 0.0,
         "t": 0.0,
         "p": 1.0,
+        "p_is_underflow": false,
         "cohens_d": 0.0,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "tie",
+        "verdict": "-"
       },
       "hit_rate": {
         "bge": 0.8966,
@@ -66,10 +78,13 @@
         "mean_diff": 0.0,
         "t": 0.0,
         "p": 1.0,
+        "p_is_underflow": false,
         "cohens_d": 0.0,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "tie",
+        "verdict": "-"
       },
       "latency_ms": {
         "bge": 88.1724,
@@ -77,10 +92,13 @@
         "mean_diff": -0.7586,
         "t": -0.95,
         "p": 0.3419,
+        "p_is_underflow": false,
         "cohens_d": -0.002,
         "n": 29,
         "significant": false,
-        "higher_is_better": false
+        "higher_is_better": false,
+        "winner": "bge",
+        "verdict": "bge 略优(未显著)"
       }
     }
   },
@@ -95,10 +113,13 @@
         "mean_diff": 0.0517,
         "t": 0.902,
         "p": 0.3673,
+        "p_is_underflow": false,
         "cohens_d": 0.133,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "bge",
+        "verdict": "bge 略优(未显著)"
       },
       "ndcg": {
         "bge": 0.8276,
@@ -106,10 +127,13 @@
         "mean_diff": 0.0382,
         "t": 0.64,
         "p": 0.5222,
+        "p_is_underflow": false,
         "cohens_d": 0.099,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "bge",
+        "verdict": "bge 略优(未显著)"
       },
       "recall@3": {
         "bge": 0.8276,
@@ -117,10 +141,13 @@
         "mean_diff": 0.0,
         "t": 0.0,
         "p": 1.0,
+        "p_is_underflow": false,
         "cohens_d": 0.0,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "tie",
+        "verdict": "-"
       },
       "page_hit": {
         "bge": 0.8276,
@@ -128,10 +155,13 @@
         "mean_diff": 0.0,
         "t": 0.0,
         "p": 1.0,
+        "p_is_underflow": false,
         "cohens_d": 0.0,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "tie",
+        "verdict": "-"
       },
       "hit_rate": {
         "bge": 0.8276,
@@ -139,10 +169,13 @@
         "mean_diff": 0.0,
         "t": 0.0,
         "p": 1.0,
+        "p_is_underflow": false,
         "cohens_d": 0.0,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "tie",
+        "verdict": "-"
       },
       "latency_ms": {
         "bge": 161.7586,
@@ -150,10 +183,13 @@
         "mean_diff": 37.6552,
         "t": 4.376,
         "p": 0.0,
+        "p_is_underflow": true,
         "cohens_d": 0.393,
         "n": 29,
         "significant": true,
-        "higher_is_better": false
+        "higher_is_better": false,
+        "winner": "other",
+        "verdict": "Qwen 显著更优"
       }
     }
   },
@@ -168,10 +204,13 @@
         "mean_diff": 0.0115,
         "t": 0.226,
         "p": 0.8215,
+        "p_is_underflow": false,
         "cohens_d": 0.034,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "bge",
+        "verdict": "bge 略优(未显著)"
       },
       "ndcg": {
         "bge": 0.8793,
@@ -179,10 +218,13 @@
         "mean_diff": 0.0172,
         "t": 0.328,
         "p": 0.7428,
+        "p_is_underflow": false,
         "cohens_d": 0.052,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "bge",
+        "verdict": "bge 略优(未显著)"
       },
       "recall@3": {
         "bge": 0.8966,
@@ -190,10 +232,13 @@
         "mean_diff": 0.0345,
         "t": 0.571,
         "p": 0.5683,
+        "p_is_underflow": false,
         "cohens_d": 0.104,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "bge",
+        "verdict": "bge 略优(未显著)"
       },
       "page_hit": {
         "bge": 0.8966,
@@ -201,10 +246,13 @@
         "mean_diff": 0.0345,
         "t": 0.571,
         "p": 0.5683,
+        "p_is_underflow": false,
         "cohens_d": 0.104,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "bge",
+        "verdict": "bge 略优(未显著)"
       },
       "hit_rate": {
         "bge": 0.8966,
@@ -212,10 +260,13 @@
         "mean_diff": 0.0345,
         "t": 0.571,
         "p": 0.5683,
+        "p_is_underflow": false,
         "cohens_d": 0.104,
         "n": 29,
         "significant": false,
-        "higher_is_better": true
+        "higher_is_better": true,
+        "winner": "bge",
+        "verdict": "bge 略优(未显著)"
       },
       "latency_ms": {
         "bge": 217.7241,
@@ -223,10 +274,13 @@
         "mean_diff": 26.3103,
         "t": 2.401,
         "p": 0.0163,
+        "p_is_underflow": false,
         "cohens_d": 0.076,
         "n": 29,
         "significant": true,
-        "higher_is_better": false
+        "higher_is_better": false,
+        "winner": "other",
+        "verdict": "Qwen 显著更优"
       }
     }
   }
