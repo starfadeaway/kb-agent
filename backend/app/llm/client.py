@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 from dataclasses import dataclass
 from typing import Any, ClassVar
@@ -15,6 +16,8 @@ import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -238,7 +241,48 @@ class LLMClient:
         return self._judge
 
     async def aclose(self) -> None:
-        await self._rerank_http.aclose()
+        """关掉本实例持有的**全部**网络客户端，并把懒加载槽位复位。
+
+        之前这里只关了 `_rerank_http`，四个 `AsyncOpenAI`
+        （deepseek / minimax / silicon / judge）各自的 httpx 连接池从不释放 ——
+        进程退出时剩下的就是那条 `RuntimeError: Event loop is closed` 噪音。
+
+        复位（置 None + 重建 `_rerank_http`）不是洁癖，是必需的：
+        `aclose()` 在三类地方被调用 ——
+        FastAPI shutdown、`crawl.py` / `bulk_ingest.py` 脚本收尾、
+        `pipeline.py` 的自检入口 —— 而这些 client 都是**全局单例 `get_llm()`**。
+        只关不复位的话，同进程内任何在 close 之后发生的调用都会拿到一个
+        已关闭的 client，直接报 `Event has been closed`。
+        """
+        clients = [
+            c
+            for c in (self._silicon, self._judge, *self._chat_providers.values())
+            if c is not None
+        ]
+        # 先重建再关：任何一个 client 关失败都不该让剩下的漏掉。
+        old_http = self._rerank_http
+        self._rerank_http = httpx.AsyncClient(timeout=30.0)
+        errors: list[str] = []
+
+        try:
+            await old_http.aclose()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"rerank_http: {exc}")
+        for client in clients:
+            try:
+                await client.close()
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{type(client).__name__}: {exc}")
+
+        # 复位：置空才能让下次调用懒加载出一个可用的 client。
+        # 按已有 key 重建而不是写字面量 —— 动态注册过的基座不能被清掉。
+        self._chat_providers = dict.fromkeys(self._chat_providers)
+        self._silicon = None
+        self._judge = None
+
+        if errors:
+            logger.warning("LLMClient 关闭时部分失败：%s", "; ".join(errors))
+        logger.info("LLMClient 已关闭：%d 个 OpenAI 兼容客户端", len(clients))
 
     # ---------------- Chat ----------------
     def chat_backend_name(self, backend: str | None) -> str:
