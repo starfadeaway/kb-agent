@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -23,6 +24,9 @@ from dataclasses import dataclass
 from app.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
+
+# Judge 单次实测约 28.5s（SiliconFlow Qwen3-8B），120s 留了四倍余量。
+DEFAULT_JUDGE_TIMEOUT = 120.0
 
 _JSON_RE = re.compile(r"\{[\s\S]*\}")
 
@@ -108,9 +112,30 @@ def _clamp(v) -> float:
 
 
 class Judge:
-    def __init__(self, llm: LLMClient, model: str | None = None) -> None:
+    """给回答打分。**每一次对 Judge 的调用都有超时上限。**
+
+    为什么必须有：早先 `score()` / `pairwise()` 直接
+    `await self.llm.judge(...)`，超时完全依赖 OpenAI SDK 的默认值（600 秒）。
+    实测已经踩过两次：
+      - 实验 E 的 sr-008 拿到 `judge_error:APITimeoutError`；
+      - 并发一致性探针的第二轮出现连续 60 秒零读入。
+
+    评测跑在无人值守的后台里，一次 Judge 挂住就足以让整轮实验停在那里，
+    而 **SDK 的 600 秒兜底远长于任何一次正常的打分（28.5s）**，
+    等下去既拿不到结果，也看不出是哪一档出的问题。
+    超时后走既有 except 分支，标记为 `judge_error:*`，
+    由聚合层剔除（见 exp_common.is_kept）——**失败可识别，而不是静默挂起**。
+    """
+
+    def __init__(
+        self,
+        llm: LLMClient,
+        model: str | None = None,
+        timeout: float = DEFAULT_JUDGE_TIMEOUT,
+    ) -> None:
         self.llm = llm
         self.model = model
+        self.timeout = timeout
 
     async def score(
         self, *, question: str, gold: str, answer: str, contexts: str, max_context_chars: int = 6000
@@ -124,7 +149,10 @@ class Judge:
             answer=answer.strip(),
         )
         try:
-            raw = await self.llm.judge(prompt, model=self.model)
+            raw = await asyncio.wait_for(
+                self.llm.judge(prompt, model=self.model),
+                timeout=self.timeout,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Judge 调用失败: %s", exc)
             return JudgeScore(0, 0, 0, f"judge_error:{type(exc).__name__}", "")
@@ -180,7 +208,10 @@ class Judge:
                 b=second.strip(),
             )
             try:
-                raw = await self.llm.judge(prompt, model=self.model)
+                raw = await asyncio.wait_for(
+                    self.llm.judge(prompt, model=self.model),
+                    timeout=self.timeout,
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Judge 成对比较失败: %s", exc)
                 return "TIE", f"judge_error:{type(exc).__name__}（未得到有效结论，非真实平局）"
