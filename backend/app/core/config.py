@@ -83,7 +83,10 @@ class Settings:
     # `chroma_path` 自己（./data/chroma）这个目录并不存在、也不使用。
     chroma_path: str = field(default_factory=lambda: _env("CHROMA_PATH", "./data/chroma"))
     chroma_collection_prefix: str = field(default_factory=lambda: _env("CHROMA_COLLECTION_PREFIX", "kb"))
-    # lancedb（真实向量库）| numpy（零依赖精确索引）| sqlite（最小演示后端）
+    # lancedb（真实向量库）| numpy（零依赖精确索引）。
+    # 只有这两个后端 —— 早先这里写着第三个「sqlite（最小演示后端）」，
+    # 但 sqlite3 / SQLiteStore 在 app/ 下从来没有任何实现，
+    # 是一句写在注释里的虚构实现。由 test_no_phantom_backend_declared 守住。
     vector_backend: str = field(default_factory=lambda: _env("VECTOR_BACKEND", "lancedb"))
     # ANN 近似索引：默认关闭。开启会引入近似误差，改变排名，
     # 而评测必须可复现，所以只在规模大到暴力扫描吃不消时才打开。

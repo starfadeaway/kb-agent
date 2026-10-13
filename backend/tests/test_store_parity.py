@@ -14,7 +14,14 @@
 
 from __future__ import annotations
 
+import importlib
+import inspect
+import re
+from pathlib import Path
+
 import numpy as np
+from app.core import config
+from app.store.vector_store import get_vector_store
 
 
 def _write(store, ids, texts, metas, dim: int = 4):
@@ -137,3 +144,77 @@ def test_search_returns_same_ranking_for_same_query(stores_probe, chunk_meta):
     n_ids = [h.chunk_id for h in np_store.query(query_embedding=q, game="sr", top_k=3)]
     l_ids = [h.chunk_id for h in lance.query(query_embedding=q, game="sr", top_k=3)]
     assert n_ids == l_ids, f"两个后端 top-3 排序不同：\n  numpy={n_ids}\n  lance={l_ids}"
+
+
+
+
+# --------------------------------------------------------------------------
+# 注释不得宣称不存在的实现
+# --------------------------------------------------------------------------
+# 这条不是风格洁癖。`get_vector_store` 的 docstring 与 config.py 的注释
+# 都曾写着「sqlite（最小演示后端）」，把后端写成三个 ——
+# 而 `sqlite3` / `SQLiteStore` 在 `app/` 下**从来没有任何实现**。
+#
+# 一句注释里的虚构实现比不写更糟：面试官追问「第三个后端怎么实现的」
+# 会当场露底，而且它恰好出现在要写进简历的这个项目里。
+#
+# 双向验证：对修复前的代码快照实跑本文件，这组断言必须失败。
+
+# 后端名 -> 该后端在源码中必须能找到的实现证据
+_BACKEND_EVIDENCE = {
+    "lancedb": ("app.store.lance_store", "LanceVectorStore"),
+    "numpy": ("app.store.vector_store", "VectorStore"),
+}
+# 归一化与存储无关，不算后端声明
+_NOT_BACKENDS = {"vector", "store", "backend", "ann", "numpy", "default",
+                 "env", "field", "factory", "dict", "str", "int", "bool"}
+
+# 后端声明有两种写法都要认：
+#   - lancedb（默认）：真实向量库…
+#   - numpy：零依赖兜底…
+# 半角 '(' 不能当说明括号 —— 否则 `field(default_factory=…)` 会被误认成后端。
+_BACKEND_DECL = re.compile(r"-\s*([a-z][a-z0-9_]*)\s*[（:：]")
+_BACKEND_DECL_PIPE = re.compile(r"(?:^|[|｜])\s*([a-z][a-z0-9_]*)\s*[（:：]")
+
+
+def _declared_backends(doc: str) -> set[str]:
+    """从 docstring 里抠出后端声明。"""
+    names = {m.group(1) for m in _BACKEND_DECL.finditer(doc)}
+    names |= {m.group(1) for m in _BACKEND_DECL_PIPE.finditer(doc)}
+    return names
+
+
+def test_no_phantom_backend_declared():
+    """docstring 里提到的每个后端都必须真的有可 import 的实现。"""
+    doc = inspect.getdoc(get_vector_store) or ""
+    for name in _declared_backends(doc):
+        if name in _NOT_BACKENDS:
+            continue
+        assert name in _BACKEND_EVIDENCE, (
+            f"get_vector_store 的 docstring 宣称了 {name!r} 后端，"
+            f"但 _BACKEND_EVIDENCE 里没有它 —— 虚构的实现比不宣传更糟"
+        )
+    for name, (mod_name, attr) in _BACKEND_EVIDENCE.items():
+        mod = importlib.import_module(mod_name)
+        assert hasattr(mod, attr), \
+            f"{name} 后端声称的实现 {mod_name}.{attr} 不存在"
+
+
+def test_config_comment_matches_real_backends():
+    """config.py 里 vector_backend 上方的注释不能提未实现的后端。"""
+    cfg_src = Path(config.__file__).read_text(encoding="utf-8")
+    lines = cfg_src.splitlines()
+    idx = next(i for i, ln in enumerate(lines)
+               if "vector_backend" in ln and "field(" in ln)
+    comment = "\n".join(lines[max(0, idx - 8):idx])
+    for name in _declared_backends(comment):
+        if name in _NOT_BACKENDS:
+            continue
+        assert name in _BACKEND_EVIDENCE, \
+            f"config.py 注释提到后端 {name!r}，但它没有实现"
+
+
+def test_phantom_backend_is_named_in_doc_as_history():
+    """这段纠正说明必须留着：否则下一个人会把 sqlite 再当成真后端加回来。"""
+    doc = (inspect.getdoc(get_vector_store) or "").lower()
+    assert "sqlite" in doc, "删掉了 sqlite 的纠正说明 —— 它会被当成真后端再加回来"

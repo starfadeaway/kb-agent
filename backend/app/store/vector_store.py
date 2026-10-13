@@ -349,9 +349,15 @@ def get_vector_store(settings: Settings | None = None):
 
     - lancedb（默认）：真实向量库，跨进程持久化已实测可用；暴力精确扫描。
     - numpy：零依赖兜底，LanceDB 不可用时（未装 / 平台无轮子）自动降级。
-    - sqlite：内置的极小语料演示后端，连 lancedb 都没有时用。
 
-    三者共用 Collection 接口，换后端不需要动上层任何代码。
+    **只有这两个后端。** 早先这里还列过一个 sqlite 后端，但 `sqlite3` /
+    `SQLiteStore` 在 `app/` 下从来没有任何实现 —— 那是一句写在注释里的
+    虚构实现。宣传一个不存在的东西比不宣传更糟：面试官追问"第三个后端怎么
+    实现的"会当场露底。现在由 `tests/test_store_parity.py` 的
+    `test_no_phantom_backend_declared` 守住：docstring 与 config 注释里
+    出现的每个后端名都必须有对应实现。
+
+    两者共用 Collection 接口，换后端不需要动上层任何代码。
     """
     global _default
     if _default is None:
