@@ -20,7 +20,15 @@ from app.store.db import Base
 
 
 class Page(Base):
-    """wiki 页面元数据。last_revision 用于版本时效性过滤。"""
+    """wiki 页面元数据。last_revision 用于版本时效性过滤。
+
+    `content_hash` 是**内容指纹**：回答「这一页实质上变了没有」。
+    它与 `last_revision_ts` 是两件事 ——
+    wiki 页面可能被编辑但内容没变（改错别字、调排版），
+    `revision_ts` 会变而 `content_hash` 不变。
+    增量同步只该按后者决定要不要重建，前者只用来判断"要不要重抓正文"。
+    没有这个字段，「哪些页变了」只能靠全站重抓来回答。
+    """
 
     __tablename__ = "pages"
     __table_args__ = (
@@ -36,6 +44,7 @@ class Page(Base):
     url: Mapped[str] = mapped_column(String(512), default="")
     last_revision: Mapped[int] = mapped_column(BigInteger, default=0)
     last_revision_ts: Mapped[str] = mapped_column(String(32), default="")
+    content_hash: Mapped[str] = mapped_column(String(16), default="", index=True)
     infobox: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     n_chars: Mapped[int] = mapped_column(Integer, default=0)
     n_chunks: Mapped[int] = mapped_column(Integer, default=0)
@@ -46,6 +55,11 @@ class ChunkMeta(Base):
     """chunk 元数据（正文与向量在向量库里，这里只放可过滤的结构化字段）。
 
     独立于 Page 存 chunk，是为了让"按版本/按章节过滤"成为一次索引扫描而不是 join。
+
+    `content_hash` 是**块级**指纹，与 `Page.content_hash` 分工不同：
+    页面没变不代表块没变（切块参数改了），块没变更不代表 embedding 可以复用 ——
+    但只要块指纹一致，就**一定**可以跳过重新 embedding。
+    这是增量相对全量最实在的收益来源。
     """
 
     __tablename__ = "chunks"
@@ -64,6 +78,7 @@ class ChunkMeta(Base):
     n_chars: Mapped[int] = mapped_column(Integer, default=0)
     last_revision: Mapped[int] = mapped_column(BigInteger, default=0)
     last_revision_ts: Mapped[str] = mapped_column(String(32), default="")
+    content_hash: Mapped[str] = mapped_column(String(16), default="")
     source_url: Mapped[str] = mapped_column(String(512), default="")
     truncated: Mapped[bool] = mapped_column(Integer, default=0)
 

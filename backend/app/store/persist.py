@@ -23,6 +23,7 @@ from app.core.config import Settings, get_settings
 # 一个是数据库表（SQLAlchemy model）。同名裸导入时后者会把前者顶掉，
 # 于是下面构造 EvalCase(...) 实际在构造 ORM 对象 —— 必须显式区分。
 from app.eval.cases import EvalCase as EvalCaseDef
+from app.ingest.fingerprint import chunk_hash, page_hash
 from app.ingest.pipeline import IngestConfig, load_cached_page
 from app.store.db import MySQLUnavailable, init_db, session_scope
 from app.store.models import ChunkMeta, EvalResult, Fact, Message, Page, Run, Session, ToolCallLog
@@ -323,6 +324,7 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
                 url=url,
                 last_revision=page.revision_id,
                 last_revision_ts=page.last_revision or "",
+                content_hash=page_hash(page.wikitext),
                 n_chars=sum(c.char_len for c in chunks),
                 n_chunks=len(chunks),
             )
@@ -332,6 +334,7 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
                     url=ins.inserted.url,
                     last_revision=ins.inserted.last_revision,
                     last_revision_ts=ins.inserted.last_revision_ts,
+                    content_hash=ins.inserted.content_hash,
                     n_chars=ins.inserted.n_chars,
                     n_chunks=ins.inserted.n_chunks,
                 )
@@ -348,6 +351,7 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
                             "chunk_index": c.chunk_index, "n_chars": c.char_len,
                             "last_revision": c.last_revision,
                             "last_revision_ts": c.last_revision_ts or "",
+                            "content_hash": chunk_hash(c.text),
                             "source_url": c.source_url, "truncated": int(bool(c.truncated)),
                         }
                         for c in chunks
@@ -359,6 +363,7 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
                         n_chars=ins.inserted.n_chars,
                         last_revision=ins.inserted.last_revision,
                         last_revision_ts=ins.inserted.last_revision_ts,
+                        content_hash=ins.inserted.content_hash,
                         source_url=ins.inserted.source_url,
                     )
                 )

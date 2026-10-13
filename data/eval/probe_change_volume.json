@@ -1,0 +1,26 @@
+{
+  "probed_at": "2026-10-13T13:27:31Z",
+  "site": "sr",
+  "sweeps": [
+    {
+      "label": "近 7 天",
+      "window_start": "2026-10-06T13:27:31Z",
+      "requests": 6,
+      "changes": 2922,
+      "unique_pages": 1157,
+      "oldest_seen": "2026-07-15T13:36:29Z",
+      "newest_seen": "2026-10-06T13:08:31Z",
+      "exhausted": true
+    },
+    {
+      "label": "近 30 天",
+      "window_start": "2026-09-13T13:27:31Z",
+      "requests": 2,
+      "changes": 1000,
+      "unique_pages": 547,
+      "oldest_seen": "2026-07-31T11:04:22Z",
+      "newest_seen": "2026-09-13T12:13:24Z",
+      "exhausted": false
+    }
+  ]
+}

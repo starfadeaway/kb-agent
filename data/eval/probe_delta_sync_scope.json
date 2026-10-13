@@ -1,0 +1,38 @@
+{
+  "probed_at": "2026-10-13T13:31:35Z",
+  "game": "sr",
+  "local_pages": 707,
+  "windows": [
+    {
+      "label": "近 7 天",
+      "changed_pages": 1003,
+      "intersect": 148,
+      "local_pct": 20.9,
+      "changes": 2500,
+      "requests": 6,
+      "waf_hits": 1,
+      "exhausted": false,
+      "sample_intersect": [
+        "@只要很多爱",
+        "@爱能止痛",
+        "@独自探店中",
+        "@饿了喵点评",
+        "Saber",
+        "「妖月的倒影」",
+        "「张嘴」",
+        "「无缘黎明」卡厄斯兰那"
+      ]
+    },
+    {
+      "label": "近 30 天",
+      "changed_pages": 0,
+      "intersect": 0,
+      "local_pct": 0.0,
+      "changes": 0,
+      "requests": 1,
+      "waf_hits": 1,
+      "exhausted": true,
+      "sample_intersect": []
+    }
+  ]
+}

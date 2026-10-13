@@ -13,15 +13,25 @@ venv/
 # data/raw 是可再生派生物（重新抓取即可），data/lance 是当前默认的向量索引，
 # data/vectors 是 numpy fallback 的索引 —— 三个都可以用 rebuild_index.py 重建，
 # 而且 data/lance 有 60MB 二进制，提交进去只会让仓库没法看 diff。
-# checkpoint 与 eval 结果要保留：它们是实验可复现的证据。
+# eval 结果要保留：它们是实验可复现的证据。
 data/chroma/
 data/lance/
 data/vectors/
 data/raw/
-data/checkpoints/
 *.sqlite
 *.db
 .tmp_probe/
+.tmp_guard/
+
+# checkpoint 现在**入库**：它不是派生物，而是版本更新链路的运行状态。
+# data/raw 丢了重抓就行（要花 WAF 配额），checkpoint 丢了就得整库重抓才能重建。
+# 而且它是 `probe_delta_sync.py` 算「变更页 ∩ 已收录页」的唯一依据 ——
+# 没有它，增量收益那 20.9% 无法复现。30 个文件共 ~42KB，没有体积负担。
+# （此前这条规则与上一段注释「checkpoint 要保留」自相矛盾，规则把该留的挡掉了。）
+
+# 实验的中间态：exp_e.py 每档落一份 .partial.json 是为了崩溃时保住已完成的部分，
+# 实验跑完后它就是垃圾，不该入库（正式产物 exp_E*.json 照常入库）。
+data/eval/*.partial.json
 
 # 自检/验收脚本的临时产物
 _tmp_*.py

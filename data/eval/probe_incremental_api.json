@@ -1,0 +1,54 @@
+{
+  "recentchanges": {
+    "status": 200,
+    "ctype": "application/json; charset=utf-8",
+    "verdict": "OK",
+    "count": 20,
+    "sample": [
+      {
+        "type": "new",
+        "ns": 0,
+        "title": "这样就能把你捧在手心啦",
+        "pageid": 41769,
+        "revid": 104295,
+        "old_revid": 0,
+        "rcid": 100282,
+        "timestamp": "2026-10-13T13:07:14Z"
+      },
+      {
+        "type": "edit",
+        "ns": 0,
+        "title": "「乐子神智取米哈游」",
+        "pageid": 41767,
+        "revid": 104294,
+        "old_revid": 104291,
+        "rcid": 100281,
+        "timestamp": "2026-10-13T12:47:38Z"
+      },
+      {
+        "type": "edit",
+        "ns": 0,
+        "title": "「重返群星之旅」第十二期",
+        "pageid": 39474,
+        "revid": 104293,
+        "old_revid": 99218,
+        "rcid": 100280,
+        "timestamp": "2026-10-13T12:44:40Z"
+      }
+    ],
+    "oldest": "2026-10-13T05:43:36Z"
+  },
+  "allpages_rv": {
+    "status": 200,
+    "ctype": "application/json; charset=utf-8",
+    "verdict": "OK",
+    "count": 20
+  },
+  "recentchanges_window": {
+    "status": 200,
+    "ctype": "application/json; charset=utf-8",
+    "verdict": "OK",
+    "count": 50,
+    "uniq_titles": 27
+  }
+}

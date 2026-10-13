@@ -8,11 +8,11 @@
 |---|---|---|
 | 检索策略消融（n=29, top_k=3） | 纯 BM25 0.793 → 纯向量 0.828 → 融合 0.828 → **+重排 0.897**（A3 仍是最优档）。旧 2306-chunk 语料下为 0.897/0.828/0.897/**0.966**，补抓 368 页角色页后指标整体下移，退化项**全部**来自攻略页挤占 | [`data/eval/exp_A_role_pages.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
 | 分块 / embed_mode 消融 | `embed_mode title→text` 使 MRR **0.736→0.506（−23.0pt，p=0.0001）**；chunk_size 在 500/800/1200 下 **A3 指标完全相同**（差异被重排吸收） | [`data/eval/exp_B0..B3_sr_k3.json`](data/eval) |
-| Agent 能力消融（n=15, Judge） | 无工具 **2.43** → `search_kb` **4.67** → 全套工具 4.80 | [`data/eval/exp_C.json`](data/eval/exp_C.json) |
+| Agent 能力消融（生成侧，Judge；n=15/13/13） | 无工具 **2.90** → `search_kb` **4.77** → 全套工具 4.73；C0→C1 配对 Δ=+1.88（p<0.0001, d=2.02） | [`data/eval/exp_C.json`](data/eval/exp_C.json) · [`EVALUATION.md`](EVALUATION.md) |
 | 假前提题（幻觉测试） | 无检索 3.83 → 有检索 **5.00**（模型学会"明确说不知道"） | 同上 |
 | Chat 基座对比（n=15, DeepSeek⇄MiniMax） | 质量 **4.57 vs 4.00，p=0.167 未达显著**（不敢说谁更强）；延迟 **4.08×**（p=0.0011 显著）。两者失败模式**互补** | [`data/eval/exp_E.json`](data/eval/exp_E.json) |
-| 代价 | 挂知识库 = prompt token **×19.9**、延迟 3.5 倍；C2 比 C1 多花 8% token 只涨 0.13 分 | [`docs/cost_latency_quality.md`](docs/cost_latency_quality.md) |
-| 并发（真实问题压测） | 并发 4 吞吐 **×3.98**（5.01 req/s），4 档 top-5 结果**逐条一致** | [`docs/concurrency.md`](docs/concurrency.md) |
+| 代价 | 挂知识库 = prompt token **×20.2**、延迟 3.5 倍（串行实测口径）；C2 比 C1 多花 **23%** token，judge 只涨 0.14 且 p=0.16 未达显著 | [`docs/cost_latency_quality.md`](docs/cost_latency_quality.md) |
+| 并发（真实问题压测） | 并发 4 吞吐 **×3.40**（4.10 req/s），1/4/8 三档 top-5 结果**逐条一致** | [`docs/concurrency.md`](docs/concurrency.md) |
 | 流式 | TTFT **860ms** vs 非流式 3410ms（感知延迟 −75%），总耗时仅差 264ms | [`data/eval/probe_stream_latency.json`](data/eval) |
 | 失败模式 | 4 类，含「答案全对但引用了不存在的页面」 | [`docs/failure_analysis.md`](docs/failure_analysis.md) |
 
@@ -69,6 +69,7 @@ git commit、Python 版本、平台，以及当时的测量条件**（并发度�
 | `docs/concurrency.md` | **并发实测** —— 能开几个、同时跑会怎样、共享状态有哪些坑、怎么调 |
 | `docs/injection_guard.md` | **间接 Prompt 注入** —— 威胁模型、为什么"命中就拦"是错的、规则集实测误报率 |
 | `docs/fallback_chain.md` | **LLM 降级链** —— 哪些故障值得换模型、哪些换也没用、降级为什么必须显形 |
+| `docs/delta_sync.md` | **版本更新怎么做** —— 增量同步的实测口径、chunk 级脏数据陷阱、为什么先落内容指纹再动增量 |
 | `docs/experiments.md` | **五个实验各自想证明什么、结果里每列是什么意思** —— 忘了当初为什么做实验就看这个 |
 | `EVALUATION.md` | 实验数据与结论，含方法论教训 |
 
@@ -176,6 +177,8 @@ cd backend
 > 不重启的话 API 会继续用旧语料，看起来就像"补了数据也没用"。
 
 限流参数用的是实测过的 **batch=10 + interval=6s**（518 页 0 拦截的那组），
+后来补抓角色页又用同一组参数跑了 **368 页 / 5722 chunk，依然 0 次拦截** ——
+说明这组参数不是撞运气。
 新建 `scripts/crawl_all.py` 就是为了把「多分类串起来 + 失败不中断 + 限流统计」这件事固化下来。
 它会读 `data/checkpoints/{game}_{分类}.json` 跳过已抓标题，所以第二轮只补增量、不会重跑。
 
@@ -444,9 +447,10 @@ cd kb-agent\backend
 | 分块 | 实验 B 四组完成（3932 chunk 语料）：**embed_mode=title 显著更优（p=0.0001）**；chunk_size 在 500/800/1200 下 A3 指标完全相同 |
 | Embedding | 实验 D：**保留 bge-m3**，依据是 reranker 配套而非质量（A2 跨模型配对 p=0.6743，无法区分，且两模型方向互相矛盾）；Qwen 在融合档显著更快（−28ms，p<1e-10） |
 | 延迟 | A3 检索 785ms（纯 BM25 144ms 的 5.4 倍）；感知延迟靠流式 −85%；KV cache 自动生效，无需配置。⚠️ 索引从 2306 涨到 3932 chunk 后，A3 延迟从 567ms 涨到 785ms（+38%） |
-| 并发 | 实测 1/4/8 并发：4 并发吞吐 3.95x，8 并发 5.93x；同 query 各并发度下 top5 完全一致。冷缓存并发从"8 次重复建索引"降到 1 次（`docs/concurrency.md`） |
+| 并发 | 实测 1/4/8 并发：4 并发吞吐 3.40x，8 并发 5.18x；同 query 各并发度下 top5 完全一致。冷缓存并发从"8 次重复建索引"降到 1 次（`docs/concurrency.md`） |
 | 安全 | 间接 Prompt 注入：11 条规则分两级，10843 chunk 真实语料误报 **0**、攻击样本召回 **13/13**；工具结果一律包进不受信任数据区（`docs/injection_guard.md`） |
 | 可用性 | Chat 降级链：只对 429/5xx/超时降级，400/401 不重试；降级在响应 `fallback` 字段与 `/api/health` 留痕（`docs/fallback_chain.md`） |
+| 数据时效 | 版本更新：实测 wiki `recentchanges` 可穿过 WAF；近 7 天变更页 ∩ 已收录 = **148/707 页（20.9%）**，增量省 79% embedding。⚠️ 全站口径 1157 页会得出"增量无意义"的**相反结论**。内容指纹已落库（1401 页 + 10843 chunk 100% 覆盖），归一化把格式误判从 **100% 压到 0**（`docs/delta_sync.md`） |
 | Agent | 手搓 ReAct，4 工具 + 4 道安全阀 + 熔断；不可答问题从 7 步/30317 token 降到 4 步/6514 token |
 | 多库路由 | 三态（库内/越界/未提及）；越界走无工具单轮，实测 0 步 / 1.1s，库内 3–5 步 / 5–8s |
 | 后端 | FastAPI，`/api/health` `/api/retrieve` `/api/chat` `/api/chat/stream` `/api/runs` `/api/ingest` `/api/stats` |
@@ -588,17 +592,17 @@ embedding / rerank / judge **同时失效**，但：
 
 按"投入产出比 × 简历可信度"排序。每项都写清**为什么还没做**，避免看起来像是漏了。
 
-1. **在真实问题分布上重跑一遍实验 A–E**
-   现在 A/B/C/D/E 全部跑在星铁 56 条里、且检索实验的 29 条评测都在 sr。
-   评测集扩到三库之后，**还没重跑** —— 换语料后指标大概率会变，
-   拿旧数字当新结论就是造假。`rebuild_index.py` + `run_eval.py` 可离线重建，不吃 WAF 配额。
+1. **把评测集扩到三库，再重跑一遍实验 A–E**
+   补抓角色页后 A/B/D 已在新语料下重跑过一轮，但**29 条评测题仍然全在 sr**，
+   而线上真实问题分布是三库。评测集扩到三库之后必须再重跑 ——
+   拿只覆盖一个库的旧数字当全库结论就是造假。`rebuild_index.py` + `run_eval.py` 可离线重建，不吃 WAF 配额。
 
 2. **评测集继续加量**
    12 条/库只够验证"路由没错"，统计功效仍然不足
-   （实验 C 在 n=15 时 C1→C2 的 p=0.47 就已经分不出差异）。
+   （实验 C 在 n=13 时 C1→C2 的 p=0.16、d=0.28 就已经分不出差异）。
    经验上单库要 30+ 条才谈得上显著性。
 
-3. **把 zzz / ys 的语料规模拉到与星铁同量级**
-   现在 518 / 263 / 257 页，三库之间差一个数量级的量级差。
+3. **把 zzz 的语料规模拉到与 sr / ys 同量级**
+   现在 sr 706 / ys 435 / zzz 260 页，补抓角色页后 zzz 反而成了最短的板。
    跨库对比题（`ys-010` 圣遗物 vs 位面饰品）如果检索只命中了语料多的那个库，
    结论会偏向"语料多"而不是"路由对"，需要控制这个隐藏变量。

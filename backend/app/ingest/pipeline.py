@@ -17,6 +17,7 @@ from pathlib import Path
 
 from app.core.config import Settings, get_settings
 from app.ingest.chunker import Chunk, chunk_page, chunk_to_index_text
+from app.ingest.fingerprint import page_hash
 from app.ingest.page_filter import should_index
 from app.ingest.template_parser import find_infobox
 from app.ingest.wiki_client import PageContent, WikiClient
@@ -133,6 +134,7 @@ def cache_raw(page: PageContent, game: str) -> bool:
     changed = False
 
     p = raw_cache_path(page, game)
+    ph = page_hash(page.wikitext)
     if not p.is_file() or p.read_text(encoding="utf-8") != page.wikitext:
         p.write_text(page.wikitext, encoding="utf-8")
         changed = True
@@ -145,6 +147,9 @@ def cache_raw(page: PageContent, game: str) -> bool:
             "last_revision": page.last_revision or "",
             "last_revision_ts": page.last_revision or "",
             "revision_id": page.revision_id,
+            # 指纹必须落在 sidecar 里：它是「不读正文就能判断变没变」的唯一凭据，
+            # 也是步 3（按页先删后建）跳过无谓重建的依据。
+            "content_hash": ph,
         },
         ensure_ascii=False,
         indent=2,
@@ -173,6 +178,21 @@ def load_cached_page(page_id: int, game: str) -> PageContent | None:
         last_revision=meta.get("last_revision") or None,
         revision_id=int(meta.get("revision_id") or 0),
     )
+
+
+def cached_page_hash(page_id: int, game: str) -> str:
+    """只读 sidecar 里的指纹，不碰正文文件。
+
+    增量检测会按批遍历几千个页面；每次都读全文算哈希会把
+    "检测是否变更"变成"重新读取整个语料"，那就没有省下任何东西。
+    """
+    meta_p = raw_meta_path(page_id, game)
+    if not meta_p.is_file():
+        return ""
+    try:
+        return str(json.loads(meta_p.read_text(encoding="utf-8")).get("content_hash") or "")
+    except (json.JSONDecodeError, OSError):
+        return ""
 
 
 def page_to_chunks(page: PageContent, cfg: IngestConfig, source_url: str) -> list[Chunk]:

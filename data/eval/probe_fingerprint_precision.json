@@ -1,0 +1,31 @@
+{
+  "probe": "fingerprint_precision",
+  "note": "唯一变量 = 哈希前是否归一化；语料与扰动方式相同",
+  "pages_total": 1405,
+  "false_positive_without_normalize": 1405,
+  "false_positive_with_normalize": 0,
+  "false_positive_rate_without_normalize": 100.0,
+  "per_game": {
+    "sr": {
+      "pages": 707,
+      "false_positive_without_normalize": 707,
+      "false_positive_with_normalize": 0,
+      "false_positive_rate_without_normalize": 100.0
+    },
+    "ys": {
+      "pages": 435,
+      "false_positive_without_normalize": 435,
+      "false_positive_with_normalize": 0,
+      "false_positive_rate_without_normalize": 100.0
+    },
+    "zzz": {
+      "pages": 263,
+      "false_positive_without_normalize": 263,
+      "false_positive_with_normalize": 0,
+      "false_positive_rate_without_normalize": 100.0
+    }
+  },
+  "normalize_is_idempotent": true,
+  "empty_input_safe": true,
+  "chunk_hash_sample": "56da80fcbae28bba"
+}
