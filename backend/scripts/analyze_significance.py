@@ -30,7 +30,17 @@ def load(name: str) -> list[dict]:
     # 而这个脚本的产物是要写进简历的量化数字，不能只在作者本机跑得通。
     # 复用 exp_common 的 EVAL_DIR，和 save 落盘的那份永远是同一个目录。
     p = EVAL_DIR / name
-    return json.loads(p.read_text(encoding="utf-8"))
+    data = json.loads(p.read_text(encoding="utf-8"))
+    # 产物尾部可能跟一个 `_meta` 出处块（没有 label）——
+    # exp_b 走 build_meta 会带，exp_E 经 merge_exp_e.py 合并后也会带。
+    # 不滤掉的话 `{d["label"]: d}` 直接 KeyError，而且报错信息
+    # （KeyError: 'label'）完全指不到真正的原因。
+    blocks = [d for d in data if isinstance(d, dict) and d.get("label")]
+    dropped = len(data) - len(blocks)
+    if dropped:
+        print(f"  （{name} 里有 {dropped} 个非档位块，已跳过："
+              f"多半是 _meta 出处块）")
+    return blocks
 
 
 def is_infra_failure(row: dict) -> bool:

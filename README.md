@@ -10,7 +10,7 @@
 | 分块 / embed_mode 消融 | `embed_mode title→text` 使 MRR **0.736→0.506（−23.0pt，p=0.0001）**；chunk_size 在 500/800/1200 下 **A3 指标完全相同**（差异被重排吸收） | [`data/eval/exp_B0..B3_sr_k3.json`](data/eval) |
 | Agent 能力消融（生成侧，Judge；n=15/13/13） | 无工具 **2.90** → `search_kb` **4.77** → 全套工具 4.73；C0→C1 配对 Δ=+1.88（p<0.0001, d=2.02） | [`data/eval/exp_C.json`](data/eval/exp_C.json) · [`EVALUATION.md`](EVALUATION.md) |
 | 假前提题（幻觉测试） | 无检索 3.83 → 有检索 **5.00**（模型学会"明确说不知道"） | 同上 |
-| Chat 基座对比（n=15, DeepSeek⇄MiniMax） | 质量 **4.57 vs 4.00，p=0.167 未达显著**（不敢说谁更强）；延迟 **4.08×**（p=0.0011 显著）。两者失败模式**互补** | [`data/eval/exp_E.json`](data/eval/exp_E.json) |
+| Chat 基座对比（n=14/14，DeepSeek⇄MiniMax） | 质量 **4.79 vs 4.29，p=0.0848 未达显著**（不敢说谁更强）；token **1.85×**。⚠️ 延迟结论本轮作废（E1 工具失败率 0→0.222，WAF 配额被打满）。两者失败模式**互补** | [`data/eval/exp_E.json`](data/eval/exp_E.json) |
 | 代价 | 挂知识库 = prompt token **×20.2**、延迟 3.5 倍（串行实测口径）；C2 比 C1 多花 **23%** token，judge 只涨 0.14 且 p=0.16 未达显著 | [`docs/cost_latency_quality.md`](docs/cost_latency_quality.md) |
 | 并发（真实问题压测） | 并发 4 吞吐 **×3.40**（4.10 req/s），1/4/8 三档 top-5 结果**逐条一致** | [`docs/concurrency.md`](docs/concurrency.md) |
 | 流式 | TTFT **860ms** vs 非流式 3410ms（感知延迟 −75%），总耗时仅差 264ms | [`data/eval/probe_stream_latency.json`](data/eval) |
@@ -328,7 +328,7 @@ Percona 虽然下放了但不是官方能力，面试时解释"为什么不用�
 | B | 分块 | ✅ 已完成。chunk 500/800/1200 × embed_mode title/text |
 | C | Agent 能力 | ✅ 已完成。C0 无工具 → C1 单工具 → C2 多工具循环（n=15） |
 | D | Embedding | ✅ 已完成。`bge-m3` vs `Qwen/Qwen3-Embedding-0.6B`（关重排+双侧归一化+独立库） |
-| E | Chat 模型 | ✅ 已完成。DeepSeek vs MiniMax（n=15，剔除 1 条基础设施失败后 n=14） |
+| E | Chat 模型 | ✅ 已完成。DeepSeek vs MiniMax（n=15，两档各剔除 1 条 Judge 侧失败后 n=14） |
 
 运行：
 

@@ -1,0 +1,41 @@
+{
+  "revision_old": "a4ef1d5",
+  "old": {
+    "E1": {
+      "n": 14,
+      "judge": 4.5714,
+      "tool_failure_rate": 0.0,
+      "tool_calls": 22,
+      "avg_latency_ms": 3696,
+      "avg_prompt_tokens": 3858
+    },
+    "E2": {
+      "n": 15,
+      "judge": 4.0,
+      "tool_failure_rate": 0.0385,
+      "tool_calls": 26,
+      "avg_latency_ms": 15232,
+      "avg_prompt_tokens": 7807
+    }
+  },
+  "new": {
+    "E1": {
+      "n": 14,
+      "judge": 4.7857,
+      "tool_failure_rate": 0.2222,
+      "tool_calls": 27,
+      "avg_latency_ms": 10390,
+      "avg_prompt_tokens": 4381
+    },
+    "E2": {
+      "n": 14,
+      "judge": 4.2857,
+      "tool_failure_rate": 0.087,
+      "tool_calls": 23,
+      "avg_latency_ms": 14544,
+      "avg_prompt_tokens": 8090
+    }
+  },
+  "latency_ratio_old": 4.121,
+  "latency_ratio_new": 1.4
+}
