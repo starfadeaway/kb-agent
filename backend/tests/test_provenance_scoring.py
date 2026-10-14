@@ -33,6 +33,7 @@ from app.eval.provenance_score import (
     declares_uncertainty,
     has_revision_wording,
     has_staleness_wording,
+    mask_question_echo,
     mentions_date,
     ref_revision_coverage,
     score_case,
@@ -259,17 +260,83 @@ def test_every_target_page_names_something():
             assert c.target_pages, f"{c.case_id} 没有任何 target_pages，会变成永远满分的空题"
 
 
-def test_selfrate_question_asks_for_uncertainty():
-    """selfrate 题面必须真的在问「有多确定」。
+def test_selfrate_question_does_not_ask_for_the_thing_it_measures():
+    """selfrate 题面**不能**出现「有多确定」这类索要不确定性的措辞。
 
-    没有这句，模型就没有理由说出「不确定」，
-    于是 `declares_uncertainty_rate` 量到的是
-    「模型会不会主动说」而不是「被问到了会不会答」——
-    这两件事不能混。
+    第一版题面写的是「请说明依据，并说说这个判断有多确定」，
+    结果 F1/F2 两档的不确定率都是 1.0 —— 题面直接把被测量的东西问出来了。
+    量到的因此是「被问到会不会答」，而设计意图是「会不会**主动**说」。
+
+    这条守卫守的就是那个方向：它不检查题面问得好不好，
+    只检查题面**没有把答案喂给模型**。
     """
     for c in PROVENANCE_CASES:
-        if c.kind == "selfrate":
-            assert "确定" in c.question, f"{c.case_id} 题面没在问确定性"
+        if c.kind != "selfrate":
+            continue
+        for prompt in ("有多确定", "多确定", "把握", "不确定", "能否确定",
+                       "请说明依据，并说说"):
+            assert prompt not in c.question, (
+                f"{c.case_id} 题面里出现了 {prompt!r} —— "
+                "selfrate 题不能主动索要不确定性，否则该指标恒为真。"
+            )
+
+
+def test_mask_question_echo_removes_only_markers_present_in_question():
+    """抹除只针对**题面里也有**的词，不能变成无差别删词。
+
+    如果不管题面一律抹掉，答案里所有「修订」都会被删，
+    指标会恒为 False —— 那不是修污染，是把仪器砸了。
+    """
+    q = "「三月七•巡猎」这个页面在 wiki 上是**哪一天**最后修订的？"
+    # 标记表里是「修订」而不是「最后修订」，所以抹完会留下一个「最后」残片。
+    # 残片不影响判定（判据只找标记词），这里断言的也是功能性质而非精确残串。
+    masked = mask_question_echo("该页面最后修订。", q)
+    assert "修订" not in masked, masked
+    assert masked.startswith("该页面")
+    # 题面里没有「版本」，答案里的「版本」必须留着
+    assert "版本" in mask_question_echo("我参考的是某个版本。", q)
+    # 只删题面里出现过的词
+    assert "过时" in mask_question_echo("该数据可能过时。", q)
+
+
+def test_wording_metrics_ignore_echoed_question_but_date_still_counts():
+    """题面回声不该算作模型自发表述，但日期必须照常命中。
+
+    这一条是本文件最核心的断言：它复现了那次「F1/F2 都是 1.0」的场景
+    —— 消融档压根没有日期可拿，模型只是把题面复读了一遍。
+    修好之后，F1 的措辞指标应该塌下来，而日期指标本来就是 0，
+    两者不能被混为一谈。
+    """
+    q = "「三月七•巡猎」这个页面在 wiki 上是**哪一天**最后修订的？"
+    # 模拟 F1：工具输出没有任何日期，模型只是复述题面并说不知道
+    f1_answer = "「三月七•巡猎」这个页面在 wiki 上是最后修订的，但知识库里没有这个日期。"
+    assert has_revision_wording(f1_answer, q) is False, (
+        "复述题面不算模型自发提到修订"
+    )
+    assert has_revision_wording(f1_answer) is True, (
+        "不带 question 参数时应回到旧行为（原始口径），否则无法对照"
+    )
+
+    # F2：模型自己给出了日期，也自己说了「修订」
+    f2_answer = "该页面最后修订于 2025-11-09。"
+    row = score_case(
+        ProvenanceCase(case_id="t", game="sr", kind="restate",
+                       question=q, target_pages=["三月七•巡猎"]),
+        f2_answer, [{"url": "u", "last_revision_ts": "2025-11-09"}],
+        {"三月七•巡猎": "2025-11-09"},
+    )
+    assert row["date_hit_rate"] == 1.0, "日期匹配不能被题面回声抹除影响"
+    assert row["has_revision_wording_raw"] is True
+    assert row["has_revision_wording"] is False, (
+        "「最后修订」在题面里，按新口径不算模型自发表述"
+    )
+
+
+def test_weak_marker_is_not_masked_by_question():
+    """弱标记「可能」不参与抹除，否则「可能不是最新版本」这个真信号会被删掉。"""
+    q = "根据你自己检索到的内容，你打算以哪一条作为主要依据？请说明理由。"
+    a = "以上信息可能不是最新版本。"
+    assert declares_uncertainty(a, q) is True
 
 
 def test_cases_for_filters_by_game():

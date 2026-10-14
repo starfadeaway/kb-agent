@@ -20,11 +20,15 @@ F1 关掉披露后，工具输出里**一个日期都没有**，提示词也删�
 > F1 的 date 指标只能读作「信息有没有被送到答案里」，
 > **不能**读作「加披露层之后模型变强了」。
 
-真正有信息量的是另外三个指标，它们在 F1 档同样有意义：
+真正有信息量的是另外两个指标，它们在 F1 档同样有意义：
 
-- `has_revision_wording_rate` —— 模型会不会说出「修订」这个概念；
 - `has_staleness_wording_rate` —— 模型会不会主动声明「可能已过时」；
 - `declares_uncertainty_rate` —— selfrate 题上模型会不会承认自己没把握。
+
+⚠ **「修订措辞率」已从报告中撤掉**（见 print_report 的第 4 条）。
+它量的是用词习惯而不是披露行为：拿到日期的档位会直接写日期、不用这个词，
+拿不到日期的档位反而只能说「最后修订于……（查不到）」，
+于是它与披露行为**负相关**，列出来只会误导。
 
 后两个尤其重要：它们正是 `docs/version_staleness.md` 第五节
 聚类实测所指的那条**原理上就不该由页面修订时间推出**的推断。
@@ -158,8 +162,7 @@ async def run_one(label: str, cases, gold_dates, tools, *, concurrency: int = 2)
 
     for r in rows:
         print(f"  [{label}] {r['case_id']:<12} 日期 {r['date_hits']}/{r['date_targets']}"
-              f"  修订词={int(r['has_revision_wording'])}"
-              f" 陈旧词={int(r['has_staleness_wording'])}"
+              f"  陈旧词={int(r['has_staleness_wording'])}"
               f" 存疑={int(r['declares_uncertainty'])}"
               f" 引用修订覆盖={r['ref_revision_coverage']}"
               f" tok={r['prompt_tokens']:>6} {r['latency_ms']:>6}ms"
@@ -168,7 +171,6 @@ async def run_one(label: str, cases, gold_dates, tools, *, concurrency: int = 2)
     agg = aggregate_rows(rows)
     print(f"  [{label}] 逐页命中={agg['page_level_date_hit_rate']} "
           f"全对={agg['case_level_all_hit_rate']} "
-          f"修订词={agg['has_revision_wording_rate']} "
           f"陈旧词={agg['has_staleness_wording_rate']} "
           f"存疑={agg['declares_uncertainty_rate']} "
           f"引用修订覆盖={agg['ref_revision_coverage']}")
@@ -182,17 +184,17 @@ def print_report(results) -> None:
     print("\n" + "=" * 96)
     print("  实验 F：披露层消融（F1 关 / F2 开）")
     print("=" * 96)
-    hdr = (f"{'档':<4}{'逐页日期命中':>14}{'全对率':>9}{'修订词':>9}"
-           f"{'陈旧词':>9}{'存疑率':>9}{'引用修订覆盖':>13}{'延迟ms':>9}{'错误':>6}")
+    # 「修订措辞率」这一列**被刻意撤掉**，理由写在 _REVISION_WORD_METRIC_RETRACTED。
+    hdr = (f"{'档':<4}{'逐页日期命中':>14}{'全对率':>9}{'陈旧词':>9}"
+           f"{'存疑率':>9}{'引用修订覆盖':>13}{'错误':>6}")
     print(hdr)
     for r in results:
         a = r["aggregate"]
         print(f"{r['label']:<4}{str(a['page_level_date_hit_rate']):>14}"
               f"{str(a['case_level_all_hit_rate']):>9}"
-              f"{str(a['has_revision_wording_rate']):>9}"
               f"{str(a['has_staleness_wording_rate']):>9}"
               f"{str(a['declares_uncertainty_rate']):>9}"
-              f"{a['ref_revision_coverage']:>13}{'':>9}"
+              f"{a['ref_revision_coverage']:>13}"
               f"{sum(1 for x in r['rows'] if x['error']):>6}")
 
     print("\n--- 逐条 ---")
@@ -204,7 +206,7 @@ def print_report(results) -> None:
                   + (f"  漏={x['missed_pages']}" if x["missed_pages"] else "")
                   + (f"  gold={gold}" if gold else ""))
 
-    print("\n⚠ 读这张表必须先接受三件事，否则会得出错误结论：")
+    print("\n⚠ 读这张表必须先接受四件事，否则会得出错误结论：")
     print("  1) F1 的工具输出里没有任何日期，所以「日期复述率低」是机械必然，")
     print("     测的是信息有没有送到答案，不是模型变强了；")
     print("  2) 本实验不评正确性。语料只有最新版快照，没有历史版本可比对，")
@@ -212,6 +214,21 @@ def print_report(results) -> None:
           "（docs/version_staleness.md 第四节）；")
     print("  3) 「陈旧词」「存疑」只说明模型表达了这层意思，"
           "**不代表它的判断是对的** —— 页面修订时间推不出内容时效。")
+    print(_REVISION_WORD_METRIC_RETRACTED)
+
+
+_REVISION_WORD_METRIC_RETRACTED = """
+  4) 「修订措辞率」已从表中撤掉 —— 它测的是**用词习惯**，不是披露行为。
+     第一版口径下两档都是 1.0（题面写着「最后修订」，模型复读题面就算命中）。
+     修掉题面回声之后（provenance_score.mask_question_echo），
+     用已存档的老答案离线重算得到的是 F1=0.67 / F2=0.00 ——
+     **消融档反而更爱说「修订」**。
+     原因很清楚：F2 拿到日期后直接写 2025-11-09，不需要这个措辞；
+     F1 没有日期可写，只能说「该页面最后修订于……（无法得知）」，
+     那个词出现得更多，却什么信息都没传递。
+     所以这条指标与披露行为**负相关**，列出来只会误导读者。
+     真要回答「模型有没有用上披露」，看逐页日期命中那一列。
+"""
 
 
 async def main() -> None:
