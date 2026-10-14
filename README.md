@@ -325,11 +325,12 @@ Percona 虽然下放了但不是官方能力，面试时解释"为什么不用�
 
 | 实验 | 变量 | 状态 |
 |---|---|---|
-| A | 检索策略 | ✅ 已完成。A0 仅 BM25 → A1 仅向量 → A2 RRF 融合 → A3 +重排 |
+| A | 检索策略 | ✅ 已完成。A0 仅 BM25 → A1 仅向量 → A2 RRF 融合 → A3 +重排（n=29） |
 | B | 分块 | ✅ 已完成。chunk 500/800/1200 × embed_mode title/text |
-| C | Agent 能力 | ✅ 已完成。C0 无工具 → C1 单工具 → C2 多工具循环（n=15） |
+| C | Agent 能力 | ✅ 已完成。C0 无工具 → C1 单工具 → C2 多工具循环，**三库逐库**（32/12/12 条） |
 | D | Embedding | ✅ 已完成。`bge-m3` vs `Qwen/Qwen3-Embedding-0.6B`（关重排+双侧归一化+独立库） |
-| E | Chat 模型 | ✅ 已完成。DeepSeek vs MiniMax（n=15，两档各剔除 1 条 Judge 侧失败后 n=14） |
+| E | Chat 模型 | ✅ 已完成。DeepSeek vs MiniMax，**三库逐库**（15/12/12 条） |
+| F | 披露层 | ✅ 已完成。页面修订时间开/关消融（n=8 溯源题） |
 
 运行：
 
@@ -338,9 +339,17 @@ cd kb-agent\backend
 ..\.venv\Scripts\python.exe scripts\run_eval.py --experiment A --top-k 3
 ..\.venv\Scripts\python.exe scripts\exp_b.py --steps B1,B2,B3                  # 实验 B
 ..\.venv\Scripts\python.exe scripts\exp_d.py --models Qwen/Qwen3-Embedding-0.6B # 实验 D
+..\.venv\Scripts\python.exe scripts\exp_c.py --game all --labels C0            # 实验 C 的 C0（见下方警告）
+..\.venv\Scripts\python.exe scripts\exp_f.py --game sr,ys,zzz                  # 实验 F
+..\.venv\Scripts\python.exe scripts\merge_exp_c.py                             # C 逐库拆分 + 配对
+..\.venv\Scripts\python.exe scripts\merge_exp_e.py                             # E 逐库合并 + 配对
 ..\.venv\Scripts\python.exe scripts\probe_kv_cache.py                          # KV cache 实测
 ..\.venv\Scripts\python.exe scripts\probe_stream_latency.py                    # 感知延迟实测
 ```
+
+> ⚠️ 旧的 `exp_C*.json` 里 **C0 档的提示词是坏的**（把带 `{covered}` 占位符的
+> 模板原样发给了模型，注入防护那段也没进去），已作废并由 `exp_C0_fixed.json` 取代。
+> 见 `EVALUATION.md` 实验 C 章节与 `backend/tests/test_exp_script_prompt.py`。
 
 **A 的结论**（n=29，`EVALUATION.md` 有完整表格和配对检验）：
 
@@ -372,10 +381,47 @@ cd kb-agent\backend
 > ⚠️ 原文档曾用「Qwen 组内 A1→A2」的检验（p=0.12）当跨模型结论的依据，
 > **检验对象用错了**。修正过程见 `EVALUATION.md` 实验 D 章节。
 
+**C 的结论（三库逐库，2026-10-14 重跑）**：
+
+1. **给不给检索工具这条线，三库一致且极其显著**：
+   Δ 在 **+2.04 ~ +2.61**，Cohen's d 在 **2.16 ~ 3.72**，三库 p 均 **<1e-10**。
+   这是全项目最硬的一个结论。
+2. **多给 `get_page` / `calculator` / `list_games`，三库都没测出收益，而且方向不一致**：
+   sr −0.17、ys +0.36、zzz +0.05，p 从 0.0895 到 0.3173。
+   **符号互相矛盾正是「测不出差异」的样子**（与实验 D 同类证据）。
+3. **代价却三库一致**：token **+17% ~ +45%**、步数 +30%~50%、
+   工具失败率从 0 变成非 0（`get_page` 现抓 wiki 会被 WAF 拦）。
+   所以生产环境默认只开 `search_kb` —— 不是「工具越少越好」，
+   而是「在没有证据支持时，不要为看不见的收益付费」。
+
+**E 的结论（三库逐库）**：
+
+1. **质量差异三库均未达 p<0.05**（sr p=0.0697 / ys p=0.6738 / zzz p=0.2831）。
+   方向三库一致（MiniMax 略低），量级差异大（sr 的 d=−0.71 已是中到大效应量），
+   但没有一个库撑到显著。**不能说「MiniMax 更差」，也不能说「两者一样好」。**
+2. **成本差异三库一致，这才是选型的真正依据**：token **1.55x ~ 2.85x**、
+   延迟 **2.56x ~ 3.65x**。
+3. 两个信号一起看是自洽的：成本差最大的 sr 库（2.85x token）质量差也最大
+   （Δ=−0.73）；成本差最小的 ys 库（1.79x token）质量差也最小（Δ=−0.14）。
+
+**F 的结论（披露层消融）**：
+
+1. **披露层把信息完整送到了答案**：15 个目标页的修订日期，
+   关闭时命中 0 个，开启时命中 15 个（引用修订覆盖率同样 0.0 → 1.0）。
+2. **给了日期之后模型会主动声明「可能已过时」**（0.0 → 0.5）。
+   但这**不代表判断是对的** —— 页面修订时间原理上推不出内容时效。
+3. **本实验不能证明披露层让回答更准**，语料只有最新版快照，
+   没有历史版本可比对（`docs/version_staleness.md` 第四节）。
+4. ⚠️ 其中一条指标被**主动撤掉**：修订措辞率修掉题面回声之后是
+   F1=0.67 / F2=0.00，**消融档反而更爱说「修订」** —— 它量的是用词习惯而非
+   披露行为，与披露**负相关**。过程与数据见 `EVALUATION.md` 实验 F 章节。
+
 以及两条方法论教训：
 
 - **10 条评测集测出「融合无增益」，32 条测出「融合有增益」，符号相反。** 题不够的时候，消融实验的结论不可信。
 - **A0（仅 BM25，不依赖 embedding）在两组对比里数字完全相同** —— 这一行是对照实验的自证，证明语料/分块/评测集一致。
+- **实验 C 的 C0 档提示词是带占位符的模板，被原样发给了模型** —— 游戏名没注入、注入防护那段也没进去，错误还不报错（judge 正常打分、分数也合理）。**"实验脚本把常量当成品用"是一类很安静的缺陷**，靠断言「发给模型的那段文本里还有没有占位符」才抓得住。
+- **先用已存档的答案离线验证判据有没有区分度，再花钱重跑。** 实验 F 的修订措辞率就是这么被撤掉的：离线重算零成本，而它直接决定了这轮要不要花 16 次 Agent 调用。
 
 ---
 

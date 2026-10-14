@@ -596,7 +596,7 @@
       "script": "merge_exp_e.py",
       "experiment": "E",
       "game": "sr",
-      "merged_at": "2026-10-14T08:19:27Z",
+      "merged_at": "2026-10-14T10:11:48Z",
       "sources": [
         {
           "file": "exp_E1_sr.json",

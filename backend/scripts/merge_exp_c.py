@@ -82,11 +82,14 @@ def _split_by_game(rows: list[dict]) -> dict[str, list[dict]]:
     unknown: list[str] = []
     for r in rows:
         cid = str(r.get("case_id") or "")
+        # 命中后要**去掉前缀里的连字符**再当键用 —— case_id 是 `sr-001`，
+        # 而 out 的键是 `sr`。这里曾经写成直接 `out[hit]`，
+        # 于是一跑就 KeyError: 'sr-'。
         hit = next((g for g in _PFX if cid.startswith(g)), None)
         if hit is None:
             unknown.append(cid)
         else:
-            out[hit].append(r)
+            out[hit[:-1]].append(r)
     if unknown:
         print(f"  !! 有 {len(unknown)} 条 case_id 识别不出库，已丢弃：{unknown[:5]}")
     return out
