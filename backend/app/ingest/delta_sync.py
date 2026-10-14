@@ -140,12 +140,21 @@ async def detect_changes(
     rep = DeltaReport(game=game, since=_iso(since))
 
     local = await _local_pages(game, s)
+    # 交集按**标题**做（不是 page_id）：recentchanges 只给标题。
+    # 代价是重定向/改名过的页面会失配 —— 站点上是旧名、本地是旧名，
+    # 就查不到，会被静默当成"本地没有这页"而漏掉这次变更。
+    # 反过来 page_id 是落盘时保留下来的无歧义键，但 API 这条路给不出来。
     rep.local_pages = len(local)
     if not local:
         logger.warning("%s 本地无收录页面，跳过检测", game)
         return rep
 
     client = wiki or WikiClient(game, base_url=s.wiki_base)
+    # 注意这里**没有**传 min_interval / max_retry：走的是 WikiClient 的
+    # 类默认（2.0s / 4 次），不是 settings.wiki_min_interval。
+    # 而实测翻 recentchanges 需要更保守的间隔（probe 脚本默认 15s，
+    # 因为 6s 打到第 3 页就吃 567）—— 这是本模块已知的参数缺口，
+    # 现在靠 max_level1_pages 封顶翻页次数来兜，而不是靠间隔。
     owns = wiki is None
 
     try:
@@ -186,7 +195,13 @@ async def detect_changes(
                 break
             rep.scanned_changes += len(rows)
             titles.update(r["title"] for r in rows)
+        # 出口先定一件事：下面的所有计数到底算不算数。
+        # 游标非空（无论是哨兵还是真游标）都意味着窗口没翻完，
+        # 此时 titles 只覆盖已经读到的那几页。
         rep.window_exhausted = cursor is None
+        # titles 是 set：同一页在窗口内被编辑 5 次也只算 1 页。
+        # 所以 unique_changed_site ≤ scanned_changes 是正常的，
+        # 前者是"变过的页数"，后者是"变更记录条数"。
         rep.unique_changed_site = len(titles)
 
         # ---- 交集到本地收录 ----
@@ -206,6 +221,9 @@ async def detect_changes(
             logger.warning("第 2 级中断（WAF），本轮只能报第 1 级的结果：%s", exc)
             rep.waf_hits += 1
             metas = []
+        # 请求数是**按批量估算**的，不是实测：即使 batch=20 内部又因为 WAF 退避
+        # 重试了 3 次，这里也只记 1。所以 requests_* 用来看量级（对比三级
+        # 成本），不能当 WAF 强度的读数 —— 后者看 waf_hits。
         rep.requests_level2 += max(1, -(-len(hit) // 20))
 
         suspects: list[tuple[str, PageContent]] = []
@@ -214,11 +232,22 @@ async def detect_changes(
             if not info:
                 continue
             if (m.last_revision or "") == info["revision_ts"] and info["content_hash"]:
+                # 第二个条件是"本地还没指纹"的意思：这种页即使 revision 相同
+                # 也得放行去算一次，否则永远补不上指纹（而空指纹在
+                # `is_stale` 里一律判为变更，放行才是安全方向）。
+                # 比较用字符串全等而不是解析成时间戳：两边都是
+                # MediaWiki 的 `%Y-%m-%dT%H:%M:%SZ`，定长同格式，
+                # 字符串比较和数值比较等价，还省掉一次解析失败的可能。
                 # revision 没变 -> 内容不可能变，连指纹都不用算
                 continue
             suspects.append((m.title, m))
 
         # ---- 第 3 级：只有 revision 变了的才取正文算指纹 ----
+        # **截断是无声的**：超出 max_level3_pages 的嫌疑人直接丢掉，
+        # 不进 report 也没有告警。所以当 suspects 超过上限时，
+        # changed 少掉的部分不是"没变"而是"没查"。
+        # 当前上限 40 来自实测量级（一周 20.9% 交集 ≈ 20 页量级），
+        # 真出问题时得先把上限调高，否则重建范围是不完整的。
         suspects = suspects[:max_level3_pages]
         fetched: list[PageContent] = []
         if suspects:
@@ -241,6 +270,8 @@ async def detect_changes(
                 rep.revision_only.append(m.title)
                 continue
             rep.changed.append({
+                # page_id 用的是**本地**那份，不是 API 返回的 ——
+                # 第 3 步按页先删后建要靠它定位，混用来源会删错页。
                 "page_id": info["page_id"],
                 "title": m.title,
                 "old_hash": info["content_hash"],
@@ -249,6 +280,8 @@ async def detect_changes(
                 "new_revision_ts": m.last_revision or "",
             })
     finally:
+        # 借来的 client 不关：调用方（测试、脚本）可能还要接着用。
+        # 早退分支（本地无收录、无交集）也走这里，所以不关就等于泄漏连接。
         if owns:
             await client.aclose()
 
@@ -275,6 +308,8 @@ async def main(game: str, days: int) -> int:
     for c in d["changed"][:10]:
         print(f"    {c['title'][:28]}  {c['old_hash']} -> {c['new_hash']}")
 
+    # 报告的读法：只有 `lower_bound=False`（即 window_exhausted=True）时，
+    # 「近 N 天零变更」才是个结论；为 True 时它只说明"已读到的部分没有变更"。
     # 产物必须落盘：这些数字要写进文档与简历，只留在终端输出里等于无法追溯。
     # 路径是 parents[3] 不是 parents[2]：本文件在 backend/app/ingest/ 下，
     # parents[2] 指向的是 backend/，产物会落到 backend/data/eval/ ——

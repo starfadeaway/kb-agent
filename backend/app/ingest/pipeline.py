@@ -196,6 +196,19 @@ def cached_page_hash(page_id: int, game: str) -> str:
 
 
 def page_to_chunks(page: PageContent, cfg: IngestConfig, source_url: str) -> list[Chunk]:
+    """把一页原始 wikitext 变成待入库的 chunk 列表。
+
+    入参前提：清洗放在这一层做，而不是抓取时做。原始 wikitext 必须留存在
+    data/raw 里（离线重跑、指纹比对都依赖它），清洗是可变的实验维度 ——
+    改了清洗逻辑还要能拿同一份原文重跑，才谈得上「同一数据、不同清洗」对比。
+
+    切分依据与边界处理都在 `chunk_page` 里：先按 `==` 标题切段，
+    再按句边界打包，overlap 以整句回退。返回的 chunk_id 是
+    `f"{game}-{page_id}-{idx:04d}"` —— **只依赖 page_id 与序号**，
+    这是重跑幂等的唯一依据：同一页重跑得到同一组 id，upsert 覆盖而非追加。
+    但它也意味着改 chunk_size 会让序号整体错位，旧 id 对应的内容变了，
+    所以「换分块参数重跑」不能只 upsert，必须配合按页删除（见 persist 的剪枝）。
+    """
     from app.ingest.template_parser import clean_wikitext
 
     text = clean_wikitext(page.wikitext)
@@ -271,6 +284,11 @@ def page_to_facts(page: PageContent, cfg: IngestConfig, source_url: str) -> list
     「使装备者的攻击力提高{{颜色|描述2|12%}}」这种带模板语法的原始串，
     看着像结构化数据、实际没法当数值用 —— 向量库干净而 SQL 库是脏的，
     比两边都脏更糟，因为会让人误以为 SQL 侧已经可用。
+
+    **返回值的去向要说清楚**：本模块的 `ingest_pages` 只用它的 `len()`
+    填 stats.facts，并没有把 fact 写进 MySQL；真正落库的是
+    `store/persist.py` 的回填流程。所以「facts 数量」出现在入库统计里，
+    不等于 facts 表已经被更新过。
     """
     from app.ingest.template_parser import _flatten_value
 
@@ -346,6 +364,9 @@ class Ingestor:
                 continue
             url = source_url_for(page) if source_url_for else f"{self.s.wiki_base}/{cfg.game}/{page.title}"
             try:
+                # 返回值（是否真的更新了缓存）在这里被**丢弃**：
+                # 本函数只负责入库，不负责汇报抓取进展。要看
+                # 「这轮有几页内容真的变了」，得看 crawl 层或 delta_sync 的报告。
                 cache_raw(page, cfg.game)
                 chunks = page_to_chunks(page, cfg, url)
             except Exception as exc:  # noqa: BLE001
@@ -358,12 +379,24 @@ class Ingestor:
             all_chunks.extend(chunks)
 
         if not all_chunks:
+            # 一个 chunk 都没有 = 整批都被过滤器挡掉或全部分块失败。
+            # 这里提前返回，**不会写库也不会报错**，所以调用方必须看
+            # stats.skipped / stats.failed 才能区分「语料本来就不该索引」
+            # 和「入库链路挂了」。
             stats.elapsed_s = time.perf_counter() - t0
             return stats
 
+        # embed_mode 在这一步决定送进模型的文本；只在这里变一次，
+        # 下游 upsert 用的就是同一份 index_texts，所以向量与库里的
+        # documents 永远是同一版内容（换后端 A/B 时这点必须成立）。
         index_texts = [chunk_to_index_text(c, cfg.embed_mode) for c in all_chunks]
         vectors = await self.llm.embed(index_texts, model=cfg.embed_model, batch_size=cfg.embed_batch)
 
+        # 这些 metadata 字段是下游**唯一**的检索过滤依据，改名等于功能下线：
+        # - game / page_title：评测按页面判定 page_hit、工具按标题过滤
+        # - last_revision_ts：版本感知检索 min_revision_ts 的 $gte 条件
+        # - section：引用定位与前端展示
+        # - truncated：评测区分「整句」与「硬切半句」，别混在一起算指标
         metadatas = [
             {
                 "game": c.game,
@@ -379,6 +412,12 @@ class Ingestor:
             for c in all_chunks
         ]
 
+        # 幂等依据：upsert 的主键是 chunk_id（`{game}-{page_id}-{序号}`），
+        # 所以同一批页面重跑是覆盖而不是追加，不会写出重。
+        # 但**换 chunk_size / overlap / embed_mode 重跑就不幂等了** ——
+        # 序号会错位，库里会同时存在新旧两套内容。清理靠 persist 的按页剪枝，
+        # 不靠这里。
+        #
         # 分批 upsert：一次几千条会把底层存储的写入缓冲顶到内存峰值
         for i in range(0, len(all_chunks), 256):
             sl = slice(i, i + 256)
@@ -421,6 +460,9 @@ class Ingestor:
             max_retry=self.s.wiki_max_retry,
         ) as wc:
             titles = await wc.list_category_pages(category, limit=limit)
+            # 注意 `len(titles)` 是**下界**：list_category_pages 只取一页，
+            # 匿名用户 cmlimit 上限 500，大分类传再大的 limit 也会被截断。
+            # 所以这个日志数字不能被读成「这个分类一共 N 页」。
             logger.info("分类 %s 取到 %d 个页面", category, len(titles))
 
             pages: list[PageContent] = []
@@ -433,6 +475,10 @@ class Ingestor:
                     continue
             stats.waf_hits = wc.waf_hits
 
+        # 两段结果的合并方式：抓取阶段的 failed/waf_hits 要**并入**入库阶段的
+        # stats，否则调用方只看到入库侧的 failed，会以为抓取一次没失败过。
+        # 反过来 sub.pages 也是关键 —— 它是过滤器放行并成功分块的页数，
+        # 减去 skipped 与 failed 才是真正进向量库的规模。
         sub = await self.ingest_pages(
             pages, cfg, source_url_for=lambda p: f"{self.s.wiki_base}/{cfg.game}/{p.title}"
         )

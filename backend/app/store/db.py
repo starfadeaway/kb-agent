@@ -19,6 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
+    """所有 ORM 模型的元数据注册点，也是 `create_all` 建表的唯一依据。
+
+    前提：`app.store.models` 必须**先被 import**，否则 `Base.metadata` 是空的，
+    `init_db` 会建出一套零张表的数据库而且不报错。
+    persist.py 在模块顶部 import models 就是为了保证这一点。
+
+    本项目没有 migration 体系（改列结构不会被自动应用），所以这里的字段定义
+    等于线上 schema；加字段要同时考虑已有库里的旧表。
+    """
     pass
 
 
@@ -32,6 +41,19 @@ class MySQLUnavailable(RuntimeError):
 
 
 def get_engine(settings: Settings | None = None) -> AsyncEngine | None:
+    """惰性建连接池的进程级单例，第二个参数一旦传入就被永久忽略。
+
+    前提与后果要说清楚：
+    - 单例按**首次调用**的 settings 固化。测试若先用一个假 Settings 建过池，
+      后面换 DSN 拿到的是同一个旧池 —— 改 `.env` 不重载进程就不生效。
+    - `create_async_engine` 本身**不建立任何连接**，连接是首次使用时才懒建的，
+      所以这里返回成功不代表 MySQL 可用；真正的可用性判断在 `init_db`/`db_status`。
+    - 连接池是 5+5：本机 MySQL 默认停止且无业务数据，池开大没有意义，
+      而 `pool_pre_ping` 会在每次取连接前探活，避免用到已被关掉的连接。
+
+    结果消费：`session_scope` 与 `init_db` 共用这一个引擎；
+    `close_db()` 会把它置回 None（进程内重建），因此不能在 lifespan 关闭后再用旧引用。
+    """
     global _engine
     if _engine is None:
         s = settings or get_settings()
@@ -47,6 +69,17 @@ def get_engine(settings: Settings | None = None) -> AsyncEngine | None:
 
 
 def get_sessionmaker(settings: Settings | None = None) -> async_sessionmaker[AsyncSession]:
+    """会话工厂的进程级单例，与 `_engine` 同生命周期（`close_db` 一起置空）。
+
+    `expire_on_commit=False` 是这里最关键的一个选项：
+    默认行为会在 commit 之后让 ORM 实例过期，之后再读它的属性就得重新发 SQL，
+    在 session 已关闭时就直接抛 `DetachedInstanceError`。
+    落库链路正是「commit 之后把对象拼成 dict 返回」，
+    所以必须关掉过期 —— 否则 save_run 这类函数会在最后一步炸掉。
+
+    结果消费：`session_scope()` 是唯一推荐用法（自带事务边界与异常转换），
+    直接拿它开 session 的调用方要自己负责 commit/rollback。
+    """
     global _sessionmaker
     if _sessionmaker is None:
         _sessionmaker = async_sessionmaker(
@@ -117,6 +150,18 @@ async def init_db(settings: Settings | None = None) -> bool:
 
 
 def db_status() -> dict:
+    """返回当前连接状态的**副本**（不是 `_status` 本身，外部改不到内部状态）。
+
+    `state` 的三个取值要能区分对待：
+    - `unknown`：进程起来还没跑过 `init_db`。
+    - `ready`：建表成功（detail 是库名）。
+    - `unavailable`：连不上/建表失败（detail 是首行错误信息，已截断）。
+    MySQL 缺席时这里只是记录，**不抛** —— 纯向量检索链路不依赖 SQL 侧。
+
+    结果消费：`/api/health` 和 `/api/stats` 直接把它塞进响应，
+    `detail` 因此会出现在 HTTP 响应里 —— 它是首行异常文本，
+    所以新增错误分支时要检查异常消息里有没有 DSN 或口令，别顺手带出去。
+    """
     return dict(_status)
 
 
@@ -124,9 +169,12 @@ def db_status() -> dict:
 async def session_scope(settings: Settings | None = None) -> AsyncIterator[AsyncSession]:
     """一个事务边界。MySQL 缺席时抛 MySQLUnavailable，由调用方决定是否致命。"""
     s = settings or get_settings()
-    # 看着像没用（结果没接住），但**位置有意义**：它在 try 之外，
-    # 作用是 MySQL 缺席时立刻抛 MySQLUnavailable，而不是进到 try 里
-    # 才开始建 session。删掉会让错误语义变模糊。
+    # 位置有意义（不能挪进 try），但**理由不是注释原先写的那样**：
+    # 它并不会在 MySQL 缺席时立刻抛 —— `create_async_engine` 是惰性的，
+    # 不建立任何连接（见 `get_engine` 的 docstring）。
+    # 把它放在 try 之外的真实作用是：让「建引擎」这一步的异常走 except Exception
+    # 分支，从而把 `_status` 更新成 unavailable；而不是让它和 session 的异常混在一起。
+    # 真正的 MySQLUnavailable 由下面 session 首次取连接时抛出。
     get_engine(s)  # noqa: F841
     try:
         async with get_sessionmaker(s)() as session:

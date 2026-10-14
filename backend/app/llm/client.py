@@ -79,7 +79,15 @@ def _balanced_object(text: str, start: int) -> str | None:
 
 
 def _normalize_call(obj: Any) -> tuple[str, dict]:
-    """把见过的几种内联写法归一成 (工具名, 参数 dict)。认不出就返回空。"""
+    """把见过的几种内联写法归一成 (工具名, 参数 dict)。认不出就返回空。
+
+    返回值只有两个下游：`parse_inline_tool_calls` 拿 name 去 `allowed` 比对，
+    空名会被自然过滤掉；args 则原样进工具。所以「认不出」必须返回 ("", {})
+    而不是抛错 —— 正文里扫到花括号是常态。
+    arguments 是字符串但 JSON 解不开时塞 `{"__raw__": 原文}`，代价是工具
+    收不到预期参数：calculator 这类会取不到值而报工具失败，
+    计入 `tool_failure_rate`。这是可接受的 —— 那说明模型确实没给出结构化调用。
+    """
     if not isinstance(obj, dict):
         return "", {}
     name = obj.get("name") or obj.get("tool") or obj.get("tool_name")
@@ -105,6 +113,12 @@ def parse_inline_tool_calls(content: str, allowed: set[str]) -> list[dict]:
     `allowed` 由调用方传入 —— 也就是本次请求**声明过的**工具名集合。
     这样兜底解析只可能认出"本来就允许调"的工具，不会凭空造出一个
     模型/schema 里都不存在的函数名。
+
+    调用前提：`content` 必须已经过 `strip_think`。写在 `<think>` 里的工具调用
+    JSON 到这里已经被当推理链删掉了 —— 这是有意的，推理块不该产生副作用。
+
+    返回的 id 形如 `inline-0`，只在**本轮**内用来配对后续的 role='tool' 消息；
+    下一轮靠 `assistant_tool_message` 原样回传，不保证跨轮唯一或连续。
     """
     calls: list[dict] = []
     if not content or "{" not in content:
@@ -140,7 +154,13 @@ def l2_normalize(vec: list[float]) -> list[float]:
 
 
 class _LRU(dict):
-    """进程内 LRU。命中/未命中只影响延迟，不影响结果 —— 最多多重算一次。"""
+    """进程内 LRU。命中/未命中只影响延迟，不影响结果 —— 最多多重算一次。
+
+    名字比实现宽：put 淘汰的是**最早插入**的那条（FIFO），被读到并不会续命。
+    实际影响是命中率而非正确性 —— embedding 缓存里入库语料条数远多于查询，
+    先占满容量的常常是语料侧，于是热 query 会被挤出去。
+    缓存 key 含 model 与 normalize 两个开关，所以命中时向量必然是同一个值。
+    """
 
     def __init__(self, maxsize: int) -> None:
         super().__init__()
@@ -302,6 +322,9 @@ class LLMClient:
         self._silicon = None
         self._judge = None
 
+        # 刻意**不清** _embed_cache / _rerank_cache / _fallback_events：
+        # 缓存里只有向量和排序，不持有任何 client，重连后照常可读；
+        # 而降级留痕的价值恰恰在于跨整个进程生命期累积，清掉就只剩最后一段。
         if errors:
             logger.warning("LLMClient 关闭时部分失败：%s", "; ".join(errors))
         logger.info("LLMClient 已关闭：%d 个 OpenAI 兼容客户端", len(clients))
@@ -407,6 +430,10 @@ class LLMClient:
         primary = (backend or "deepseek").lower()
         last_exc: BaseException | None = None
 
+        # chain 至少含主基座（_fallback_chain 保证），所以循环必然至少跑一次。
+        # 继续下一个候选的触发条件写在下面的 except 里：**失败可重试** 且
+        # **链上还有下一个**。不可重试的异常（鉴权失败、模型名写错）当场抛出 ——
+        # 换一个基座也解决不了配置问题，降级只会把它掩盖成「模型答得不好」。
         for idx, be in enumerate(chain):
             if idx:  # 不是第一次尝试 → 这是降级
                 await asyncio.sleep(self.s.chat_fallback_backoff * idx)
@@ -430,6 +457,11 @@ class LLMClient:
             else:
                 out["fallback"] = {"used": False}
             return out
+        # 结果消费：`content` / `tool_calls` / `usage` 由 Agent 逐轮读走
+        # （react.py 把 usage 累加成成本指标，把空 tool_calls 当终止信号）。
+        # `fallback` 这一项目前只有测试在读，实验脚本并没有按它剔除样本 ——
+        # 一次静默降级混进跨模型对比时，只能事后从 /api/health 的
+        # fallback_stats 里看出那天降过级，而看不出哪几条 rows 受了影响。
         raise RuntimeError("Chat 降级链为空")  # pragma: no cover - chain 至少含主基座
 
     def _fallback_chain(self, backend: str | None, model: str | None) -> list[str]:
@@ -519,6 +551,11 @@ class LLMClient:
         两条路径都会回填缓存，所以入库过的语料在检索时也能命中。
         """
         model_name = model or self.s.embed_model_main
+        # 分流依据是**条数**，不是总字符数：少量 query 逐条查缓存，
+        # 大量入库文档走批接口。阈值 8 是权衡点 —— 再低会让几千条的入库
+        # 路径退回逐条串行 HTTP，慢一个数量级。
+        # 副作用：大批量分支不回填 hits/misses 计数，所以入库跑完之后
+        # /api/health 里的 embed 命中率仍是 0，那是「没测过」而不是「没命中」。
         if len(texts) > _CACHE_BATCH_THRESHOLD:
             return await self.embed_batch(
                 texts, model=model_name, normalize=normalize, batch_size=batch_size
@@ -543,6 +580,9 @@ class LLMClient:
             for text, d in zip(missing, resp.data, strict=False):
                 vec = d.embedding
                 self._embed_cache.put(key_of(text), l2_normalize(vec) if normalize else vec)
+        # 返回列表与 texts **同长同序**（重复文本也各占一格），调用方可以按位置 zip。
+        # 这个前提由上面那个循环保证：missing 全部回填之后每个 key 都存在，
+        # 少一条就是 KeyError 而不是静默给个 None —— 向量错位比报错更难查。
         return [self._embed_cache[key_of(t)] for t in texts]
 
     async def embed_batch(self, texts: list[str], **kwargs) -> list[list[float]]:
@@ -551,6 +591,10 @@ class LLMClient:
         normalize = kwargs.pop("normalize", True)
         batch_size = kwargs.pop("batch_size", 16)
         out: list[list[float]] = []
+        # 返回列表与入参 texts 同序（严格依赖 resp.data 与 batch 等长同序）。
+        # 注意回填缓存用的是**替换空白后的 batch 文本**，而 embed() 查缓存
+        # 用的是原文 —— 纯空白字符串那条键永远对不上，命中率统计会偏低；
+        # 结果向量本身没错，错配只发生在缓存命中这一层。
         for i in range(0, len(texts), batch_size):
             batch = [t if t.strip() else " " for t in texts[i : i + batch_size]]
             resp = await self.silicon.embeddings.create(model=model_name, input=batch)
@@ -599,6 +643,10 @@ class LLMClient:
         data = resp.json()
         out = [RerankHit(index=r["index"], score=float(r["relevance_score"])) for r in data["results"]]
         self._rerank_cache.put(key, out)
+        # 结果消费：index 是 `documents` 的**原始下标**，不是排序后的名次 ——
+        # 调用方必须 `documents[hit.index]` 反查原文，顺序通常要自己再排。
+        # top_n 虽已在请求里夹到 len(documents)，服务端仍可能少返回几条，
+        # 所以结果长度不必等于 top_n，调用方按实际条数截断，别按下标猜长度。
         return out
 
     def cache_stats(self) -> dict:
@@ -621,7 +669,16 @@ class LLMClient:
 
     # ---------------- Judge ----------------
     async def judge(self, prompt: str, *, model: str | None = None, max_tokens: int = 512) -> str:
-        """Judge 走独立基座（Qwen），严禁用被测模型自评。"""
+        """Judge 走独立基座（Qwen），严禁用被测模型自评。
+
+        这里**不做超时**：超时预算是调用方的（见 `app/eval/judge.py`）。
+        客户端层一旦自己吞掉时间，聚合层就再也分不清「慢」和「挂」，
+        而这两者需要被区别对待。
+
+        返回值直接进 Judge 的 JSON 解析，所以空串是一个真实可能：
+        max_tokens=512 偏小，模型若先写一长段推理再输出 JSON，响应会被截断 ——
+        排查「judge 输出无法解析」时先看这里的 token 上限，再去怀疑 prompt。
+        """
         model_name = model or self.s.judge_model
         resp = await self.judge_client.chat.completions.create(
             model=model_name,
@@ -636,6 +693,10 @@ _default: LLMClient | None = None
 
 
 def get_llm(settings: Settings | None = None) -> LLMClient:
+    """进程级单例。`settings` **只在首次调用时生效**，之后传什么都会被忽略 ——
+    这也正是 `aclose()` 必须复位懒加载槽位的原因：全局只有一个实例，
+    却被 FastAPI、crawl、bulk_ingest、pipeline 自检四处共用。
+    """
     global _default
     if _default is None:
         _default = LLMClient(settings)

@@ -95,9 +95,12 @@ class Settings:
     # 但 sqlite3 / SQLiteStore 在 app/ 下从来没有任何实现，
     # 是一句写在注释里的虚构实现。由 test_no_phantom_backend_declared 守住。
     vector_backend: str = field(default_factory=lambda: _env("VECTOR_BACKEND", "lancedb"))
-    # ANN 近似索引：默认关闭。开启会引入近似误差，改变排名，
-    # 而评测必须可复现，所以只在规模大到暴力扫描吃不消时才打开。
-    vector_ann: str = field(default_factory=lambda: _env("VECTOR_ANN", "false"))
+    # 这里**曾经**有 `vector_ann`（VECTOR_ANN），现已删除 —— 它是个假开关：
+    # 配置被读进来、传进 LanceCollection、存进侧车 meta、再读回来，
+    # 但查询路径从不读它，全仓也没有任何 create_index 调用，配成 true 什么都不会发生。
+    # 与其留一个「看起来能开、实际不生效」的旋钮，不如让「本后端只有精确扫描
+    # 这一条路径」成为事实。实测依据（IVF-PQ 会改变 top3 排名）在
+    # `app/store/lance_store.py` 的模块 docstring 里，那里才是它的归属地。
 
     # --- 数据源 ---
     wiki_base: str = field(default_factory=lambda: _env("WIKI_BASE", "https://wiki.biligame.com"))

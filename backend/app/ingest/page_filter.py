@@ -20,6 +20,15 @@
 from __future__ import annotations
 
 # 标题前缀。MediaWiki 本地化前缀会变，中英文都带上。
+#
+# 加一条前缀前先想清楚**判错的代价是不对称的**：
+# - 多滤（把好页面误判成定义页）：该页在向量库和 MySQL 里都不存在，
+#   检索侧**永远召不回来**，而且没有任何地方会提示"这里本来有内容"。
+#   事后只能靠人工翻 category 列表才能发现，属于静默数据丢失。
+# - 少滤（漏掉一个模板定义页）：多占几个 embedding 位置、挤掉一点召回，
+#   指标上有轻微损失，但页面还在库里，随时能通过改前缀补上。
+# 所以这张表可以保守（宁多勿少），判据本身则必须窄而可证 ——
+# 这正是它只认标题前缀、不认正文特征的原因（见模块 docstring 的 60% 误杀）。
 _TEMPLATE_TITLE_PREFIXES = (
     "模板:",
     "模板：",
@@ -43,10 +52,20 @@ _TEMPLATE_TITLE_PREFIXES = (
 
 
 def is_template_page(title: str) -> bool:
-    """标题表明这是模板/模块/帮助/分类/图片等定义页，不是内容页。"""
+    """标题表明这是模板/模块/帮助/分类/图片等定义页，不是内容页。
+
+    空标题返回 True（视为该滤）：抓分类列表时理论上不会给出空标题，
+    但真出现时无法判断它是不是内容页，放进来等于往索引里塞一条无法解释的记录。
+
+    `should_index` 已经先判过空标题，所以这里的空值分支实际只在
+    本函数被单独调用时才走到 —— 保留它是让这个谓词**自身就是安全的**，
+    不依赖调用方先做防御。
+    """
     t = (title or "").strip()
     if not t:
         return True
+    # startswith 而非 in：前缀是 MediaWiki 的命名空间约定，
+    # 用 `in` 会把标题里恰好出现"模板:"字样的内容页也误杀。
     return t.startswith(_TEMPLATE_TITLE_PREFIXES)
 
 
@@ -55,10 +74,21 @@ def should_index(title: str) -> tuple[bool, str]:
 
     调用方把被跳过的标题记进 IngestStats，让"为什么这批页没进去"在报告里可见 ——
     静默丢弃比丢弃本身更糟。
+
+    **两个调用方必须保持同一套判据**：`pipeline.Ingestor.ingest_pages`（写向量库）
+    和 `persist.backfill_corpus`（写 MySQL）。只在一处过滤的后果是
+    MySQL 里出现 `sr-1273-*` 这种向量库里根本不存在的分片，
+    届时一边查 SQL 一边查检索，对不上时根本不知道该信哪个。
+
+    返回 `(True, "")` 时原因串为空是**契约**而非偷懒：调用方拼的是
+    `f"{title}（{why}）"`，只在被跳过时才消费这个串，
+    所以"通过"的页面拿一个空串占位就够了，不必编一句"内容页"塞进统计里。
     """
     t = (title or "").strip()
     if not t:
         return False, "空标题"
     if is_template_page(t):
+        # 第二个返回值是给人看的：它会原样出现在入库报告的 skipped 列表里，
+        # 是"这批页为什么少了"唯一的现场证据，改措辞前先确认有人读它。
         return False, "模板/模块/帮助/分类/图片定义页"
     return True, ""

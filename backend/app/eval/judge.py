@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 # 保持 120s 不改：改超时会让新旧产物落在不同样本集上，等于给实验换一个变量。
 # 真要解决超时，先查 `LLMClient.judge_client` 的 SDK 默认 `max_retries=2`
 # （静默重试会撑爆外层 wait_for），而不是放宽上限。
+#
+# 这个预算是**单次尝试**的：judge_client 已关掉 SDK 重试，所以不存在
+# 「一次调用其实偷偷重试了 3 次」的情况，wait_for 到点砍断就是真的砍断。
+# 不含的部分：并发场景下 Semaphore 的排队等待 —— 那是实验脚本自己的闸门。
 DEFAULT_JUDGE_TIMEOUT = 120.0
 
 _JSON_RE = re.compile(r"\{[\s\S]*\}")
@@ -91,6 +95,14 @@ class JudgeScore:
     raw: str
 
     def as_dict(self) -> dict:
+        """落进实验产物的投影（exp_c / exp_e 把这一份直接摊进 row）。
+
+        `judge_score` = (correctness + faithfulness) / 2，**不含 completeness** ——
+        所以它衡量的是「答对 + 不编」，而「答得不全」在总分里被刻意不计。
+        所有实验的总均值都是这个口径，换算法等于换指标。
+        `raw` 不进这个 dict：它是模型原文（含证据片段），随产物落盘等于把
+        检索内容抄一遍，体积翻倍；排查解析失败时再从 JudgeScore.raw 取。
+        """
         return {
             "correctness": self.correctness,
             "faithfulness": self.faithfulness,
@@ -111,6 +123,12 @@ def _parse_json(text: str) -> dict | None:
 
 
 def _clamp(v) -> float:
+    """把 Judge 给的分夹进 [1, 5]；非数、缺字段一律 0.0。
+
+    注意 0.0 越过了下界：它表示「这一维没拿到分」，不是「打了 1 分」，
+    但两者在产物 JSON 里长得一模一样。所以任何一维异常都必须同时看 reason，
+    否则均值里会混进来源不明的 0，而且没有任何报错提示。
+    """
     try:
         f = float(v)
     except (TypeError, ValueError):
@@ -147,8 +165,21 @@ class Judge:
     async def score(
         self, *, question: str, gold: str, answer: str, contexts: str, max_context_chars: int = 6000
     ) -> JudgeScore:
+        """单条打分。**失败不抛异常，一律折成 0 分 + 可读的 reason。**
+
+        调用方（exp_c / exp_e）不区分「异常」与「低分」，只读 as_dict()，
+        所以想让失败可见，就必须让 reason 带上一眼能认出来的前缀。
+        """
+        # 空回答在这里短路：不发请求，也就不会被超时误伤。
+        # 但 reason 是「空回答」而非 `judge_error:*`，exp_common.judge_failed
+        # 认不出来 —— 只有 Agent 侧同时抛了异常（row["error"] 非空）才会被剔除。
+        # 也就是说：Agent 正常返回但答案是空串时，这个 0 分是真的进能力均值的。
         if not answer.strip():
             return JudgeScore(0, 0, 0, "空回答", "")
+        # 证据截到 max_context_chars（6000 字符，37-51s 就是这个量级下的实测）。
+        # **faithfulness 是对这份截断视图打的分**：答案引用了被截掉的后半段正文，
+        # Judge 会判成幻觉。所以 faithfulness 天然偏低，读它时要知道这是
+        # 「视图上界」而不是「模型爱编」。
         prompt = SCORE_PROMPT.format(
             question=question.strip(),
             gold=gold.strip(),
@@ -175,6 +206,9 @@ class Judge:
         data = _parse_json(raw)
         if not data:
             return JudgeScore(0, 0, 0, "judge 输出无法解析", raw[:300])
+        # 返回的 reason 会原样进 row["judge_reason"]，聚合层靠 `judge_error`
+        # 前缀识别「这次没评成」。**这个前缀是跨模块契约**：改写它不会报错，
+        # 只会静默改掉剔除口径（0 分于是又以能力差的形式回到均值里）。
         return JudgeScore(
             correctness=_clamp(data.get("correctness")),
             faithfulness=_clamp(data.get("faithfulness")),
@@ -211,9 +245,19 @@ class Judge:
         下游能统计、能告警，不会把故障读成结论。
         同文件的 score() 早就是 `if not data: return ... "judge 输出无法解析"`，
         两处口径必须一致，否则同一套 Judge 会按两套标准计分。
+
+        证据长度这里**写死 6000**，而 score() 走的是 max_context_chars 参数：
+        两条路径必须保持同一个证据长度，否则同一份产物里 faithfulness 与
+        成对胜负不是同一把尺子量的。
+
+        注意：目前没有任何实验脚本调用 pairwise（只有测试用），
+        它是为模型对比准备的组件。接入时要一并确认 reason 串的落盘位置 ——
+        丢弃它可以（统计口径不依赖），丢弃结论则会把基础设施失败读成打平。
         """
         results: list[str | None] = []
         reasons: list[str] = []
+        # 两次尝试的区别只有 a/b 顺序；任何一次失败都不是"这一次不好"，
+        # 而是整条比较作废 —— 所以 except 分支直接返回，不再跑第二次。
         for first, second in ((answer_a, answer_b), (answer_b, answer_a)):
             prompt = PAIRWISE_PROMPT.format(
                 question=question.strip(),
@@ -251,6 +295,10 @@ class Judge:
             return "TIE", "judge_parse_error（未得到有效结论，非真实平局）：" + " / ".join(reasons)
 
         r1, r2 = results
+        # 分支触发条件全在这里，按顺序读：
+        #   任一次真 TIE → 整体 TIE（模型自己都说分不出来）；
+        #   两次都指向同一个字母 → 那一方赢（位置偏好已被正反抵消）；
+        #   两次指向不同答案 → 差异落在噪声内，判 TIE 而不是硬挑一个。
         if r1 == "TIE" or r2 == "TIE":
             return "TIE", " / ".join(reasons)
         if r1 == r2:
@@ -260,6 +308,19 @@ class Judge:
 
 
 def contexts_from_hits(hits) -> str:
+    """把检索结果拼成 Judge 唯一的证据视图。
+
+    三条对下游成立的口径约束：
+
+    - `[i]` 编号就是 hits 的下标顺序。它是**另取的一份检索**（exp_c / exp_e
+      为 Judge 单独跑一次 retriever），所以编号不必和 Agent 引用里的编号对齐 ——
+      两边各看各的顺序，不要拿答案里的 [n] 去对这里的 [n]。
+    - 只有被拼进来的内容才算「证据」。top_k 调小、被 rerank 挤掉的候选
+      对 Judge 是不可见的，于是 top_k 一变 faithfulness 就会跟着变 ——
+      那是测量设置的差异，不是能力变化。
+    - 检索抛异常时调用方兜成空串，Judge 收到的是「（无检索证据）」：
+      此时任何具体数值都会被判不忠实，这条 0 分来自链路而不是模型。
+    """
     return "\n\n".join(
         f"[{i}] {h.chunk.page_title} > {h.chunk.metadata.get('section', '')}\n{h.chunk.text}"
         for i, h in enumerate(hits, 1)

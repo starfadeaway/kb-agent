@@ -9,6 +9,17 @@
 2. gold_answer 必须是页面里真实存在的值，不允许写"以 wiki 为准"这种废话；
 3. 幻觉测试单独成类：正确行为是"明确说不知道"，答不出来才算对；
 4. 每个游戏一套标注，绝不混在一起评 —— 两款游戏的术语体系不同。
+
+还有两条踩过才知道的约束：
+
+5. **case_id 是跨文件契约**。`exp_common.SUBSET_IDS` 按 id 引用本表，
+   `run_eval.py` 把 as_dict() 写进 MySQL 的 eval_cases 表。改 id / 删题不会
+   让任何代码报错，只会让子集静默变小、历史产物无法复跑同一批题 ——
+   而"新旧实验用了同一批题"是所有对比的前提。
+6. **gold_pages 为空有两种含义**：越界题（unanswerable）与跨库辨析题（routing）。
+   检索层据此把它们排除在 recall 分母外（run_eval.NO_GOLD_EXEMPT），
+   它们只由 Judge 评。所以"某档 recall 更高"和"某档更会拒答"是两组
+   互不相关的数字，不能互相解释。
 """
 from __future__ import annotations
 
@@ -27,6 +38,13 @@ class EvalCase:
     notes: str = ""
 
     def as_dict(self) -> dict:
+        """整条 case 的落盘形式，被 `app/store/persist.py` upsert 进 MySQL
+        的 eval_cases 表（`scripts/seed_eval_cases.py` 用它核对代码与库的一致性）。
+
+        所以新增字段必须同步出现在这里，否则它只活在内存里，评测从库里读时看不到。
+        `notes` 也在其中 —— 它记录的是「当初为什么这么标」（gold 有歧义、
+        这条替代了哪个坏题）。判读一份旧产物时 notes 是唯一的口径线索。
+        """
         return {
             "case_id": self.case_id,
             "game": self.game,
@@ -46,6 +64,14 @@ class EvalCase:
 # 样本不够时 A2（融合）的负结果无法区分"融合真的没用"和"题出得不好"。
 # 扩展后的分布：
 #   single_hop 14 / semantic 6 / multi_hop 4 / numerical 3 / unanswerable 3 / routing 2
+#
+# 注意这 32 条 ≠ 实验实际跑的题集：`exp_common.SUBSET_IDS` 只挑了其中 15 条
+# （实验 C/E 的默认子集），`run_eval.py` 的检索侧才跑全量有 gold_pages 的题。
+# 挑选是**按 case_id**做的，所以本表任何一次重编号都会悄悄改变那个 15 条子集的
+# 内容 —— 新旧实验的样本集不同，差值里就混进了题集差异。
+#
+# 另注：semantic 类的 top-1 单独看不可靠（sr-007 的 gold 本身有歧义，见其 notes），
+# 读它的数字时先看 notes 再看分数。
 SR_CASES: list[EvalCase] = [
     # ---------------- single_hop：结构化字段精确命中 ----------------
     EvalCase(
@@ -642,8 +668,21 @@ ALL_CASES: dict[str, list[EvalCase]] = {
 
 
 def cases_for(game: str) -> list[EvalCase]:
+    """取单个游戏的全量题（不分层、不抽样），返回**副本**。
+
+    调用方（run_eval.py 的检索评测、probe_version_story、/api/eval）
+    会在返回的 list 上排序或筛选，所以必须给副本 —— 这张表是所有实验
+    共用的标注源，就地修改会让后续实验悄悄换掉基准。
+    未知库返回空列表而不是抛错：多库脚本会先枚举再逐库取。
+    """
     return list(ALL_CASES.get(game, []))
 
 
 def all_cases() -> list[EvalCase]:
+    """三库全量题拼接，顺序固定为 ALL_CASES 的声明顺序（sr / zzz / ys）。
+
+    **这个顺序不是 sr, ys, zzz** —— parse_games() 的库序才是那个顺序。
+    两处顺序不一致不是 bug 各自的错，但任何依赖顺序的下标操作（写 JSON、
+    对齐产物行）都会在这里踩空，所以要按游戏分组处理而不是按下标。
+    """
     return [c for cases in ALL_CASES.values() for c in cases]

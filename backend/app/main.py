@@ -73,6 +73,25 @@ async def _warmup_after_ingest(game: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """启动/关闭两侧资源。端口能监听**不代表**这两样已经就绪。
+
+    启动时建立：
+    - `init_db` 建库建表。它按设计**不抛**（除非 MYSQL_REQUIRED=true），
+      返回 False 时服务照常起来、MySQL 相关能力整体降级 —— 所以端点里不能假设
+      DB 可用，一律以 `db_status()` / 捕获 MySQLUnavailable 为准。
+    - 预热任务 `create_task` 后台跑，**这里不等它**：冷启动要 2.8s，
+      等于端口就绪时间被 BM25 建索引拖住。副作用是刚起来的瞬间
+      第一个请求可能撞上尚未建好的索引，检索器内部有懒加载兜底。
+
+    关闭时释放（finally，顺序即依赖顺序）：
+    先取消预热任务，避免关库期间它还在往 store 上打；
+    再 `close_db` dispose 连接池并把引擎/会话工厂置回 None；
+    最后 `aclose` 关 LLM 客户端的 httpx 连接。
+    少了 close_db 会在退出时挂住等连接池回收，少了 aclose 会留 warning。
+
+    结果消费：`lifespan` 返回后端点才可被调用，因此所有 `get_*` 单例
+    （retriever / llm / vector_store）在模块级初始化是安全的，不存在竞态。
+    """
     # 用 get_retriever() 单例而不是 HybridRetriever(...)：
     # BM25 索引和语料缓存在实例级，新建实例等于每个请求重付 ~1800ms 建索引。
     # 预热和 /chat 的 ToolContext.build() 共用同一份缓存，才有意义。
@@ -102,6 +121,17 @@ app.add_middleware(
 # 请求 / 响应模型
 # --------------------------------------------------------------------------- #
 class ChatRequest(BaseModel):
+    """`/chat` 与 `/chat/stream` 共用的入参。
+
+    进入端点前已经成立的前提：MySQL 可能缺席（`init_db` 不抛），
+    所以 `session_key` 给了也不保证落库成功，只保证「尽力记录」。
+    `game` 决定检索哪个语料库，缺省用 `.env` 的主库；传了不存在的库会在
+    检索阶段才失败，这属于当前已知的行为差异而非校验。
+
+    落库语义：`session_key` 是多轮上下文与历史记录的唯一钥匙，
+    不传则这一轮**不留痕**（save_turn 被跳过），前端历史也就断了。
+    """
+
     question: str = Field(min_length=1, max_length=1000)
     session_key: str | None = None
     game: str | None = None
@@ -115,6 +145,19 @@ class ChatRequest(BaseModel):
 
 
 class RetrieveRequest(BaseModel):
+    """`/retrieve` 入参：只做检索、不生成，用来单独观察检索层。
+
+    契约前提：这个模型同时是**检索实验的对照组入口** ——
+    实验 A/B 就是靠这里逐项传不同参数跑的，所以 `None` 与写死值的区别很重要（见下）。
+
+    响应形状：`{query, label, config, hits[]}`，其中 `label`/`config` 是这次
+    实际生效的配置快照（已被 from_settings 用 `.env` 兜底后的值），
+    落进实验产物后就是「这个数字是哪档配置跑出来的」的唯一凭据。
+
+    `page_titles` 与 `min_revision_ts` 是两个**约束**（过滤掉候选）而非加权，
+    用来验证「某页是不是唯一来源」和「只看某时间之后的内容」，
+    它们会同时压低 recall，属预期行为，读指标时要和基线档分开列。
+    """
     query: str = Field(min_length=1, max_length=500)
 
     # 以下几项默认 **None 而非写死数值**：写死的话 Pydantic 每次都会把默认值
@@ -140,6 +183,19 @@ class RetrieveRequest(BaseModel):
 
 
 class IngestRequest(BaseModel):
+    """`/ingest` 入参：抓一个分类下的页面并重建索引。
+
+    前提与副作用（这是全 API 里唯一会**写坏缓存**的端点）：
+    - `game` + `category` 决定抓取范围，`limit` 限条数。
+      限流间隔来自 `settings.wiki_min_interval`，不是本模型里的字段。
+    - 成功后调用 `reset_retriever()` 丢弃检索器缓存，所以**抓完之后**
+      之前的 BM25 索引不再代表语料；不重置就表现为「入库成功却查不到」。
+    - `variant` / `embed_mode` 决定切块与向量化方式，改它们等于要重建全库向量，
+      只对新增页面生效的假设在这里不成立。
+
+    同步返回抓取统计；耗时较长的抓取请走 `scripts/crawl.py`，
+    否则会占住 `_semaphore`（`concurrency_limit`）把问答请求一起堵住。
+    """
     game: str = "sr"
     category: str
     limit: int = 30
@@ -156,16 +212,38 @@ class IngestRequest(BaseModel):
 # --------------------------------------------------------------------------- #
 @api_router.get("/health")
 async def health() -> dict:
+    """进程级健康快照：前端的所有下拉框数据都从这里来。
+
+    进入这里的前提：MySQL 可能根本不在（`init_db` 不抛）。
+
+    **`ok` 与 `ready` 是两件事，别混用**：
+    - `ok` 只表示「HTTP 进程活着」——进程还在跑就是 true，因此它**不能**当探针；
+    - `ready` 才反映依赖健康（MySQL 就绪 + 至少一个 chat 基座配好密钥），
+      负载均衡 / k8s 探针应当断言 `ready`，MySQL 挂掉时会诚实地变成 false。
+
+    此前这里只有一个恒为 true 的 `ok`，MySQL 全挂、LLM 密钥全缺也照样返回 ok:true，
+    等于探针永远认为后端可用。现在把两种语义分开。
+
+    结果消费：`fallback` 与 `cache` 是降级留痕，`warmup` 是预热状态，
+    三者都是「不报错但行为变了」的唯一出口 —— 它们必须出现在响应里，
+    否则降级这件事没有任何人会知道。
+    """
     store = get_vector_store(_settings)
     llm = get_llm()
+    mysql = db_status()
+    llm_keys = {
+        "deepseek": bool(_settings.deepseek_api_key),
+        "siliconflow": bool(_settings.siliconflow_api_key),
+        "judge": bool(_settings.judge_model),
+    }
     return {
         "ok": True,
-        "mysql": db_status(),
-        "llm_configured": {
-            "deepseek": bool(_settings.deepseek_api_key),
-            "siliconflow": bool(_settings.siliconflow_api_key),
-            "judge": bool(_settings.judge_model),
-        },
+        # 依赖就绪度：探针断言这个，不是上面的 ok。
+        # 纯向量检索链路不依赖 MySQL，所以 mysql 未就绪只降级为 false、不抛异常；
+        # 判定口径写在这里而不是散在探针配置里，避免各处对「什么算健康」理解不一致。
+        "ready": bool(mysql.get("state") == "ready" and any(llm_keys.values())),
+        "mysql": mysql,
+        "llm_configured": llm_keys,
         # 前端模型下拉框的数据源。只列出配好密钥的，不会泄露密钥内容。
         "chat_backends": llm.available_backends(),
         # 降级留痕。降级不报错，所以它必须自己出现在健康检查里 ——
@@ -212,6 +290,19 @@ def _normalize_ts(raw: str | None) -> str | None:
 
 @api_router.post("/retrieve")
 async def retrieve(req: RetrieveRequest) -> dict:
+    """纯检索端点：不调 LLM，延迟只反映检索层，适合做 A/B 与排障。
+
+    进入前的两个前提：
+    - `get_retriever(_settings)` 是进程级单例，BM25 索引只建一次；
+      刚 `reset_retriever()` 之后第一次调用要重建（约 1.8s），所以这里的
+      延迟数字只在缓存热着的时候才有横向可比性。
+    - 整段检索占用 `_semaphore`（全局并发上限），慢查询会把 `/chat` 一起挤住，
+      所以面板上反复点不会更快。
+
+    结果消费：命中以 `hits[]` 返回，`rank` 从 1 开始、已按最终分数排好序；
+    `source` 标明这条是 bm25 / vector / rerank 哪一路贡献的 —— 重排前后的
+    来源分布比总分更能说明「提升来自哪里」。
+    """
     retriever = get_retriever(_settings)
     # 只把**请求里真的给了**的字段传下去（None 的一律丢掉），
     # 其余交给 from_settings() 用 .env 兜底。
@@ -289,6 +380,18 @@ def _build_agent(req: ChatRequest) -> tuple[ReActAgent, ToolContext]:
 
 @api_router.post("/chat")
 async def chat(req: ChatRequest) -> dict:
+    """非流式问答：一次跑完 ReAct 全过程后整体返回。
+
+    进入前的前提（都由 `_build_agent` 保证）：`backend` 若显式指定必须是**已配密钥**
+    的基座，否则这里就 400 —— 不等 Agent 跑起来才报错。
+    多轮历史优先用请求里的 `history`，没给且带 `session_key` 时才查库。
+
+    结果消费：`fallback` 信息不在响应体里（那是 chat 基座层的字段），
+    想知道这一轮是不是被降级过，只能对 `/api/health` 的 `fallback_stats`
+    按时间对账 —— 所以跨模型对比实验跑完后必须核这一项，
+    否则"降级样本混进对比"这个隐藏变量就查不出来了。
+    `trace[]` 是逐步工具调用，前端用它渲染过程面板，`run_id` 用来回查 `/api/runs/{id}`。
+    """
     from app.store.persist import load_history, save_run, save_turn
 
     agent, ctx = _build_agent(req)
@@ -329,6 +432,17 @@ async def chat(req: ChatRequest) -> dict:
 
 @api_router.post("/chat/stream")
 async def chat_stream(req: ChatRequest) -> StreamingResponse:
+    """SSE 流式问答：与 `/chat` 走同一个 Agent，差别只在**什么时候**拿结果。
+
+    进入前的前提同上（`_build_agent` 已完成基座校验），另外要注意
+    **流一旦发出就无法改状态码**：`_build_agent` 在返回响应之前跑，
+    所以参数错误仍然是干净的 400；但生成过程中出错只能以 `event: error`
+    的形式补发，前端必须单独处理这个事件，不能只等 `done`。
+
+    结果消费：`done` 事件里额外带 `persisted`（落库结果）和 `backend`，
+    前端据此提示「已存档」并标出实际用的模型 ——
+    这是唯一能在流式响应里看出发生了降级的位置。
+    """
     agent, ctx = _build_agent(req)
     backend = agent.backend or "deepseek"
 
@@ -392,6 +506,11 @@ async def ingest(req: IngestRequest) -> dict:
 
 @api_router.get("/stats")
 async def stats() -> dict:
+    """最轻量的一条可观测端点：向量库里的集合列表 + MySQL 状态。
+
+    与 `/health` 的区别：不调 LLM、不读配置，所以可以放心地高频轮询；
+    判断「语料在不在」用这里，判断「回答为什么变了」用 /health 的 fallback。
+    """
     store = get_vector_store(_settings)
     return {"collections": store.list_collections(), "mysql": db_status()}
 
@@ -401,6 +520,12 @@ async def stats() -> dict:
 # --------------------------------------------------------------------------- #
 @api_router.get("/runs")
 async def runs(limit: int = 20) -> list[dict]:
+    """最近的运行列表。
+
+    进入前的前提：MySQL 可能缺席 —— 此时 `recent_runs` 返回**空列表而不是报错**，
+    所以「列表为空」有两种含义：真的没跑过，或库没连上。
+    要区分必须同时看 `/api/health` 的 `mysql.state`，别把降级读成「没人用过」。
+    """
     from app.store.persist import recent_runs
 
     return await recent_runs(limit=limit, settings=_settings)
@@ -408,6 +533,11 @@ async def runs(limit: int = 20) -> list[dict]:
 
 @api_router.get("/runs/{run_id}")
 async def run_detail(run_id: str) -> dict:
+    """单次运行的完整轨迹（含逐步工具调用），是复现问题的那一屏。
+
+    注意这里的 404 混了两种原因：run 真不存在，或者 MySQL 没连上导致压根没落库。
+    两者返回同一个 404，排查时得先看 `/api/health` 的 `mysql.state`。
+    """
     from app.store.persist import run_detail as _detail
 
     detail = await _detail(run_id, settings=_settings)

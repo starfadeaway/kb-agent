@@ -44,7 +44,13 @@ class WikiError(RuntimeError):
 
 
 def data_has_error(payload: dict[str, Any]) -> bool:
-    """MediaWiki 把错误放在 query.errors 里，返回体依然是 200，不能只看状态码。"""
+    """MediaWiki 把错误放在 query.errors 里，返回体依然是 200，不能只看状态码。
+
+    只有 `list_category_pages` 在用这个判定：分类不存在时 API 照样返 200 +
+    `query.errors`，不查就会把「分类写错了」当成「这个分类是空的」。
+    其他方法靠 MediaWiki 的 `pages[].missing` 字段识别不存在的页面，
+    没有再查一遍 errors —— 依赖的是 formatversion=2 的 missing 约定。
+    """
     if not isinstance(payload, dict):
         return False
     return bool(payload.get("error") or (payload.get("query") or {}).get("errors"))
@@ -91,6 +97,13 @@ class _Throttle:
         return self._locks[host]
 
     async def wait(self, host: str) -> None:
+        """排队 + 睡到距上次请求满 min_interval。
+
+        锁是**按 host** 的，且只在 sleep 期间持有：多个协程会依次算出
+        各自的等待时间，而不是一起冲出去。用 `time.monotonic()` 而不是
+        `time.time()`，是为了不受系统时间被调整（NTP 校时）的影响 ——
+        用墙钟的话一次校时就可能让间隔瞬间变成 0。
+        """
         async with self._lock(host):
             delta = time.monotonic() - self._last.get(host, 0.0)
             if delta < self._min:
@@ -118,6 +131,10 @@ class WikiClient:
         self.waf_backoff_base = waf_backoff_base
         """WAF 退避基数。实测密集请求会被连续拦截,20s 起跳比 8s 稳定。"""
         self._client = httpx.AsyncClient(
+            # 「保持 Cookie」这一条没有显式代码，靠的就是复用同一个 client：
+            # httpx 的 cookie jar 会把挑战页下发的 cookie 带到下一次请求。
+            # 每次现 new 一个 client 就等于每次都从零开始，518 页 0 拦截那组
+            # 参数也就白测了 —— 所以抓取全程必须共用一个 WikiClient 实例。
             timeout=timeout,
             follow_redirects=True,
             headers={
@@ -154,6 +171,13 @@ class WikiClient:
         host = httpx.URL(url).host or ""
         last_exc: Exception | None = None
 
+        # 进入本循环之前，调用方要清楚两件事：
+        # 1. 间隔不由本函数决定 —— 节流器的 min_interval 来自构造参数，
+        #    库内实测值是 6s（CLI `--interval 6` / WIKI_MIN_INTERVAL），
+        #    WikiClient 的默认值 2.0 只是兜底，不是实测值。
+        # 2. 最坏耗时由 max_retry × 退避基数决定：WAF 连续命中时
+        #    单次请求最坏要等 20+40+80 ≈ 140s 才抛异常，所以
+        #    上层（crawl / delta_sync）必须能容忍这种阻塞。
         for attempt in range(self._max_retry):
             await self._throttle.wait(host)
             try:
@@ -174,6 +198,10 @@ class WikiClient:
                 )
                 await self._sleep_backoff(attempt, base=self.waf_backoff_base)
                 continue
+
+            # 注意这里**不** return 也不 raise：拦截是「没拿到数据」，
+            # 不是「这个页面不存在」。真正的失败信号在循环跑完之后
+            # 统一以 WAFBlocked 抛出，上层据此把本轮记成中断而不是 0 结果。
 
             if resp.status_code == 404:
                 raise WikiError(f"404 Not Found: {url} params={params}")
@@ -256,6 +284,10 @@ class WikiClient:
         prefixes = (category,) if ":" in category else ("分类:", "Category:")
         last: dict[str, Any] = {}
 
+        # **本方法只取一页，不翻页。** 匿名用户的 cmlimit 上限是 500，
+        # 传再大的 limit 也会被服务端截断，所以返回的标题集合
+        # 在大分类下是**下界而不是全集** —— 上层用它估规模没问题，
+        # 拿它当"这个分类就这些页"就会漏抓且不报错。
         for prefix in prefixes:
             data = await self._get(
                 self.api,
@@ -331,6 +363,9 @@ class WikiClient:
                         revision_id=int(revs[0].get("revid") or 0),
                     )
                 )
+        # 出口的集合**可能短于入参**：页面被删/被保护/无修订都会被 continue 掉，
+        # 且不报错。delta_sync 靠 `local.get(m.title)` 兜底跳过这些页，
+        # 所以最终 changed 少掉的部分会被当成"没变"而不是"查不到"。
         return out
 
     async def fetch_meta_by_ids(self, page_ids: list[int], batch: int = 20) -> list[PageContent]:
@@ -430,6 +465,9 @@ class WikiClient:
             },
         )
         rows = data.get("query", {}).get("recentchanges", [])
+        # 翻页版的出口与首页版同义：cursor 非空 = 还没翻完。
+        # 调用方（delta_sync）必须自己决定翻到哪儿为止，不能把
+        # 「拿到一页」当成「窗口已遍历完」—— 后者会把下界当结论。
         return rows, data.get("continue", {}).get("rccontinue")
 
     async def search(self, keyword: str, limit: int = 10) -> list[str]:
@@ -479,7 +517,16 @@ class WikiClient:
         )
 
     async def fetch_pages(self, titles: list[str], batch: int = 10) -> list[PageContent]:
-        """批量取页。MediaWiki 单次 query 支持多 title,分批以控制 URL 长度。"""
+        """批量取页。MediaWiki 单次 query 支持多 title,分批以控制 URL 长度。
+
+        `batch=10` 不是随手取的整数：它和请求间隔 6s 是一组实测参数
+        （518 页 / 0 次拦截，见 `crawl_all.py` 顶部）。一次塞更多页
+        会让单请求体积变大，EdgeOne 的判定阈值比间隔更早触发 ——
+        实测对策优先级是「批量取页 > 拉长间隔 > 退避重试」。
+
+        与 `fetch_page_meta` 的 batch=20 的差别：这里带正文（rvprop 含
+        content），响应体大得多，所以批量更小。
+        """
         out: list[PageContent] = []
         for i in range(0, len(titles), batch):
             chunk = titles[i : i + batch]
@@ -511,4 +558,8 @@ class WikiClient:
                         revision_id=int(revs[0].get("revid") or 0),
                     )
                 )
+        # 出口可能短于入参：missing / 无修订的页被 continue 掉且不报错。
+        # delta_sync 第 3 级直接拿它算指纹，缺的页会静默不进 changed；
+        # 那级带 WAF 计数，看 requests_level3 与 waf_hits 才分得清
+        # 「内容没变」和「压根没取到」。
         return out

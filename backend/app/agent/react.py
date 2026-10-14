@@ -125,6 +125,17 @@ class SearchGuard:
 
     def check(self, name: str, args: dict) -> str | None:
         """命中熔断条件时返回替代文本，否则 None。"""
+        # 调用方 `_exec_call` 在**执行工具之前**问这一句：拿到非 None 就完全不调工具，
+        # 把返回的这段文本直接当工具输出喂回模型。所以这里的措辞是写给模型看的，
+        # 不是给人看的错误提示。
+        #
+        # 前提：`self.seen` 与两个计数器是**每轮运行**新建的（见 `_run_once` 里的
+        # `guard = SearchGuard()`），不是跨请求共享。
+        # 这个前提一旦破（把 guard 挂到 session 上），A 用户查过的指纹会拦掉
+        # B 用户完全正常的第一次检索，而且两边都看不到任何异常。
+        #
+        # 只管检索类工具：calculator / list_games 没有"换个说法再搜一遍"这个失败模式，
+        # 用指纹去拦它们会把模型的正常重算判成重复调用。
         if name not in {"search_kb", "get_page"}:
             return None
         raw = str(args.get("query") or args.get("title") or "").strip()
@@ -147,6 +158,14 @@ class SearchGuard:
         self.seen[key] = raw
         return None
 
+        # 返回 None = 放行，并且这次查询**已经登记进 seen**（上面最后一行）。
+        # 登记放在放行之后是个有意的顺序：被去重/熔断拦下的查询不该占 seen，
+        # 否则模型改一次措辞就可能撞上自己上一轮被拦的那条，白白少一次检索机会。
+        #
+        # 出口只有两种语义，调用方必须靠 `blocked is None` 区分：
+        # 非 None → 不执行工具、ok=False、但**照常喂回模型**。
+        # 丢弃这个返回值等于把熔断变成静默丢消息，模型只会看到"工具没回话"。
+
     def observe(self, name: str, result: str) -> None:
         """根据工具结果更新连续 miss 计数。
 
@@ -158,6 +177,10 @@ class SearchGuard:
         if result.startswith("[重复查询已拦截]") or result.startswith("[熔断]"):
             return
         head = result[:200]
+        # 下面三条分支的**顺序就是优先级**，且全都建立在一个前提上：
+        # 「判据一定在结果的前 200 个字符里」。
+        # 这个前提由 search_kb 的输出格式保证（header 是第一行），不是由这里保证 ——
+        # 任何改动 header 位置/长度的改动都必须同步放宽 head，否则熔断会静默失效。
         if result.startswith(_INFRA_FAILURE_PREFIXES):
             # 基础设施失败期间继续检索只会重复失败，必须计入 miss。
             # 原先这里没有这一分支，失败会落到末尾把 misses 清零 ——
@@ -168,23 +191,43 @@ class SearchGuard:
         if "status=empty" in head:
             self.consecutive_misses += 1
             return
+        # 命中这一段的前提：正常路径下 `top_score=` 是**按空格分隔**的一个独立 token
+        # （search_kb 的 header 就是这么拼的）。分隔符一变（改成逗号），
+        # 这里会静默走到最后一行把 misses 清零 —— 熔断看着还在，实则永不触发。
         for token in head.split():
             if token.startswith("top_score="):
                 try:
                     score = float(token.split("=", 1)[1])
                 except ValueError:
                     score = 0.0
+                # 注意这里是"有则清零"，不是"累加"：一次好结果就足以证明
+                # 前一次的低分可能只是这次 query 写得不好，重新给了机会。
                 self.consecutive_misses = self.consecutive_misses + 1 if score < self.low_score else 0
                 return
+        # 兜底：完全没有可判定的分数（格式被改过 / 工具换了输出形态）。
+        # 选择清零而不是累加 —— 宁可熔断晚触发，也不要在判据失效时
+        # 把 Agent 提前掐死在还有希望的一轮上。
         self.consecutive_misses = 0
 
     def stats(self) -> dict:
+        # 唯一消费方是 `AgentState.guard_stats()`，再往上是 /api/chat 响应、
+        # SSE 的 done 事件和评测产物里的 guard 字段。
+        #
+        # 刻意只导出这四个计数：它们对应三种**可区分**的失败模式 ——
+        # 重复查询（模型在原地打转）/ 熔断触发（查了但没查到）/
+        # 连续低置信（快到了但对不上）。少导一个就没法判断
+        # "Agent 是省了 token 还是压根查不到"。
         return {
             "unique_queries": len(self.seen),
             "dedup_blocked": self.dedup_blocked,
             "forced_finishes": self.forced_finishes,
             "consecutive_misses": self.consecutive_misses,
         }
+
+        # 读这四个数时的一条推论：`forced_finishes > 0` 一定意味着"查了但没查到"，
+        # 不可能是"压根没查"。因为 `check()` 只在 seen 已有一次真实查询之后才可能
+        # 走到熔断分支，而 `observe()` 只在真跑过 search_kb 时才动计数器。
+        # 评测脚本靠这个区分"正确收尾"和"被熔断掐掉的缺陷"，不要合并成一个数。
 
 
 @dataclass
@@ -257,6 +300,11 @@ class AgentState:
         }
 
     def guard_stats(self) -> dict:
+        # guard 为 None 只发生在"越界拒答"那条路径 —— 它压根没进 ReAct 循环，
+        # SearchGuard 也没被创建。此时返回 **空 dict** 而不是四个 0，
+        # 与 `_run_stream` 越界分支刻意不发 guard 字段是同一个理由：
+        # 「没测到」和「测到是 0」在指标上必须能区分开。
+        # 消费方要按 `.get()` 取，别假设四个 key 一定在。
         return self.guard.stats() if self.guard else {}
 
 
@@ -304,6 +352,15 @@ def route_game(question: str, covered: dict[str, str]) -> str | None:
     覆盖范围从 `covered` 参数来而不是写死常量，所以 `GAME_TERTIARY=ys` 配上
     灌好的语料，`ys` 的关键词会自动从"未收录"变成"可路由"。
     """
+    # 两趟扫描的分工：第一趟只看**已收录**游戏（词表 = _GAME_HINTS ∩ covered），
+    # 第二趟只看**明确知道存在但未收录**的游戏。两张词表目前不相交，
+    # 所以顺序交换不会改变结果 —— 但保持"先覆盖内、后覆盖外"是为了将来
+    # 某个游戏既进了 _GAME_HINTS 又可能未收录时，语义仍然成立。
+    #
+    # 覆盖不到的第三种情况：slug 既不在 covered、也不在 UNCOVERED_GAMES
+    # （新库在语料灌好前的过渡期）。两趟都扫不到 → 返回 None →
+    # 调用方按"没提到任何游戏"处理、退回默认库。这是可接受的降级：
+    # 再"猜"一个就会重演拿星铁库去答原神问题的那个 bug。
     for game in covered:
         hints = _GAME_HINTS.get(game)
         if hints and any(h in question for h in hints):
@@ -311,6 +368,10 @@ def route_game(question: str, covered: dict[str, str]) -> str | None:
     for slug, (_, hints) in UNCOVERED_GAMES.items():
         if slug not in covered and any(h in question for h in hints):
             return slug
+    # 返回 None 在下游**不是拒答**，而是"沿用调用方的默认库"
+    # （见 `_prepare`）。用户问「光锥有哪些？」这种不点名游戏的问题就走这条路：
+    # 先拿默认库搜一次，搜不到会在 ReAct 循环里被 SearchGuard 收尾，
+    # 用户看到的是"知识库未收录该部分信息"，而不是一句莫名其妙的路由失败。
     return None
 
 
@@ -329,18 +390,31 @@ def trim_history(history: list[dict], max_chars: int) -> list[dict]:
     """
     kept: list[dict] = []
     used = 0
+    # 循环的终止由三件事共同保证，两个出口都必要：
+    #   a) `used + n > max_chars` → 预算耗尽，break（`kept` 非空时才判，所以单条超限仍会留下）
+    #   b) history 走完 → 自然结束
+    #   c) 最坏情况 a 与 b 都不成立 → 整段历史都塞得下，原样返回（不算裁剪失败）
+    # 退出时 kept 是**逆序**的，下面 reverse 之后才允许被拼接进 messages。
     for msg in reversed(history):
         n = len(str(msg.get("content") or ""))
         if kept and used + n > max_chars:
             break
         kept.append(msg)
         used += n
+    # 反转的必要性：这里是从最新往回取的，直接 extend 会得到
+    # "最新问答 → 上一轮问答 → 更早问答"的时间倒序，
+    # 模型会把后一轮当成对前一轮的追问，忠实度评测里的引用归属也会整体错位。
     kept.reverse()
     return kept
 
 
 def _split_for_stream(text: str, min_len: int = 6) -> list[str]:
     """把完整答案切成适合打字机效果的片段（优先按中文标点断句）。"""
+    # 出口有一条硬约束：**"".join(pieces) 必须严格等于 text**。
+    # 消费方 `_run_stream` 是逐片 `state.answer += piece` 累加的，
+    # 任何"顺手 strip 一下"或去重相邻片段的优化，都会让最终答案与模型输出对不上，
+    # 而这种偏差在评测里表现为莫名其妙的忠实度扣分，很难归因。
+    # 空串是唯一允许的特例（`not text` 那条），调用方拿到 [] 就不会发任何 token 事件。
     if not text:
         return []
     pieces: list[str] = []
@@ -401,6 +475,10 @@ class ReActAgent:
         ctx: ToolContext | None = None,
         stream: bool = False,
     ) -> AgentState | AsyncIterator[dict]:
+        # 出口有**两种形状**，且是这个返回类型（而不是拆成 run/run_stream）的原因：
+        # 非流式拿 AgentState 直接落库；流式拿一个异步迭代器边跑边推。
+        # 调用方必须显式传 stream=True 才知道拿的是哪种 ——
+        # 误用（比如对迭代器做 len()）不会报错，只会拿到一个看不懂的 TypeError。
         if stream:
             return self._run_stream(question, session_key, history, ctx)
         return await self._run_once(question, session_key, history, ctx)
@@ -410,6 +488,13 @@ class ReActAgent:
         context = ctx or ToolContext.build()
         covered = self.s.games
         routed = route_game(question, covered)
+        # routed 有三个落点，决定完全不同的后续路径，进入下面的分支前先钉清楚：
+        #   1) 命中 covered              → 正常 system prompt + 工具默认检索该库
+        #   2) 命中 UNCOVERED_GAMES      → uncovered=True，换拒答 prompt，不进 ReAct 循环
+        #   3) routed is None            → 沿用 ctx.game（用户没点名游戏）
+        # 第 2 种情况下 game **刻意退回** context.game 而不是那个越界 slug：
+        # 真实目标由 state.uncovered_game 单独承载，state.game 保持成一个合法的库，
+        # 这样 done 事件里的 game 字段不会变成一个库里根本不存在的值。
         # 未提到游戏 → 用上下文里的默认；提到了未收录的游戏 → 标记出来走拒答
         uncovered = routed is not None and routed not in covered
         game = routed if routed is not None and not uncovered else context.game
@@ -431,11 +516,23 @@ class ReActAgent:
         # 表现为"没怎么检索就被判 token_budget 收尾"。
         if history:
             messages.extend(trim_history(history, self.s.agent_history_chars))
+        # 从这一行起，messages 只增不改 —— ReAct 循环里一路 append，没有任何地方回删。
+        # 这是一个刻意的约束：超预算只能在 `_budget_exceeded` 里靠"不再调模型"处理，
+        # 靠裁剪已经发出去的消息是做不到的（上下文里已经包含了被裁的部分）。
+        #
+        # user 消息追加在**最后**：它是模型的直接任务，写在历史前面会让模型
+        # 把历史里的上一轮问题当成本轮问题回答。
         messages.append({"role": "user", "content": question})
         state = AgentState(
             session_key=session_key, game=game, messages=messages, question=question
         )
         state.uncovered_game = routed if uncovered else None
+        # 三个返回值的分工（`_run_once` 与 `_run_stream` 完全一致）：
+        #   context → 只被透传给 `_exec_call` 里的 call_tool，本函数之外没人读它的字段
+        #   messages → 循环的工作副本，跑完才整体赋给 state.messages
+        #   state    → 循环内被逐步写入，最后 `return state` 返回的就是它
+        # 刻意不让循环内直接读 state.messages 写答案：跑到一半时它还没有 final answer，
+        # 落库/推流只能看到半条消息链。要看轨迹就读 state.steps 与 state.refs。
         return context, messages, state
 
     async def _refuse_uncovered(self, state: AgentState) -> None:
@@ -461,7 +558,15 @@ class ReActAgent:
             )
         state.stop_reason = "out_of_scope"
         state.elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        # 把这次回复也拼回消息链：落库要的是完整的一问一答，
+        # 只存 question + answer 两列的话，多轮历史就没有上下文可拼。
+        # 用 `+` 而不是 append：state.messages 是 AgentState 构造时接进来的那个
+        # list（与 _prepare 返回的 messages 同一对象），就地改会让调用方的
+        # 局部变量多出这条消息 —— 这里改副本，图的是"这一步只有 state 该变"。
         state.messages = state.messages + [{"role": "assistant", "content": state.answer}]
+        # 刻意**不**调 _collect_refs：这条路径没有工具消息可扫，
+        # refs 保持空列表正是"没检索过"这个事实的准确表达。
+        # 走一遍空扫描没坏处，但会让读者误以为这里也可能有引用。
         self.last_state = state
 
     def _budget_exceeded(self, state: AgentState, deadline: float) -> str | None:
@@ -471,6 +576,14 @@ class ReActAgent:
         单步 token 少但步数多，照样能把上下文撑爆。
         墙钟用 monotonic 而非 time.time()，后者会被系统时钟调整影响。
         """
+        # 三个 if 的顺序 = 优先级，返回值只回答"最先撞上的是哪一道"。
+        # 调用方（两条 run 路径）拿它只做分支、不做数值比较，所以契约很松；
+        # 但把步数放第一是有意的：它是唯一一条**与墙钟和 token 都无关**的确定性上界，
+        # 放最后的话一次慢工具就能让 max_steps 整轮失效。
+        #
+        # 刻意的反面：这里**不**检查 len(messages)。上下文膨胀由 token_budget 兜，
+        # 而 token_budget 读的是累计 usage —— 用消息条数当预算等于用一个
+        # 和实际费用不相关的量来停机。
         if len(state.steps) >= self.s.agent_max_steps:
             return "max_steps"
         if state.prompt_tokens + state.completion_tokens >= self.s.agent_token_budget:
@@ -481,6 +594,16 @@ class ReActAgent:
 
     async def _finalize(self, messages: list[dict], state: AgentState, reason: str) -> None:
         """安全阀触发后的强制收尾：不带工具再问一次，让它把话说完。"""
+        # 前置：传进来的 messages 末尾一定是 **tool 消息**而不是 assistant ——
+        # 安全阀在每轮开头检查，此刻模型还没给出这一轮的答案。
+        # 这个前置同时解释了为什么收尾提示要作为 user 消息追加：
+        # tool 消息后面必须跟一条非 tool 消息，多数基座还要求是 user，
+        # 直接把 FINALIZE_PROMPT 塞进 system 会被部分 API 判成消息链非法。
+        #
+        # 出口：只写 state 上的标量字段（answer / token 计数 / stop_reason）。
+        # **不**把 messages 赋给 state.messages，也不调 _collect_refs 之外的落库动作 ——
+        # 前者由调用方在循环外统一赋值（避免同一份引用被赋两次），
+        # 后者在 finally 里做，所以即使 LLM 调用抛异常，引用照样收得到。
         state.stop_reason = reason
         try:
             # 走 chat_fn 而不是 self.llm.chat：切到别的基座时，
@@ -497,6 +620,11 @@ class ReActAgent:
             logger.exception("收尾失败")
             state.answer = f"[系统] 达到安全阀上限({reason})，且生成最终回答失败：{exc}"
         finally:
+            # 这里能直接扫 state.messages，是因为 AgentState 构造时接的就是同一个
+            # list 对象（`AgentState(messages=messages)`）—— 引用共享，不是拷贝。
+            # 这个"偷懒"是有价值的：换成真正拷贝的实现，循环里 append 的
+            # tool 消息就不会出现在 state.messages 里，引用会静默变成空列表，
+            # 而且不报任何错。
             self._collect_refs(state)
 
     def _collect_refs(self, state: AgentState) -> None:
@@ -510,6 +638,11 @@ class ReActAgent:
         注意：URL 后面挂的是**竖线分隔的修订**，不是 query 参数。
         这里用 `partition("|")` 而不是 split，避免 URL 里出现 `|` 时截错。
         """
+        # 调用时机是唯一的前置条件：state.messages 里必须已经有 tool 消息。
+        # 三个调用点都在"消息链定型之后"（`_finalize` 的 finally、`_run_once` 返回前、
+        # 流式的 finally）。若改成循环里每步调一次，seen 这个局部 set 每次重建，
+        # 同一条出处行会被反复收进 refs，引用列表里出现重复项 ——
+        # 而前端和评测都不会报错，只会安静地展示成"引用了 5 个来源"。
         seen: set[str] = set()
         for msg in state.messages:
             if msg.get("role") != "tool":
@@ -529,6 +662,18 @@ class ReActAgent:
                     ref["last_revision_ts"] = rev[len("修订") :].strip()
                 state.refs.append(ref)
 
+        # 每条 ref 只有两种形状：拿到修订 → {"url", "last_revision_ts"}，
+        # 没拿到 → 只有 {"url"}。**刻意不给空值占位**：
+        # 前端按 key 是否存在决定要不要渲染时效标签，塞空串会渲染出一个空标签；
+        # 忠实度评测按这个 key 判定"这条引用有没有时效标注"，空串会被算成有。
+        #
+        # 消费方：/api/chat 与 SSE done.refs、以及忠实度评测的引用对齐。
+        # 注意去重按 URL 走：同一个页面被 search_kb 和 get_page 各引用一次
+        # 只会留下一条，但两条的修订日期同源（都来自 metadata.last_revision_ts）。
+        # 丢弃某个分量是安全的 —— tools.py 里行内与出处行的日期是同一份计算。
+        # 前提是所有工具都遵守「出处：<url>[ | 修订 date]」这一条格式约定；
+        # 少一个工具遵守，引用就会对不上模型的正文出处，看起来和幻觉一样。
+
     async def _exec_call(
         self, call: dict, ctx: ToolContext, guard: SearchGuard, state: AgentState
     ) -> tuple[str, StepRecord]:
@@ -542,6 +687,12 @@ class ReActAgent:
         任何异常都在这里兜住并转成可读文本喂回模型 —— 抛出去会直接中断整条链，
         模型也就失去了自己调整策略的机会。
         """
+        # 返回值的两个分量，消费方不同：
+        #   text → 调用方立刻包成 tool 消息进 messages（下一步）；
+        #   rec  → 流式路径读 ok/ms/chars 推 tool_end 事件，
+        #           非流式路径直接 `_` 丢弃。
+        # 丢弃 rec 是安全的：它已经被 append 进 state.steps，
+        # 而非流式的出口只有 AgentState，steps 就在里面。
         ts = time.perf_counter()
         blocked = guard.check(call["name"], call["args"])
         if blocked is not None:
@@ -555,8 +706,15 @@ class ReActAgent:
                 text, ok = f"[异常] {exc}", False
         guard.observe(call["name"], text)
         dt = int((time.perf_counter() - ts) * 1000)
+        # dt 从这里才开始算，**包含熔断拦截的那 0ms 调用**：
+        # 被拦下的步骤 latency≈0，这是刻意让它看起来"没花时间"，
+        # 评测里才能区分"查了但被熔断"和"查了很慢"。
         if not ok:
             state.tool_failures += 1
+        # rec.step 用当前 steps 长度当序号，前提是**每个 call 恰好 append 一条** ——
+        # 包括熔断拦下的那步。不记它就看不出模型被拦过，而模型并不知道自己被拦了
+        # （它只是读到一段文本）。
+        # error 截 200 字符：完整文案已经进 messages，trace 再存一份全量会让落库翻倍。
         rec = StepRecord(
             step=len(state.steps),
             tool_name=call["name"],
@@ -583,8 +741,18 @@ class ReActAgent:
         `state` 必须显式传进来 —— `self.last_state` 在这一步还指着上一次运行，
         用它记账会把本次的命中记到上一个 run_id 上。
         """
+        # 前置：`text` 必须是**未经处理的工具原始输出**。扫描只在这里做一次，
+        # 任何调用方提前改写/截断/拼接文本都会让注入检测漏扫那一段，
+        # 而漏扫是静默的 —— 返回值看起来完全正常。
+        # 两条 run 路径共用这一个入口正是为了堵住这个口子：
+        # 只要有一处绕过（比如流式路径直接 push 原文），注入防护就变成
+        # "只在某个接口上生效"的假防护。
         content, result = scan_and_wrap(call["name"], text)
+        # note_injection 内部已过滤未命中，所以这里不需要再判 result.suspect；
+        # ScanResult 不进消息链，只通过 state.injections 旁路留痕。
         state.note_injection(call["name"], result)
+        # 出口是唯一进 messages 的形态。name 字段不是所有基座都认，
+        # 但带上它才能在出错信息里区分是哪个工具出的问题。
         return {
             "role": "tool",
             "tool_call_id": call["id"],
@@ -606,6 +774,10 @@ class ReActAgent:
             await self._refuse_uncovered(state)
             return state
         guard = SearchGuard()
+        # guard **每轮运行新建**，不跨请求共享：seen 与两个计数器的语义都是"本次运行"。
+        # 挂到 session 上会让同一个指纹在第二次提问时被当成重复查询拦掉，
+        # 而用户看到的只是一次莫名其妙的"重复查询已拦截"。
+        # 代价是同一 session 内熔断不复位 —— 但换个问法本来就该重新给机会。
         state.guard = guard
         t0 = time.perf_counter()
         # deadline 相对 monotonic 起算，不受系统时间调整影响
@@ -634,7 +806,11 @@ class ReActAgent:
             state.prompt_tokens += out["usage"]["prompt_tokens"]
             state.completion_tokens += out["usage"]["completion_tokens"]
 
-            # 3) 没有 tool_calls = 模型认为信息够了，这是终止信号
+            # 3) 没有 tool_calls = 模型认为信息够了，这是终止信号。
+            #    注意这是**唯一**的正常终止路径：安全阀触发走 break，
+            #    模型异常走另一个 break —— 只有这里 return。
+            # 出口时 state 已经完整：answer / refs / elapsed / last_state 全部就位，
+            # 所以调用方拿到 state 就能直接落库，不需要再补任何字段。
             if not out["tool_calls"]:
                 messages.append({"role": "assistant", "content": out["content"] or ""})
                 state.answer = out["content"]
@@ -652,11 +828,19 @@ class ReActAgent:
 
             # 4) 执行工具。失败也把错误文本喂回去让模型自己纠正 ——
             #    检索不到和报错的处理路径不一样，直接抛异常中断会丢掉模型自我调整的机会。
+            # 这个 for 遍历的是**模型一次请求里返回的全部 tool_calls**（可能有多个）。
+            # 前置假设：一个 assistant 消息的每个 tool_call 后面都紧跟一条 tool 消息 ——
+            # 所以循环体里两行必须成对出现，中途 continue/break 会让消息链断掉，
+            # 下一轮直接被 API 判成非法。
             for call in out["tool_calls"]:
                 text, _ = await self._exec_call(call, context, guard, state)
                 messages.append(self._tool_result_message(call, text, state))
 
-        # 只有走到安全阀才会到这里
+        # 只有走到安全阀才会到这里 —— 三个出口里只有安全阀那个 break 会落到循环外，
+        # 「模型调用失败」和「没有 tool_calls」都在循环内 return。
+        # 所以落到这里时：state.answer 一定已被 _finalize 填过（成功或失败兜底文案），
+        # state.refs 也已被 _finalize 的 finally 收过 —— 循环外**不能**再收一次，
+        # 否则引用会重复（虽然 url 去重能挡住，但 wasted 一遍全量扫描）。
         state.messages = messages
         state.elapsed_ms = int((time.perf_counter() - t0) * 1000)
         return state
@@ -676,6 +860,12 @@ class ReActAgent:
         """
         context, messages, state = self._prepare(question, session_key, history, ctx)
         if state.uncovered_game:
+            # 越界分支：不进 ReAct 循环，直接给边界说明。
+            # 出口只有 done 这一个事件（外加一条 out_of_scope 让前端能换文案），
+            # 而且刻意**不发** guard / injection 两个字段、refs 与 trace 硬写成空列表：
+            # 这条路径压根没调工具，对应计数恒为 0，
+            # 发一串 0 值会让前端把"没有这个数据"和"数据全是零"混为一谈，
+            # 评测侧也会把不存在的 guard 当成"熔断了 0 次"。
             t0 = time.perf_counter()
             await self._refuse_uncovered(state)
             state.elapsed_ms = int((time.perf_counter() - t0) * 1000)
@@ -693,11 +883,30 @@ class ReActAgent:
         t0 = time.perf_counter()
         deadline = t0 + self.s.agent_wall_timeout
 
+        # try 包住整个循环：流式路径里任何一步抛异常都不能让 SSE 连接裸断，
+        # 前端会一直转圈直到超时。异常统一转成 error 事件再往下走。
+        #
+        # 前置：三条出口（正常收尾、limit 的 break、except）**全部**汇聚到 finally，
+        # 所以落库四件事（_collect_refs / elapsed / last_state / done 事件）
+        # 只能写在 finally 里 —— 写在循环里就等于有路径漏掉，
+        # 而漏掉的路径正好是最需要留痕的失败路径。
         try:
             while True:
                 reason = self._budget_exceeded(state, deadline)
                 if reason:
+                    # 熔断/超时出口：与 `_run_once` 的对应分支有一处**故意的差异** ——
+                    # 这里只推一条 limit 事件就 break，不再像非流式那样发一次
+                    # FINALIZE_PROMPT 收尾。原因是 SSE 已经开始吐 token，
+                    # 中途再插一轮"不带工具的完整生成"会让前端先收到一段停顿、
+                    # 再收到整段答案，体验上像是卡住了。
+                    # 代价：limit 结束时 state.answer 可能还是空的，
+                    # 前端必须能处理「只有 limit、没有 token」的组合。
                     yield {"event": "limit", "data": {"reason": reason}}
+                    # 必须落到 state 上：AgentState.stop_reason 的默认值是 "answer"，
+                    # 不写的话最终 done 事件会把「被安全阀掐掉」报成「正常回答」。
+                    # 非流式路径没有这个问题 —— 它走 _finalize()，那里第一件事就是
+                    # state.stop_reason = reason。两条路径此前在这里是分叉的。
+                    state.stop_reason = reason
                     break
 
                 out = await self.chat_fn(messages, tools=self._tool_schemas, temperature=0.0)
@@ -718,6 +927,11 @@ class ReActAgent:
                     break
 
                 messages.append(self.llm.assistant_tool_message(out["content"], out["tool_calls"]))
+                # tool_start / tool_end 必须成对且**夹住** _exec_call：
+                # start 推的是模型的意图（name/args），end 推的是真实结果
+                # （ok/ms/chars 都取自 rec，而不是 text 的长度 ——
+                #   熔断拦下时 text 是我们自己拼的文案，它的长度不代表任何耗时）。
+                # 只推 start 不推 end，前端那个"正在检索…"的动画就永远不会停。
                 for call in out["tool_calls"]:
                     yield {"event": "tool_start", "data": {"name": call["name"], "args": call["args"]}}
                     text, rec = await self._exec_call(call, context, guard, state)
@@ -725,6 +939,7 @@ class ReActAgent:
                         "event": "tool_end",
                         "data": {"name": call["name"], "ok": rec.ok, "ms": rec.latency_ms, "chars": rec.result_chars},
                     }
+                    # 与非流式路径同一个入口：注入检测不能只在一个接口上生效。
                     messages.append(self._tool_result_message(call, text, state))
         except Exception as exc:  # noqa: BLE001
             logger.exception("流式运行失败")
@@ -732,7 +947,16 @@ class ReActAgent:
         finally:
             self._collect_refs(state)
             state.elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            # 流式接口拿不到返回值，落库全靠这一行把状态交出去 ——
+            # 调用方（main.py 的 SSE 分支）读 self.last_state 写 messages + steps。
+            # 放在 finally 而不是循环成功出口，是为了 error/limit 两条路径也留痕。
             self.last_state = state
+            # done 是**唯一**保证会发出的事件，前端按它收尾。
+            # 字段来源一一对应到 state：`answer` 由 token 事件逐片累加而来，
+            # `trace` 是 state.steps 的投影（刻意丢掉 StepRecord.error，
+            #   完整错误文案已经在 messages 里，再发一遍只是占带宽），
+            # `guard` / `injection` 是两份**聚合视图**而不是原始列表 ——
+            #   评测读的是聚合后的计数，per-step 明细在 messages/trace 里。
             yield {
                 "event": "done",
                 "data": {

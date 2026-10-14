@@ -77,6 +77,16 @@ class RetrievalConfig:
         return cls(**base)
 
     def label(self) -> str:
+        """返回实验阶梯 A0–A3 的档位名，**唯一判据是三个开关的组合**。
+
+        消费方（`run_eval.py` 落库 / 实验报告分组）拿它当分组键，
+        所以这里返回什么就会直接变成表格里的行名。
+        前提：`use_*` 三个布尔必须由调用方显式设成实验设计的那一组；
+        只要有一个字段从 `.env` 或默认值漏传，这段判断就会落到另一档，
+        而落库里的 label 仍然是"自洽"的 —— 看不出是配错了。
+        注意 A2 与 A3 无法区分 bm25_top/vector_top 等候选池参数，
+        单变量消融靠的是 `config` 快照里的字段，不是这个 label。
+        """
         if self.use_bm25 and self.use_vector and self.use_rerank:
             return "A3"
         if self.use_bm25 and self.use_vector:
@@ -129,6 +139,13 @@ class BM25Index:
 
     @classmethod
     def build(cls, chunk_ids: Sequence[str], corpus: Sequence[str], tokenizer: Callable[[str], list[str]]) -> BM25Index:
+        """一次性建索引。
+
+        前提：`chunk_ids` 与 `corpus` **同序等长** —— `search()` 返回的第三分量
+        就是 `corpus` 下标，调用方要靠它对齐；两者错位不会报错，只会静默返回错行。
+        代价由调用方承担：`BM25Okapi` 会在这里把整个语料分词一遍（实测 1.9s），
+        所以只在 `_get_bm25` 的缓存未命中路径上调用。
+        """
         idx = cls(chunk_ids=list(chunk_ids), corpus=list(corpus))
         idx._bm25 = BM25Okapi([tokenizer(t) for t in idx.corpus])
         return idx
@@ -138,6 +155,15 @@ class BM25Index:
         return len(self.chunk_ids)
 
     def search(self, query_tokens: list[str], top: int) -> list[tuple[str, float, int]]:
+        """返回 `[(chunk_id, bm25分数, corpus下标), ...]`，已按分数降序。
+
+        - **分数在这里被丢弃是安全的**：融合阶段只用名次（RRF），
+          BM25 原始分与余弦不同量纲，混用会把一路的结果带偏。
+        - 第三分量（corpus 下标）目前唯一消费者 `_fuse` 也丢掉了（写作 `_idx`），
+          留它是为了将来做「BM25 命中片段高亮」时不必重排一次索引。
+        - 提前返回空列表的两种情况：索引没建成、查询切词后为空 ——
+          后者对纯标点/纯空白 query 会出现，融合阶段按"稀疏路交白卷"处理。
+        """
         if self._bm25 is None or not query_tokens:
             return []
         scores = self._bm25.get_scores(query_tokens)
@@ -202,6 +228,13 @@ class HybridRetriever:
     def _load_corpus(self, cfg: RetrievalConfig) -> tuple[list[str], list[str], dict[str, RetrievedChunk]]:
         """从向量库拉全量文本，用于建 BM25 索引和把 chunk 映射回页面。
 
+        返回三元组 `(ids, docs, mapping)`，三者**同序**，但三个消费者各拿各的：
+        - `_get_bm25` 只要 `(ids, docs)` —— BM25 需要原始文本；
+        - `retrieve` 只要 `mapping` —— 融合阶段要把命中的 id 换回带 metadata 的 chunk；
+        - `warmup` 只要 `len(ids)` —— 用来报语料规模。
+        注意 `mapping` 里的 `RetrievedChunk.score` 是**占位的 1.0**，不是相似度：
+        融合时会被向量路的真实分数覆盖（见 `_fuse`），只看 BM25 一路时它保持 1.0。
+
         实验规模（万级 chunk）下一次性拉全量是可接受的；
         所以实验报告里注明「稀疏检索未做工程优化，
         目标是隔离检索策略本身的差异」。
@@ -243,6 +276,12 @@ class HybridRetriever:
             return ids, docs, mapping
 
     def _get_bm25(self, cfg: RetrievalConfig) -> BM25Index:
+        """返回**已建好**的索引，调用方只需 `search()`，不用管缓存与并发。
+
+        前提：调用方已经确认要走稀疏路（A0/A2/A3）；只走向量路时调它纯属白付 1.9s。
+        慢路径全程持 `_cache_lock`，所以并发首访时后来的请求是**排队**而不是并行重建；
+        这换来的好处是绝不会出现两份同 key 的索引互相顶掉缓存条目。
+        """
         key = self._cache_key(cfg)
         with self._cache_lock:
             idx = self._bm25_cache.get(key)
@@ -278,16 +317,29 @@ class HybridRetriever:
             self._bm25_cache.pop(k, None)
 
     def invalidate(self) -> None:
+        """丢掉全部缓存。**必须由写入侧在重建索引后显式调用**。
+
+        缓存 key 里不含 chunk 内容，所以「向量库被换掉了」这件事这套缓存自己发现不了；
+        漏调的结果是检索继续用旧语料服务，看起来完全正常。
+        """
         with self._cache_lock:
             self._bm25_cache.clear()
             self._text_cache.clear()
 
     def stats(self) -> dict:
+        """缓存命中情况的唯一观测点，供 /api/health 展示。"""
         with self._cache_lock:
             return {"bm25_cached": len(self._bm25_cache), "corpus_cached": len(self._text_cache)}
 
     # ---------------- 检索 ----------------
     async def retrieve(self, query: str, cfg: RetrievalConfig) -> list[RetrievalHit]:
+        """检索主入口。返回已按最终排序取好 `final_top_k` 条的命中列表。
+
+        消费方：API `/api/retrieve` 直接把它序列化返回；
+        `run_eval.py` 拿 chunk_id 映射回 page_title 算 recall/MRR/NDCG；
+        Agent 侧拿 `chunk.text` 进 prompt、用 `chunk.metadata` 拼引用出处。
+        它**不关心排序过程**，所以下面各路的分数/名次细节只在 `_fuse`/`_rerank` 里有意义。
+        """
         if not query.strip():
             return []
         # 全量语料扫描（~800ms）和 BM25 建索引（~1.9s）都是同步阻塞调用。
@@ -298,12 +350,20 @@ class HybridRetriever:
         if not mapping:
             return []
 
+        # 稀疏路。前提：语料 mapping 非空（上面已判）—— 否则 BM25 建在一个空索引上，
+        # 查出来的空结果会和"库里没有相关内容"混为一谈，分不清是哪种失败。
         bm25_hits: list[tuple[str, float, int]] = []
         if cfg.use_bm25:
             bm25_hits = (await asyncio.to_thread(self._get_bm25, cfg)).search(
                 tokenize(query), cfg.bm25_top
             )
 
+        # 稠密路。比稀疏路多两个硬前提：
+        #   1. 必须注入 LLMClient —— 缺了就直接抛错，因为这一路是「要 embedding 才能跑」，
+        #      静默退化成只走 BM25 会让 A1 的评测结果其实是 A0 的。
+        #   2. **嵌入模型必须与建库时同一个**（由 cfg.embed_model 解析到同一个 collection 名保证）。
+        #      模型换了却仍读旧 collection 的话，维度对不上会在点积时报错而不是静默降级。
+        # 过滤条件与稀疏路共用同一个 where，保证两路候选集合同源 —— 这是 RRF 公平的前提。
         vec_hits: list[RetrievedChunk] = []
         if cfg.use_vector:
             if self.llm is None:
@@ -321,9 +381,14 @@ class HybridRetriever:
                 where=where,
             )
 
+        # 融合：两路都空才等于"没召回到"；只有一路空则退化成那一路的排序（见 `_fuse`）。
         hits = self._fuse(bm25_hits, vec_hits, mapping, cfg)
+        # 重排入口条件：用户开了 rerank 且融合后还有候选。
+        # 关掉 rerank 时 hits 的顺序就是 fused_score 序（`_fuse` 已排好），直接截断即可。
         if cfg.use_rerank and hits:
             hits = await self._rerank(query, hits, cfg)
+        # 唯一的「截断到 top_k」发生在这里；`rerank_candidates` 只是送重排的候选上限，
+        # 不影响最终条数，所以两者调大调小互不干扰。
         return hits[: cfg.final_top_k]
 
     @staticmethod
@@ -337,9 +402,24 @@ class HybridRetriever:
 
         用排名而非分数做融合，是因为 BM25 分数和余弦相似度不同量纲，
         直接加权相加会被其中一路的分数分布带偏。
+
+        进入这段之前要先知道四个量的量纲差别，否则很容易把 `score` 和
+        `fused_score` 搞混：
+        - `bm25_hits[1]`（BM25 原始分）：无上界，随语料长度漂移 → **只用来定名次，从不参与打分**；
+        - `vec_hits[].score`（余弦，[-1,1]）→ 只写进 `hit.score` 供前端展示/溯源；
+          **注意只走稀疏路（A0）时没有任何东西会覆盖它，`score` 恒为 0.0** ——
+          所以 A0 的 `score` 是占位值，不能拿去跨档位比较"相关度"；
+        - `fused_score`（RRF 分）：名次的倒数和，量级 ~1/60 ≈ 0.017，**只有相对大小有意义**，
+          跨查询不可比，别拿它当绝对置信度；
+        - `rrf_k=60` 是平滑常数（业界惯例），作用是压制头部名次的过度优势：
+          rank1 得 1/61、rank2 得 1/62，只差 0.26%。调小它会更"头部化"，调大更平权。
+        `score` 与 `fused_score` 谁决定最终排序：开 rerank 时看 `rerank_score`，
+        不开时看 `fused_score` —— 两者都不会让这里返回的顺序被推翻。
         """
         pool: dict[str, RetrievalHit] = {}
 
+        # 第一路：稀疏。命中的 id 必须能在 mapping 里找到，否则没有正文和 metadata 可用；
+        # 跳过的这种说明 BM25 索引与语料缓存不同源（正常不会发生，因为两者同 key 同源构建）。
         for rank, (cid, _score, _idx) in enumerate(bm25_hits, start=1):
             if cid not in mapping:
                 continue
@@ -348,6 +428,9 @@ class HybridRetriever:
                 fused_score=1.0 / (cfg.rrf_k + rank),
             )
 
+        # 第二路：稠密。两个分支的差别只在 `chunk` 从哪来：
+        # 已经在池子里 → 两路都召回了（这正是 RRF 想要的信号，fused_score 累加）；
+        # 不在池子里 → 只被向量召回到，直接用向量那份（它带真实 score）。
         for rank, ch in enumerate(vec_hits, start=1):
             if ch.chunk_id in pool:
                 h = pool[ch.chunk_id]
@@ -364,7 +447,12 @@ class HybridRetriever:
         if not cfg.use_bm25 and not cfg.use_vector:
             return []
 
+        # 排序键只有 fused_score 一个，所以 A0/A1/A2 三个档位的「融合」都退化成单路名次序，
+        # 指标差异只来自召回集合不同，不来自任何加权技巧。
         fused = sorted(pool.values(), key=lambda h: -h.fused_score)
+        # 下面两个分支只改**标签不改顺序**：单路时 rank_source 不该写成 "bm25+vector"
+        # （那会让落库的评测记录谎报用了融合）。
+        # 消费方 `rank_source` 主要用于人看 /api/retrieve 的溯源与实验记录，不是排序依据。
         if not cfg.use_bm25:
             for h in fused:
                 h.rank_source = "vector"
@@ -379,10 +467,18 @@ class HybridRetriever:
         重排是整条检索链里最贵的一步（实测 449ms / 31 文档），
         所以只对融合结果的前 `rerank_candidates` 条做重排，
         剩下的在按重排分数排完序后原样接在后面。
+
+        返回值仍是 `list[RetrievalHit]`，且**顺序即最终顺序**，由 `retrieve` 截断 top_k。
+        进入时 `hits` 必须已经按 fused_score 排好序 —— head/tail 的切分靠的就是这个序；
+        若上游换了排序方式，tail 里就会混进本该重排的高分候选。
         """
         if self.llm is None or not hits:
             return hits
 
+        # 切分的三种落点，决定了"候选数对结果不敏感"这个承诺能不能兑现：
+        #   limit<=0（不裁剪）/ 候选不足 limit → head 就是全部，tail 为空，行为等同优化前；
+        #   否则 head=前 limit 条进重排，tail=其余按原融合序兜底。
+        # 注意 tail 里这些 hit 的 rerank_score 保持 None，消费方要能区分"重排过"和"没重排过"。
         limit = cfg.rerank_candidates
         head, tail = (hits, []) if (limit <= 0 or len(hits) <= limit) else (hits[:limit], hits[limit:])
 
@@ -390,9 +486,14 @@ class HybridRetriever:
         try:
             ranked = await self.llm.rerank(query, docs, top_n=len(docs))
         except Exception as exc:  # noqa: BLE001
+            # 降级必须返回**未经重排的原序**：重排只是加分项，
+            # 上游 RRF 排序本身已经可用，让它异常把整次检索带崩不划算。
             logger.warning("Rerank 失败，降级为融合排序：%s", exc)
             return hits
         out: list[RetrievalHit] = []
+        # 注意这里按 rerank 返回的**下标**回取，并且是原地改写 head 里的对象：
+        # rerank_score 是 Cross-Encoder 的原始分（与余弦不同量纲），
+        # 覆盖 score 之后 hit.score 的含义就变成了"重排分" —— 展示时别再拿它当相似度。
         for r in ranked:
             hit = head[r.index]
             hit.rerank_score = r.score
@@ -409,7 +510,9 @@ class HybridRetriever:
         实测冷启动要 2.8s（拉语料 717ms + jieba 分词建索引 2132ms），
         而这个索引在整个进程生命周期里只建一次 —— 让它发生在服务启动阶段，
         而不是由第一个用户请求承担。
-        返回各环节耗时，供 /api/health 展示。
+        返回各环节耗时，供 /api/health 展示：`load_corpus_ms` 与 `build_bm25_ms` 相加
+        就是首个请求本来要付的代价，`chunks` 是这次被建索引的语料规模。
+        注意耗时只在**冷启动**这一次有意义（缓存命中后两个值都接近 0）。
         """
         import time as _time
 
@@ -458,7 +561,12 @@ def get_retriever(settings: Settings | None = None) -> HybridRetriever:
 
 
 def reset_retriever() -> None:
-    """切后端 / 重建索引后调用，否则会拿着旧缓存继续服务。"""
+    """切后端 / 重建索引后调用，否则会拿着旧缓存继续服务。
+
+    先 `invalidate()` 再置空是刻意的：`reset_retriever()` 常在测试里连着调，
+    若旧实例还被别的引用持有（比如已在飞行中的请求），清空缓存能保证
+    它接着服务的那几个请求不会继续读到已失效的语料。
+    """
     global _default
     if _default is not None:
         _default.invalidate()

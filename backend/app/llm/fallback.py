@@ -89,6 +89,24 @@ def classify(exc: BaseException) -> str:
 
 
 def is_retryable(exc: BaseException) -> bool:
+    """`classify(...) == "retryable"` 的布尔投影，供降级链一处判断。
+
+    **读这个 bool 之前要清楚它管的是什么、不管什么。**
+    唯一消费点是 `client.chat` 的降级链：不可重试就当场把异常抛给上层，
+    可重试才 `continue` 换下一个基座。所以这里的"可重试"实际含义是
+    「**换个基座重发一次**可能有用」，而不是「同一条请求再发一次」——
+    本项目**没有**针对同一个基座的重试，`_chat_once` 失败即换人。
+    把它当成「可以原地重试」的信号会高估系统的容错。
+
+    判断错的后果是不对称的，这也是宁可漏降级的原因：
+    - 误判 fatal → 一次限流直接冒泡成 500，用户看到的是硬失败；
+    - 误判 retryable → 真实故障被逐个基座重试一遍，错误信息被重试噪声淹没，
+      而且 `/api/health` 的 fallback_stats 会显示「降级过」，
+      跨模型对比实验里这些样本其实已经不是原模型产出的了（隐藏变量）。
+
+    判定逻辑本身全在 `classify`，本函数不引入任何额外口径 ——
+    加新判断必须改 `classify`（及其两侧元组），只改这里会造成两套口径。
+    """
     return classify(exc) == "retryable"
 
 

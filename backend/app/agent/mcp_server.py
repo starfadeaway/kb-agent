@@ -64,23 +64,31 @@ MCP_TOOLS: dict[str, float] = {
     "calculator": 5.0,
     "list_games": 5.0,
 }
+# 消费方：`_make_*` 把它透传给 `call_tool` 的 asyncio.wait_for，是 MCP 侧
+# **唯一**的超时控制点。
+#
+# 与内置路径的差别值得记住：内置路径（`ReActAgent._exec_call`）对所有工具统一用
+# Settings.tool_timeout（默认 15s）。默认配置下检索类两边都是 15s、一致；
+# 但 calculator / list_games 在 MCP 侧被收窄到 5s，属于**有意的差异**：
+# 它们不做 IO，多等没有意义，而 5s 足够覆盖一个超大表达式。
+# 也就是说 `test_mcp_parity` 断言的是"返回值逐字符一致"，**不含超时行为一致** ——
+# 引用这个守卫时不要过度声称。
 
 #: 每个工具的参数声明，与 `app/agent/tools.py` 的 @tool 声明**刻意保持一致**。
 #:
 #: 为什么要重复写一遍而不是从 SCHEMAS 里转：MCP 从**类型注解**生成 schema，
 #: 而本项目的工具签名是 `(args: dict, ctx: ToolContext) -> str`，
-#: 从这里转不出逐参数的类型。写两遍的风险是两边漂移，
-#: 所以 `test_mcp_parity.py` 里有一条守卫断言两边 schema 的字段名与 required 一致。
-#: 每个工具的参数声明。
+#: 从这里转不出逐参数的类型。写两遍的风险就是两边漂移。
 #:
-#: **必须与 `app/agent/tools.py` 的 `@tool` 声明逐字段一致** ——
-#: 参数名、required、类型全部要对齐，否则 MCP host 会用错误的参数名调用。
-#: 这里的值是从内置 schema 抄来的（2026-10-13 实测 `get_page` 少了 `game`、
-#: `search_kb` 少了 `top_k`，两边一漂移就是每个工具调用都报
-#: `validation error: Field required`）。
+#: **必须逐字段一致** —— 参数名、required、类型全部要对齐，
+#: 否则 MCP host 会用错误的参数名调用，表现为
+#: `validation error: Field required`，且错误信息里完全没有"参数名不对"这层提示。
+#: 这不是假设：2026-10-13 实测就抓到过 `get_page` 少 `game`、`search_kb` 少 `top_k`
+#: 两处漏项，两边一漂移就是**每个工具调用都报错**。
 #:
 #: 手抄必然有漂移风险，所以 `test_mcp_parity.py::test_mcp_params_match_tool_schemas`
-#: 逐字段比对 —— 那条守卫在本模块写完后立刻就抓到了这两处漏项。
+#: 逐字段比对 —— 上面那两处就是那条守卫在本模块写完后立刻抓到的。
+#: 也就是说：这份常量**是被守卫看着的**，改它之前先想清楚会不会动到实验 C 的被测变量。
 MCP_PARAMS: dict[str, tuple[dict[str, str], list[str]]] = {
     "search_kb": (
         {
@@ -127,9 +135,16 @@ def _make_no_arg(name: str, ctx: ToolContext, timeout: float):
     `ValidationError: result Input should be a valid string`。
     """
     async def _f() -> str:
+        # `ok` 在这里被丢弃是**安全**的，但理由要说准：
+        # 不是"MCP 不关心成败"，而是失败已经被 call_tool 写进 text 本身了
+        # （`[超时] …` / `[检索失败] …`），host 拿到的就是这段可读文案。
+        # 真正丢掉的信息是**结构化的成败标记** —— MCP 这条路上没有地方能上报它，
+        # 所以两个路径的失败率指标本来就不可比，不要拿它们对齐。
         text, _ok = await call_tool(name, {}, ctx, timeout)
         return text
 
+    # __name__ / __doc__ 不是装饰：MCP 把它当工具名和描述发给 host。
+    # 不设的话 host 侧会看到 `_f`，四个工具重名，列表根本没法区分。
     _f.__name__ = name
     _f.__doc__ = _DESCRIPTIONS.get(name, name)
     return _f
@@ -153,6 +168,9 @@ def _make_one_arg(name: str, key: str, ctx: ToolContext, timeout: float):
         text, _ok = await call_tool(name, {key: value}, ctx, timeout)
         return text
 
+    # exec 的两个前提（都在下面注释里）：生成的源码形参名必须等于 key，
+    # 否则 pydantic 模型与 host 的 payload 对不上；key 来自本模块常量而非外部输入。
+    # 这段 src 是**逐字符**可控的 —— 一旦 key 变成外部输入，这里就是注入面。
     src = f"async def _f({key}: str) -> str:\n    return await _invoke({key})"
     ns = {"_invoke": _invoke}
     exec(src, ns)  # noqa: S102 - key 来自本模块常量，不是外部输入
@@ -181,6 +199,12 @@ def _make_optional_arg(name: str, required: str, optional: tuple[str, ...],
     """
     params = [f"{required}: str"]
     params += [f"{o}: str = ''" for o in optional]
+    # 生成体里 `if {o}:` 这一层是**语义**而不是风格问题：
+    # 空串表示"host 没传"，而工具内部用 `args.get("game") or ctx.game` 兜底。
+    # 如果把空串原样塞进 payload，工具会收到 game=""，
+    # `or` 虽然仍能兜住，但像 search_kb 那种"先 .strip() 再判空"的地方
+    # 行为就和"键不存在"不完全一致了 —— 两个路径不该有这种细微差别。
+    # 代价：host 显式传空串与不传在这里被当成同一件事，这正是想要的。
     body = (
         f"async def _f({', '.join(params)}) -> str:\n"
         f"    _p = {{'{required}': {required}}}\n"
@@ -215,6 +239,11 @@ def build_server(ctx: ToolContext, *, only: list[str] | None = None):
         raise ValueError(f"请求的工具未注册：{missing}；已注册：{list(REGISTRY)}")
 
     server = MCPServer(SERVER_NAME)
+    # 下面这个循环的依据只有一条：**MCP 是拿函数签名生成入参模型的**。
+    # 所以适配函数的形状必须与 MCP_PARAMS 里声明的形状严格对应，
+    # 分派却按参数**个数**（0 / 1 / 多个）而不是按工具名 ——
+    # 按名字分派的话，新增一个三参数工具就会静默走错分支，
+    # 而"三参数"这件事 MCP_PARAMS 已经如实描述了，不需要额外的名字白名单。
     for name in names:
         props, _required = MCP_PARAMS[name]
         timeout = MCP_TOOLS[name]
@@ -225,29 +254,50 @@ def build_server(ctx: ToolContext, *, only: list[str] | None = None):
         else:
             _req, required = MCP_PARAMS[name]
             if len(required) != 1:
+                # 注册期就炸，而不是等到 host 调用时才发现。
+                # 这里抛出的是**编程错误**（适配层覆盖不全），不是用户输入错误，
+                # 所以用 raise 而不是返回一段文案 —— 它永远不该被模型看到。
                 raise ValueError(
                     f"{name} 有 {len(props)} 个参数但 required 是 {required}；"
                     f"带多个必填参数的工具需要专门的适配函数"
                 )
             optional = tuple(k for k in props if k != required[0])
             fn = _make_optional_arg(name, required[0], optional, ctx, timeout)
+        # fn 的签名就是 MCP 对外承诺的入参模型；
+        # ctx 被闭包捕获，所以下面所有工具共享**同一个** ToolContext 实例。
         server.tool()(fn)
 
+    # 出口是一个已注册完毕的 MCPServer，消费方只有 serve_stdio。
+    # 它在这里就被构造好（而不是在 serve_stdio 里），是为了让
+    # `test_mcp_parity` 能不启动 stdio 就直接拿到 server 对象做对照。
     return server
 
 
 async def serve_stdio(ctx: ToolContext, *, only: list[str] | None = None) -> None:
     """以 stdio 传输启动 MCP server（阻塞直到 host 断开）。"""
+    # 前置：ctx 必须**已经**是带好 retriever 的实例。
+    # 和 /chat 每请求 `ToolContext.build()` 的差别在于这里 ctx 只在启动时构造一次、
+    # 被所有工具闭包共享，所以 settings 是启动那一刻的快照 ——
+    # 运行期改 .env 不会影响已经起来的 server（要改必须重启 host 连接）。
+    # 好处是 BM25 索引、embedding 缓存只用得上一次，不必每个工具调用都重新预热。
     server = build_server(ctx, only=only)
     await server.run_stdio_async()
 
 
 def main() -> None:
-    """命令行入口：`python -m app.agent.mcp_server [game]`"""
+    """命令行入口：`python -m app.agent.mcp_server [game]`
+
+    这里原先调的是 `_TC.create(game)`，而 `ToolContext` 只有 `@classmethod build()`
+    —— 只要有人真的敲这条命令就立刻 AttributeError，而 docstring 恰恰宣称它可用。
+    真实入口是 `scripts/mcp_stdio_entry.py`（走 `serve_stdio`），平时测不出来，
+    属于「没人走 + 一走就崩 + 文档说它能走」。
+
+    `game or "sr"`：命令行不给参数时 `sys.argv[1]` 不存在，不能把 None 透给 build()。
+    """
     from app.agent.tools import ToolContext as _TC
 
-    game = sys.argv[1] if len(sys.argv) > 1 else None
-    ctx = _TC.create(game)
+    game = sys.argv[1] if len(sys.argv) > 1 else "sr"
+    ctx = _TC.build(game)
     print(f"kb-agent MCP server 启动（stdio），工具：{list(MCP_TOOLS)}", file=sys.stderr)
     asyncio.run(serve_stdio(ctx))
 

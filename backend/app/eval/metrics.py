@@ -12,6 +12,19 @@ from dataclasses import dataclass
 
 @dataclass
 class RetrievalMetrics:
+    """一次检索的四项指标快照。
+
+    读这几个数之前必须知道的口径：
+    - **分母不是 k**。`recall_at_k` 的分母是 gold 页数，`hit_rate` 的分母恒为 1（每题 0/1）。
+    - **k 只截断分子**。列表短于 k 时不会补零，多召回不会有额外收益。
+    - 数值都落在 [0,1] 且**可跨配置比较**，前提是四者都走 `evaluate_pages`
+      （页面级 + 两侧归一化）。直接拿 chunk_id 去算 recall 永远是 0。
+
+    结果消费：`as_dict()` 摊平成 `recall@{k}` / `hit_rate` / `mrr` / `ndcg`，
+    这几个键名一路透传到 `eval_results` 表列和实验产物的 JSON，
+    所以**改这里等于改历史数据的可比口径**。
+    """
+
     recall_at_k: float
     hit_rate: float
     mrr: float
@@ -28,7 +41,12 @@ class RetrievalMetrics:
 
 
 def recall_at_k(retrieved_ids: list[str], gold_ids: list[str], k: int) -> float:
-    """gold 命中比例。多 gold 时用比例而非 0/1，避免"全中才算对"的惩罚过重。"""
+    """gold 命中比例。多 gold 时用比例而非 0/1，避免"全中才算对"的惩罚过重。
+
+    分母 = `len(gold_ids)`，不是 k、也不是检索条数。
+    这意味着题目标注了几个 gold 会直接改变分数的量纲 —— 标注必须全量一致，
+    中途给某题多标一个 gold，历史均值就不再可比。
+    """
     if not gold_ids:
         return 0.0
     got = set(retrieved_ids[:k])
@@ -36,14 +54,25 @@ def recall_at_k(retrieved_ids: list[str], gold_ids: list[str], k: int) -> float:
 
 
 def hit_rate(retrieved_ids: list[str], gold_ids: list[str], k: int) -> float:
-    """是否有任意一条命中（二值，衡量"能不能答"的门槛）。"""
+    """是否有任意一条命中（二值，衡量"能不能答"的门槛）。
+
+    分母恒为 1，所以一批题的均值 = 「有多少比例的题至少召回到一个 gold 页」。
+    和 recall@k 的关系：recall 涨而 hit_rate 不动，说明提升来自多 gold 题的覆盖度，
+    而不是"原本答不了的题现在能答了" —— 这两件事对生成层的意义完全不同。
+    """
     if not gold_ids:
         return 0.0
     return 1.0 if any(g in set(retrieved_ids[:k]) for g in gold_ids) else 0.0
 
 
 def ndcg(retrieved_ids: list[str], gold_ids: list[str], k: int = 10) -> float:
-    """二值增益版 NDCG。"""
+    """二值增益版 NDCG。
+
+    分母是 `min(len(gold), k)`（理想排序的满分 DCG），同样与实际召回条数无关。
+    注意这里的 k 默认 10，**与 `evaluate_pages(k=5)` 的 k 相互独立**：
+    recall@5 只看前 5，而 NDCG 默认看前 10。检索器返回条数少于 10 时无影响，
+    一旦某档配置返回更多结果，两者的窗口就对不上了，读数时须先确认这一点。
+    """
     if not gold_ids:
         return 0.0
     gold = set(gold_ids)
@@ -57,6 +86,13 @@ def ndcg(retrieved_ids: list[str], gold_ids: list[str], k: int = 10) -> float:
 
 
 def normalize(s: str) -> str:
+    """标题归一：只去 ASCII 空格和下划线，是**两侧共用**的匹配前提。
+
+    为什么不全角化/去标点：wiki 标题里的「凝滞虚影 • 巽风之形」带间隔号，
+    两侧若用不同规则就会一边有、一边没有，凭空判 0。
+    这里只做最小归一（全角字符原样保留），宁可保守也不引入新的假阴性。
+    只要不归一化，评测集里手工敲的 gold 标题就几乎必然对不上召回结果。
+    """
     return s.strip().replace(" ", "").replace("_", "")
 
 
@@ -66,6 +102,14 @@ def page_ranking(chunk_ids: Sequence[str], page_of: dict[str, str]) -> list[str]
     评测集标的是页面而不是 chunk：
     chunk 边界会随 chunk_size 变化，绑死 chunk_id 等于让"重建索引"等价于"评测集失效"。
     折算成页面级排名后，实验 B 改分块参数时指标仍然可比。
+
+    **前置条件：`page_of` 必须覆盖 `chunk_ids` 里的每一个 id。**
+    查不到的 id 会被当成空页静默跳过（而不是报错），排名表因此比检索结果短一截 ——
+    表现是 recall 略低、指标却完全看不出异常。调用方（run_eval）由同一批 hits 同时
+    建 ids 和 page_of，才不会出现这个漏洞。
+
+    结果消费：输出**已去重但未归一化**的页面标题序列，
+    它被直接当 `evaluate_pages` 的入参，所以顺序 = 检索排名，不可再排序。
     """
     seen: set[str] = set()
     out: list[str] = []
@@ -84,19 +128,41 @@ def evaluate_pages(retrieved_pages: Sequence[str], gold_pages: Sequence[str], k:
 
     两侧都必须归一化：wiki 标题里有「凝滞虚影 • 巽风之形」这类带空格和间隔号的形式，
     只归一化 gold 会出现"明明召回了却判 0"的假阴性。
+
+    归一化只在这一层做一次 —— 上游 `page_ranking` 必须原样传页面标题，
+    在那里先归一会让「同页去重」误判（归一后不相等的原标题可能其实同一页）。
+
+    **k 同时作用于四个指标**（recall / hit_rate / mrr / ndcg）。
+    此前只前两个用 `k`，后两个走各自的默认窗口 10 ——
+    三库默认 top_k=5 时两种写法结果完全相同，但一旦某档返回超过 5 条，
+    recall@5 与 mrr@10 就不是同一个检索范围，**跨档比较会得出假差异**。
+    `RetrievalMetrics.k` 字段一直暗示四者同 k，这里让实现与之一致。
+
+    结果消费：返回值经 `as_dict()` 摊平后直接进实验产物与 `eval_results` 行，
+    键名即列名；`page_hit` 不在这里算，由 `page_level_hit` 单独出。
     """
     got = [normalize(p) for p in retrieved_pages]
     gold = [normalize(g) for g in gold_pages]
     return RetrievalMetrics(
         recall_at_k=recall_at_k(got, gold, k),
         hit_rate=hit_rate(got, gold, k),
-        mrr=list_mrr(got, gold),
-        ndcg=ndcg(got, gold),
+        mrr=list_mrr(got, gold, k),
+        ndcg=ndcg(got, gold, k),
         k=k,
     )
 
 
 def list_mrr(retrieved: Sequence[str], gold: Sequence[str], k: int = 10) -> float:
+    """首个命中排名的倒数（只看第一个命中，忽略后面的命中质量）。
+
+    与 NDCG 的可比性边界：MRR 对"第一个 gold 排得够前"敏感、对后续 gold 无感，
+    NDCG 反过来。所以 MRR 涨而 NDCG 平，通常意味着重排把单个强命中顶了上来、
+    但整体覆盖没改善 —— 只报 MRR 会把这个差别掩盖掉，两个指标必须一起看。
+
+    分母恒为 1（一题一分数）。无命中返回 0.0 而不是 NaN：
+    NaN 会污染 `aggregate` 的均值与配对检验的差值方差。
+    入参按约定已归一化，这里仍对 item 再 normalize 一次做兜底。
+    """
     gold_set = {normalize(g) for g in gold}
     if not gold_set:
         return 0.0
@@ -117,7 +183,20 @@ def page_level_hit(retrieved_ids: list[str], gold_pages: list[str], page_of: dic
 
 
 def aggregate(list_of: list[dict]) -> dict:
-    """对一批 case 的指标取均值，顺带给标准差方便判断差异是否显著。"""
+    """对一批 case 的指标取均值，顺带给标准差方便判断差异是否显著。
+
+    两个必须知道的前提：
+    - **分母是调用方给的行数**，本函数不判断一行该不该计入。run_eval 先用
+      `is_kept` 滤掉检索失败的 case 再传进来（失败是链路故障，不是检索能力差），
+      所以这里的均值只在「成功跑通的题」上成立；被滤掉的量由调用方用
+      n/ n_ok / errors 单列，读数时必须一起看。
+    - **列名只取 `list_of[0]` 的键集**。各行键不一致时多出来的键被静默丢弃，
+      所以每一行必须来自同一个 `as_dict()`；手写 dict 拼行很容易踩这个坑。
+
+    结果消费：除均值外会额外追加 `{key}_std` 键 —— 下游 `summarize` 会把这些键
+    原样留在实验产物里（只是不落 `eval_results` 表），所以 JSON 的键不是只有 4 个指标。
+    空列表返回 `{}`（没有指标键），调用方必须处理，否则会 KeyError。
+    """
     if not list_of:
         return {}
     keys = list_of[0].keys()

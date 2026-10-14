@@ -17,6 +17,15 @@ SENT_SPLIT_RE = re.compile(r"(?<=[。！？；!?;])")
 
 @dataclass
 class Chunk:
+    """一个可入库的检索单元：向量库一条记录 + MySQL `chunk_metas` 一行。
+
+    `chunk_id` 是唯一的跨表契约，格式 `{game}-{page_id}-{chunk_index:04d}`。
+    `persist.backfill_corpus` 的剪枝阶段拿它当"本轮应该存在的全集"
+    （`keep_chunk_ids`），所以它**必须只由本页的切分顺序决定**：
+    一旦掺进时间戳或随机数，重跑一次回填就会把向量库里真实存在的分片
+    全部当成残留删掉 —— 而且删完照样返回 `ok=True`。
+    """
+
     chunk_id: str
     game: str
     page_id: int
@@ -32,6 +41,14 @@ class Chunk:
 
     @property
     def char_len(self) -> int:
+        """本块正文字符数，落库为 `ChunkMeta.n_chars`。
+
+        下游把它用在两个地方，含义不同：`ChunkMeta.n_chars` 是单块长度，
+        而 `Page.n_chars = sum(c.char_len for c in chunks)` 是**求和**，
+        因为块之间有 overlap，求和会大于页面真实长度 —— 它衡量的是
+        "入库了多少文本量/embedding 成本"，不是"这个页面有多长"。
+        拿它当页面字数去和原文长度对账，必然对不上。
+        """
         return len(self.text)
 
 
@@ -39,14 +56,31 @@ def _split_sections(raw: str) -> list[tuple[str, str]]:
     """把 wikitext 清洗后的纯文本按标题切成 [(标题路径, 正文)]。
 
     标题行在清洗阶段已保留为独立行，这里逐行扫描并维护标题栈。
+
+    **切边界选标题而不是选字符**，是因为这个 wiki 的事实是挂在小节上的：
+    "刻晴 > 天赋 > 星魂"里的数值表和它上面的描述文字必须待在同一个 section，
+    按字符硬切会把数值劈到相邻块，召回时就只剩一半信息。
+
+    前提是入参已经过 `template_parser.clean_wikitext` 展平 ——
+    本函数不认 `{{模板}}` 语法，若拿到未展平的原文，切出来的段里全是模板噪声。
+    返回值只被 `chunk_page` 消费，作为外层循环的迭代源。
     """
     sections: list[tuple[str, str]] = []
     stack: list[tuple[int, str]] = []
     buf: list[str] = []
 
     def flush() -> None:
+        """把缓冲区里攒的行落成一个 section，然后清空缓冲。
+
+        两处调用时机不同，这是刻意的：遇到标题时 flush 一次（切段），
+        循环结束后再 flush 一次（收尾）。**收尾那次不能省** ——
+        页面最后一个标题下的正文后面没有标题行来触发 flush，
+        省掉它等于静默丢掉整页的最后一段，页面上却不报错。
+        """
         text = "\n".join(buf).strip()
         if text:
+            # 标题栈可能为空（正文出现在第一个标题之前），回落到"正文"，
+            # 这样调用方拿到的 section 路径永远非空，不用再判空。
             path = " > ".join(t for _, t in stack) or "正文"
             sections.append((path, text))
         buf.clear()
@@ -67,7 +101,22 @@ def _split_sections(raw: str) -> list[tuple[str, str]]:
 
 
 def _pack(text: str, chunk_size: int, overlap: int) -> list[tuple[str, bool]]:
-    """把一段正文打包成若干 (文本, 是否硬截断)，overlap 按整句回退。"""
+    """把一段正文打包成若干 (文本, 是否硬截断)，overlap 按整句回退。
+
+    **切边界只认句号**，不认字符位置：一个 chunk 的尾句和下一块的头句
+    要能各自独立读懂，否则向量召回到半句话，LLM 拿到的证据就是残缺的。
+    代价是块大小会波动 —— 宁可超出 chunk_size 一点，也不在句中下刀。
+
+    三种出口，调用方都要认：
+    - 正常打包：靠句边界攒满即落，`truncated=False`；
+    - 单句超长：只能硬切，`truncated=True`，评测时应把这类块单列，
+      它们的召回率天然偏低，混在一起会低估分块策略本身的效果；
+    - 空文本：直接返回 `[]`（由末尾的 `if t` 过滤空串兜底）。
+
+    overlap 是**回退**出来的而非切出来的：从已落的块尾部倒着取整句，
+    直到再取一句就超 overlap 为止。所以实际重叠量 ≤ overlap，
+    且至少是一整句 —— 不保证恰好等于配置值，别拿它做精确核算。
+    """
     sentences = [s for s in SENT_SPLIT_RE.split(text) if s.strip()]
     if not sentences:
         return []
@@ -120,7 +169,24 @@ def chunk_page(
     overlap: int = 50,
     min_len: int = 40,
 ) -> list[Chunk]:
-    """把一个清洗后的 wiki 页面切成带元数据的 chunk 列表。"""
+    """把一个清洗后的 wiki 页面切成带元数据的 chunk 列表。
+
+    两级串联：`_split_sections` 切逻辑段 → 每段各自 `_pack`。
+    **段与段之间不做 overlap** —— 跨小节重复文本会让相邻块的向量互相竞争召回，
+    而小节本身已经是天然的语义边界，段首自带标题路径足以定位。
+
+    返回值被三处消费，改动前先确认影响面：
+    - `pipeline.page_to_chunks` → `Ingestor.ingest_pages` 统计 `len(chunks)`，
+      并逐块送去 embedding；
+    - `persist.backfill_corpus` 用它填 `ChunkMeta`，**并把 chunk_id 收进
+      keep_chunk_ids 当剪枝依据** —— 所以切块结果必须是确定性可复现的，
+      同样输入必须切出同样的 id 和同样的条数；
+    - `min_len` 过滤掉的短块**不占用 chunk_index**（`idx` 在 append 之后才自增），
+      所以编号连续无空洞，剪枝时才对得上。
+
+    `min_len=40` 是去噪下限：展平后残留的 `字段：` 单行、表格残片长度普遍低于它，
+    留着只会占召回位。注意它砍掉的是块数而不是字符数，`Page.n_chars` 随之偏小。
+    """
     chunks: list[Chunk] = []
     idx = 0
     for section, body in _split_sections(text):

@@ -181,6 +181,9 @@ def find_infobox(wikitext: str, skip: set[str] | None = None) -> ParsedTemplate 
     fallback: ParsedTemplate | None = None
 
     for raw in iter_templates(wikitext):
+        # 前提：iter_templates 只吐**最外层**模板。嵌套模板的内容已经在
+        # 外层那一轮的 named 值里，会被 _flatten_value 递归处理，
+        # 这里不会重复解析 —— 否则同一个字段会被抽两次，facts 表出现重复行。
         tpl = parse_template(raw)
         if tpl.name.strip().lower() in {s.lower() for s in skip}:
             continue
@@ -190,6 +193,11 @@ def find_infobox(wikitext: str, skip: set[str] | None = None) -> ParsedTemplate 
         if fallback is None and len(filled) >= 1:
             fallback = tpl
 
+    # fallback 不是「凑数」：很多 wiki 页的数据模板只有 1~2 个有效字段
+    # （其余是 "—" 占位）。硬要求 ≥3 会让这些页一个 fact 都抽不出来，
+    # 于是 SQL 侧静默缺页。代价是可能选错模板 —— 所以调用方
+    # （pipeline.page_to_facts）拿 tpl.name 去做 entity_type 时
+    # 才需要再做一次清洗。
     return fallback
 
 
@@ -232,6 +240,10 @@ _WRAPPER_TEMPLATES = {
 def _template_to_text(raw: str, depth: int = 0) -> str:
     """把一个模板展平成可读文本，而不是整条丢掉。
 
+    **返回值永不为空**：无法展平时返回单个空格 `" "` 而不是 `""`。
+    空格是有意的 —— 返回空串会让模板前后的文字被直接粘在一起
+    （"攻击力提高" + "暴击率提升" 变成一坨），而插入空格保留了词边界。
+
     这是踩过的最大的一个坑：星铁 wiki 的光锥页 / 角色页几乎全部内容都在
     `{{光锥图鉴}}`、`{{角色}}` 这类数据模板里。早期实现是"删掉所有模板"，
     结果 969 字的 wikitext 清洗后只剩 20 字 —— 页面看着抓到了，其实什么都没入库。
@@ -255,6 +267,10 @@ def _template_to_text(raw: str, depth: int = 0) -> str:
         return tail or " "
 
     parts: list[str] = []
+    # 顺序即检索顺序：具名参数先出、位置参数后出，并且保持模板里写的原序。
+    # 刻意**不排序**也不去重 —— 字段顺序是编辑者写的语义顺序，
+    # 排一次序会让「稀有度/元素属性/命途」这种成组信息被拆散，
+    # 相邻的字段在向量空间里本来就更该靠在一起。
     for key, val in tpl.named.items():
         v = _flatten_value(str(val), depth)
         if not v or key.strip().lower() in _NOISE_KEYS:
@@ -267,6 +283,8 @@ def _template_to_text(raw: str, depth: int = 0) -> str:
 
     if not parts:
         return " "
+    # 首尾各补一个换行：展平后的文本随后要按行切标题、分句打包，
+    # 没有换行的话相邻两个模板会被拼进同一段，section 边界就丢了。
     return "\n" + "；".join(parts) + "\n"
 
 
@@ -314,6 +332,14 @@ def clean_wikitext(wikitext: str) -> str:
 
     处理顺序很关键:先摘掉嵌套最深的引用与注释,再逐层剥掉模板/链接,
     否则外层替换会破坏内层结构,产生残留噪声。
+
+    **入口输入 / 出口契约**：入参是原始 wikitext（未清洗），出参是
+    直接送进 `chunk_page` 的纯文本。因此出口必须保留 MediaWiki 的标题行
+    （`== 角色定位 ==`）——chunker 的 `_split_sections` 靠它切逻辑段，
+    这里一旦把等号清洗掉，整页就会退化成一个无 section 的长块，
+    检索结果里也就没有可展示的小节名了。
+
+    同样不能在这里把文本压成单行：分块器的句边界正则依赖换行。
     """
     if not wikitext:
         return ""
@@ -322,6 +348,9 @@ def clean_wikitext(wikitext: str) -> str:
 
     # 1. 注释与引用(可能嵌套模板,必须最先处理)
     prev = None
+    # 循环到稳定为止：`<ref>` 里可以套 `<ref>`、注释里也可以套注释，
+    # 单趟替换会留下内层那层，第二趟才清干净。终止条件是文本不再变化，
+    # 正常情况下 2~3 趟就收敛，不会变成死循环。
     while prev != text:
         prev = text
         text = _COMMENT.sub(" ", text)

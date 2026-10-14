@@ -84,6 +84,12 @@ def _r(name: str, severity: str, expr: str, note: str = "") -> Rule:
 
 # 刻意保持窄：宁可漏掉新型写法，也不要在正常 wiki 文本上刷误报。
 # 每条规则的取舍见 docs/injection_guard.md。
+#
+# 改这份清单的前提：**必须重跑** `scripts/scan_corpus_injection.py` 并更新
+# `data/eval/injection_scan.json` 的误报基线，否则「新规则更全了」和
+# 「新规则在真实语料上误报翻倍」在下游看起来是一样的。
+# 单条规则的形状：expr 只写「疑似劫持指令」的措辞，不要写任何可能出现在
+# 游戏 wiki 正文里的词 —— 那类误报会让注入检测和「检索到了却不给看」一起出现。
 RULES: tuple[Rule, ...] = (
     _r(
         "ignore_previous_instructions", "block",
@@ -185,12 +191,22 @@ class ScanResult:
 
     @property
     def severity(self) -> str:
+        """block / warn / none，任一 block 级命中即为 block。
+
+        调用方（react.py）拿它决定要不要向用户提示，而不是用它丢弃内容 ——
+        理由见文件头：命中即丢会亲手制造「检索到了却不给看」的假阴性。
+        """
         if any(h.severity == "block" for h in self.hits):
             return "block"
         return "warn" if self.hits else "none"
 
     def summary(self) -> dict:
-        """给日志 / 响应体用的紧凑摘要（不含原文，避免把注入内容再抄一遍出去）。"""
+        """给日志 / 响应体用的紧凑摘要（不含原文，避免把注入内容再抄一遍出去）。
+
+        结果消费：react.py 把 rules 汇总进 AgentState 并随 /api/chat 响应返回，
+        `scan_corpus_injection.py` 用它算误报率。**不含 excerpt 是有意的** ——
+        excerpt 含原文片段，进响应体等于把注入文本再抄一遍给攻击者。
+        """
         return {
             "suspect": self.suspect,
             "severity": self.severity,
@@ -220,6 +236,10 @@ def scan(text: str, *, rules: tuple[Rule, ...] = RULES) -> ScanResult:
     views = (clean, tighten(clean))
     hits: list[InjectionHit] = []
     seen: set[str] = set()
+    # seen 让每条规则最多报一次 → summary 里的 count 是「命中了几类规则」，
+    # 不是「出现了几处」。data/eval/injection_scan.json 的误报率和
+    # react.py 里的聚合列表都建立在这个口径上，别把它读成出现次数。
+    # 代价：同一段文本里同一规则命中 5 次也只算 1 类，宁可低估不虚高。
     for rule in rules:
         for view in views:
             if not view:
@@ -228,6 +248,9 @@ def scan(text: str, *, rules: tuple[Rule, ...] = RULES) -> ScanResult:
                 if rule.name in seen:
                     break
                 seen.add(rule.name)
+                # 注意坐标系：命中发生在哪个 view 上，start/end 就是**哪个 view**
+                # 的偏移。从 tighten 视图命中时它是"删掉字符间空白之后"的偏移，
+                # 与下面截 excerpt 用的 clean 不是同一坐标系 —— 拿 start 去切原文会错位。
                 lo = max(0, m.start() - _EXCERPT_PAD)
                 hi = min(len(clean), m.end() + _EXCERPT_PAD)
                 hits.append(
@@ -261,11 +284,17 @@ INSTRUCTION_NOTICE = (
 )
 
 
-def wrap_tool_result(text: str, result: ScanResult | None = None) -> str:
+def wrap_tool_result(text: str) -> str:
     """把工具结果包进不受信任数据区。
 
     正常结果也要包 —— 只在命中时才加标签，等于告诉攻击者
     "没命中就是安全的"，而规则本来就不完整。
+
+    **包裹是无条件的，与扫描结果无关**，所以这里不接收 `ScanResult`。
+    （此前它带一个从未被读取的 `result` 形参 —— 调用方 `scan_and_wrap`
+    把它传进来，看起来像「命中才包」，实际函数体只做了 f-string。
+    一个读不懂的死参数比没有参数更糟：它会让人以为包裹条件与扫描耦合。
+    扫描结果只走留痕，由调用方 react.py 累加进 AgentState。）
     """
     return f"{DATA_OPEN}\n{text}\n{DATA_CLOSE}"
 
@@ -275,9 +304,16 @@ def scan_and_wrap(tool_name: str, text: str) -> tuple[str, ScanResult]:
 
     只对会带回**外部正文**的工具扫描：`calculator` 的输出是算出来的，
     `list_games` 是我们自己写的元数据，扫了纯属噪音。
+
+    返回值怎么被消费：第一个分量直接进 role='tool' 消息；第二个分量由
+    react.py 累加进 AgentState 并写进 /api/chat 响应。留痕口径上有个已知
+    缺口 —— 不在 `_UNTRUSTED_TOOLS` 里的工具拿到的是一个**空 ScanResult**，
+    它和「扫过且干净」在 summary() 里完全一样（suspect=False、count=0），
+    即「没扫过」目前无法与「扫过且干净」区分开。
+    `_UNTRUSTED_TOOLS` 定义在本文件末尾是安全的：查找发生在调用时，不在定义时。
     """
     result = scan(text) if tool_name in _UNTRUSTED_TOOLS else ScanResult(original=text)
-    return wrap_tool_result(text, result), result
+    return wrap_tool_result(text), result
 
 
 _UNTRUSTED_TOOLS = frozenset({"search_kb", "get_page"})

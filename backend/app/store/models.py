@@ -109,6 +109,20 @@ class Fact(Base):
 
 
 class Session(Base):
+    """一次会话的入口行：只用来让 `messages` 有个可挂靠的 `session_key`。
+
+    **字段名注意：这张表叫 `title` 的是 `pages`，这里没有标题列。**
+    页面标题在 `Page.title`，chunk 侧叫 `ChunkMeta.page_title` —— 三层三种写法，
+    写 SQL 时按最直觉的名字写就会 1054 报 Unknown column。
+
+    写入方唯一是 `persist.ensure_session`（`ON DUPLICATE KEY UPDATE game`），
+    所以**先有 session 行、后有 message 行**这个顺序是靠调用方保证的，
+    这里没有外键级联。
+
+    下游读法：`session_key` 是前端传来的随机串（唯一索引，≤64 字符）；
+    绝大多数查询并不 join 这张表，只按 `messages.session_key` 过滤，
+    查这张表主要是为了看一个 key 到底有没有真正用过。
+    """
     __tablename__ = "sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -127,6 +141,18 @@ class Session(Base):
 
 
 class Message(Base):
+    """多轮历史：每轮一行 user + 一行 assistant，由 `save_turn` 一次写入。
+
+    索引 `(session_key, id)` 是为 `load_history` 准备的：它按 id **倒序**取最近 N 条、
+    再 `reversed()` 翻正序返回喂给模型。倒序 + limit 是这条查询能走索引的关键，
+    改成正序取全部再切片就会退化成全表扫。翻正序那步也不能省 ——
+    顺序错了模型会把"先问后答"读成倒叙。
+
+    下游读法与本文件另两张表的分工：
+    - `load_history` 只筛 `role in ('user','assistant')` —— 与 `tool_name`
+      恒为 NULL 的事实一致，两边不用互相迁就。
+    - 工具调用明细一律查 `tool_calls`，这里不重复存。
+    """
     __tablename__ = "messages"
     __table_args__ = (Index("ix_messages_session", "session_key", "id"),)
 
@@ -172,6 +198,18 @@ class Run(Base):
 
 
 class ToolCallLog(Base):
+    """一次 run 内每个工具调用一行 —— Agent 轨迹的最小单位，面试讲可复现性的依据。
+
+    与 `runs` 的分工：`runs` 存聚合数（steps / tool_failures 各一个总数），
+    这里存逐条明细（含 args 与 error）。要复现一次失败的回答，
+    光有 runs 表不够，必须能把每一步的入参还原出来。
+
+    下游读法：`persist.run_detail` 按 `(run_id, step)` 取出并转成
+    `{"step","tool","args","ok",...}`，所以**写入顺序必须与 step 号一致** ——
+    排序按 step 而不是 id，中途重试或并发写入就会串序。
+    `ok` / `truncated` 这类布尔在 MySQL 里是 Integer 0/1，读出来要 `bool()` 转换，
+    直接当 JSON 序列化会变成 0/1 而不是 true/false。
+    """
     __tablename__ = "tool_calls"
     __table_args__ = (Index("ix_toolcalls_run", "run_id", "id"),)
 

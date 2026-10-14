@@ -38,9 +38,17 @@ logger = logging.getLogger(__name__)
 # 会话（多轮对话）
 # --------------------------------------------------------------------------- #
 async def ensure_session(session_key: str, game: str = "sr", settings: Settings | None = None) -> bool:
+    """确保会话行存在。返回 True=写成功，**False 只表示 MySQL 不可用**。
+
+    不是"会话是否新建"：走的是 upsert 语义，每次都会执行一次写。
+    这个区分对调用方很重要 —— `save_turn` 就故意不看返回值直接写 Message，
+    靠的是外键/`session_key` 冗余列兜住，而不是靠这里失败时报错。
+    """
     s = settings or get_settings()
     try:
         async with session_scope(s) as session:
+            # on_duplicate_key_update 里给 game 赋它自己，等价于"存在就不动"：
+            # 目的是让同一 session_key 被别的 game 复用时也不会被悄悄改写。
             ins = mysql_insert(Session).values(session_key=session_key, game=game)
             await session.execute(ins.on_duplicate_key_update(game=Session.game))
         return True
@@ -52,6 +60,11 @@ async def load_history(session_key: str, limit: int = 8, settings: Settings | No
     """取最近若干轮对话，供 Agent 的 history 用。
 
     只保留 user/assistant 两种角色：tool 消息不带 tool_call_id 重放给模型会直接 400。
+
+    返回值**顺序敏感**：调用方直接拼进 messages 数组喂模型，
+    顺序错了模型就会把"先问后答"读成倒叙 —— 所以最后那步 reversed 不能省。
+    MySQL 不可用时返回空列表（而不是抛错）：多轮上下文是加分项，
+    丢了它问答照样能用，只是退化成单轮。
     """
     s = settings or get_settings()
     try:
@@ -77,8 +90,19 @@ async def save_turn(
     refs: list | None = None,
     settings: Settings | None = None,
 ) -> bool:
+    """把一轮 user/assistant 成对落库。True=已提交，False=MySQL 不可用。
+
+    两个要点：
+    - **两条消息在同一次 execute 里写入**，所以一定同生共死，
+      不会出现"存了回答没存提问"导致历史错位的半截状态。
+    - 正文截断到 8000 字符。截断是**静默**的，长对话回放时拿到的历史
+      可能已在句中被切断；要复现原对话得另找途径，别以为库里存了全文。
+    返回值只用于健康检查，不影响问答主流程。
+    """
     s = settings or get_settings()
     try:
+        # 不检查 ensure_session 的返回值：会话缺失时 Message 自己的 session_key
+        # 足以让查询工作，这里少一次写、少一个失败点。
         await ensure_session(session_key, settings=s)
         async with session_scope(s) as session:
             await session.execute(
@@ -107,6 +131,16 @@ async def save_eval_run(
 
     落库而不只是写 JSON 文件，是为了能做回归：
     改了分块参数后跑一遍，直接对比两次的 recall@3 差了多少。
+
+    **入参 `rows` 的键名是硬约定**，下面那段 dict 取值全靠字符串匹配：
+    `f"recall@{k}"`、`mrr`、`ndcg`、`page_hit`、`latency_ms`、`top_titles`。
+    任何一个键名对不上都会 `float(r.get(..., 0.0))` → 记成 **0.0**，
+    不报错、不告警，落库后就是一个看起来很正常的"零分实验"。
+    所以改评测脚本里的输出字段名时必须同步改这里；
+    记 0 还是在记真实值，取决于键名匹配，这一点没有任何运行时保护。
+
+    返回值 = 实际写入条数（`len(payload)`），调用方用它判断"这次到底落没落库"：
+    0 既可能是没有结果，也可能是 MySQL 不可用。
     """
     s = settings or get_settings()
     if not await init_db(s):
@@ -114,6 +148,9 @@ async def save_eval_run(
     try:
         async with session_scope(s) as session:
             payload = []
+            # 逐行转成表字段。`k` 决定 recall_at_k 取哪一档的指标（默认 5），
+            # 存进同一列的是"不同 k 混在一起"的结果 —— 所以对比实验时
+            # 必须同时看 config 快照里的 k，别把 recall@3 和 recall@5 放一行比。
             for r in rows:
                 k = r.get("k", 5)
                 payload.append({
@@ -129,6 +166,8 @@ async def save_eval_run(
                 })
             if payload:
                 ins = mysql_insert(EvalResult).values(payload)
+                # upsert 的意义是**重跑同一实验覆盖旧值**，而不是追加：
+                # 同 case_id 重跑时靠唯一键定位，用新值整体替换（含 config）。
                 await session.execute(
                     ins.on_duplicate_key_update(
                         recall_at_k=ins.inserted.recall_at_k,
@@ -154,6 +193,12 @@ async def save_eval_cases(game: str, settings: Settings | None = None) -> int:
     表就少了一大半，看起来像"评测集就这么大"。
 
     upsert 而非 insert：重复执行是幂等的，改了 gold 也会刷新。
+
+    ⚠️ 这条路径**不捕 MySQLUnavailable**，与同文件其他函数不同：
+    它是一次性的运维/初始化动作，报错比静默返回更可取。
+    代价是调用方必须自己准备好"数据库不存在"的情况。
+    返回值直接等于用例条数（0 = 该游戏没定义评测集），
+    调用方用它来发现"这个库压根没评测集"而不是"评测跑完了"。
     """
     from sqlalchemy.dialects.mysql import insert as mysql_insert
 
@@ -205,6 +250,13 @@ def empty_corpus_refusal(page_ids: list[int], existing_pages: int, game: str) ->
     抽成纯函数是为了能脱离数据库单测 —— 这个判断一旦失效，
     后果是整个库的语料被静默删光，所以它必须有测试守着，
     而不能只在跑真回填时才"顺便验证一下"。
+
+    两个入参各自的含义（`backfill_corpus` 是唯一调用方）：
+    - `page_ids`：本轮缓存目录里解析出的页面 id 列表，空 = 语料没找到；
+    - `existing_pages`：库里该游戏已有的页数，用来区分
+      "本来就没有数据"（无事可做）和"有数据却找不到语料"（危险）。
+    返回 None 有两种含义：语料非空（正常回填），或两边都空（无害空跑）——
+    调用方靠 `backfill_corpus` 里先判 `if not page_ids` 的顺序把两者区分开。
     """
     if page_ids:
         return None
@@ -263,26 +315,40 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
     from app.ingest.page_filter import should_index
     from app.ingest.pipeline import page_to_chunks, page_to_facts
 
+    # 三个计数只统计"**真正写进去**"的行，continue 掉的页不计入。
+    # 所以 pages_w < len(page_ids) 是正常的（模板页、被跳过的页）。
     pages_w = chunks_w = facts_w = 0
     errors: list[str] = []
     skipped: list[str] = []
     # 本轮**实际产生**的 key 集合，剪枝时用它们当"应该存在的全集"。
+    # 关键：这三个集合是后面 DELETE 的**唯一依据** ——
+    # 循环一旦有页没跑成（errors 非空），该页的 chunk/fact 就会被当成残留删掉。
+    # 这是"以当前语料为准"必须付出的代价，容忍不了部分失败，所以失败项会被显式返回。
     keep_chunk_ids: set[str] = set()
     keep_fact_keys: set[tuple] = set()
     keep_page_ids: set[int] = set()
 
+    # 整个循环 + 剪枝在**同一个 session_scope** 里：一个事务。
+    # 中途抛异常时前面所有 upsert 和后面的 delete 一起回滚，
+    # 不会留下"写了一半、剪了一半"的中间态。
     async with session_scope(s) as session:
+        # 终止条件由 `page_ids` 保证：它来自一次性目录快照，长度有限，
+        # 循环内没有任何地方往里 append。三种 continue（复原失败/被过滤/无 chunk）都不会提前结束整批。
         for pid in page_ids:
             page = load_cached_page(pid, game)
             if page is None:
                 errors.append(f"page {pid} 无法复原")
                 continue
             # 与入库管线同一套判据：被过滤的模板页在 MySQL 里也不该有分片。
+            # 注意 continue 发生在 keep_page_ids.add 之前，
+            # 所以它既不会被写入，也不会被剪枝碰到（库里本来就没有它）。
             keep, why = should_index(page.title)
             if not keep:
                 skipped.append(f"{page.title}（{why}）")
                 continue
             url = f"{s.wiki_base}/{game}/{page.title}"
+            # 下面这两个调用的参数必须与 `pipeline.Ingestor` 完全一致（同一个 cfg），
+            # 否则 chunk_id / 切分边界会对不上，剪枝就会把向量库里真存在的分片当成残留删掉。
             chunks = page_to_chunks(page, cfg, url)
             facts = page_to_facts(page, cfg, url)
 
@@ -374,6 +440,8 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
         stale_chunks = await session.execute(
             select(ChunkMeta.chunk_id).where(ChunkMeta.game == game)
         )
+        # 剪枝的判据只有一条：**库里现有 id 不在本轮 keep 集合里**。
+        # 所以它对 keep 集合的正确性零容错 —— 集合漏一个，就是删一条有效数据。
         drop_chunks = [cid for cid in stale_chunks.scalars() if cid not in keep_chunk_ids]
         if drop_chunks:
             await session.execute(
@@ -385,7 +453,11 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
         stale_facts = (await session.execute(
             select(Fact.entity_type, Fact.entity_name, Fact.attr).where(Fact.game == game)
         )).all()
+        # fact 的"身份"是三元组（类型+名称+属性），不是自增 id ——
+        # 换版本后同一实体同一属性会被视为同一条而刷新，而不是新增。
         drop_facts = [tuple(r) for r in stale_facts if tuple(r) not in keep_fact_keys]
+        # 逐条 DELETE 是因为 (entity_type, entity_name, attr) 上没有唯一索引，
+        # 无法用一条 IN 批量。3688 条量级下这是最坏几百毫秒，可接受。
         for et, en, at in drop_facts:
             await session.execute(
                 delete(Fact).where(Fact.game == game, Fact.entity_type == et,
@@ -404,6 +476,11 @@ async def backfill_corpus(game: str = "sr", settings: Settings | None = None) ->
                 delete(Page).where(Page.game == game, Page.page_id.in_(drop_pages))
             )
 
+    # 返回值是 API `/api/backfill` 的响应体，同时也是人工核对回填是否正常的凭据。
+    # 三个 pruned_* 是本次删除量，正常重跑应为 0；突然非 0 说明 page_filter 或
+    # chunk_size 变了（或本轮有页复原失败，见 errors），要去看 skipped/errors 而不是直接接受。
+    # 退出时 drop_chunks/drop_facts/drop_pages 仍在作用域内 —— 它们只在**有 page_ids 时**定义，
+    # 所以函数开头的空语料早返回不能落到这里，否则会 NameError。
     return {
         "ok": True,
         "pages": pages_w,
@@ -427,10 +504,18 @@ async def save_run(state, settings: Settings | None = None) -> bool:
 
     MySQL 不可用时返回 False 而不是抛异常 —— 轨迹持久化是加分项，
     不该因为它让整个问答接口挂掉。
+
+    两处结构上的要点：
+    - `Run` 与 `ToolCallLog` 写在**同一个 session** 里，所以详情页不会读到
+      "有运行记录但一条工具调用都没有"的半截数据。
+    - `answer[:8000]` 是静默截断，跟消息表同一个口径；轨迹详情页拿到的
+      长回答因此可能不完整，看轨迹时别把它当权威原文。
     """
     s = settings or get_settings()
     try:
         async with session_scope(s) as session:
+            # config 只在有 guard 时落：没有护栏的那次运行存 `None` 而不是 `{}`，
+            # 这样统计"开启护栏的比例"时分母才不含无关样本。
             ins = mysql_insert(Run).values(
                 run_id=state.run_id,
                 session_key=state.session_key,
@@ -455,6 +540,9 @@ async def save_run(state, settings: Settings | None = None) -> bool:
                     latency_ms=ins.inserted.latency_ms,
                 )
             )
+            # 工具调用是**纯 insert**：一次 run_id 的轨迹是完整的，
+            # 重跑覆盖用的是上面 Run 的 upsert，这条依赖"要么整批写、要么都没写"，
+            # 因此不能也换成 on_duplicate_key_update（那会把上次的步骤混进来）。
             if state.steps:
                 await session.execute(
                     mysql_insert(ToolCallLog).values(
@@ -476,6 +564,11 @@ async def save_run(state, settings: Settings | None = None) -> bool:
 
 
 async def recent_runs(limit: int = 20, settings: Settings | None = None) -> list[dict]:
+    """轨迹列表页数据：按时间倒序，question 截断到 120 字供列表展示。
+
+    **刻意不返回 answer** —— 列表页不需要全文，少读一个大字段差别很明显。
+    要正文走 `run_detail`。MySQL 不可用时返回空列表（列表页显示空态，不报错）。
+    """
     s = settings or get_settings()
     try:
         async with session_scope(s) as session:
@@ -500,6 +593,15 @@ async def recent_runs(limit: int = 20, settings: Settings | None = None) -> list
 
 
 async def run_detail(run_id: str, settings: Settings | None = None) -> dict | None:
+    """单次运行的完整轨迹。⚠️ 返回 None 有**两种**含义，调用方区分不了：
+
+    1. 这个 run_id 不存在（用户点了个旧链接 / 数据被清）；
+    2. MySQL 整体不可用。
+
+    这里选择不抛异常，是因为前端只想渲染一个"没有该记录"的空态；
+    代价是数据库挂了也被渲染成"记录不存在"，排查时要看日志里的 warning。
+    `tool_calls` 按 step 正序，消费方（轨迹时间线）依赖这个顺序。
+    """
     s = settings or get_settings()
     try:
         async with session_scope(s) as session:
