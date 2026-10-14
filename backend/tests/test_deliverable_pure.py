@@ -29,6 +29,7 @@ from app.agent.deliverable import (
     SubtaskResult,
     _stamp_now,
     build_json,
+    dedupe_same_page_facts,
     detect_conflicts,
     normalize_value,
     render_markdown,
@@ -377,3 +378,115 @@ def test_subtask_result_carries_offtopic_accounting():
     st.offtopic_pages = ["长夜月"]
     assert st.offtopic_dropped == 5
     assert st.offtopic_pages == ["长夜月"]
+    assert st.duplicate_dropped == 0
+
+
+# --------------------------------------------------------------------------- #
+# 同页同 key 的截断回声去重
+#
+# 实测：长夜月的星魂子任务把 `星魂6描述` 抽了两遍 ——
+# 短的是 wiki 列表页摘要，长的是详情页全文，表里出现两行，
+# 一行少一半内容，看起来像「数据自相矛盾」。
+# --------------------------------------------------------------------------- #
+def _star6() -> list[Fact]:
+    short = ("长夜月在场时，我方全体目标的全属性抗性穿透提高20%。")
+    long_ = (short + "忆灵「长夜」施放【迷梦，流失，如露】后，"
+             "长夜月获得本次攻击消耗【忆质】数量的30%。")
+    return [
+        Fact(key="星魂6描述", label="星魂6描述", value=short, page_title="长夜月",
+             source_url="u1", revision="2026-03-27"),
+        Fact(key="星魂6描述", label="星魂6描述", value=long_, page_title="长夜月",
+             source_url="u2", revision="2026-03-27"),
+    ]
+
+
+def test_truncated_echo_is_merged_and_the_longer_value_wins():
+    kept, dropped = dedupe_same_page_facts(_star6())
+    assert dropped == 1
+    assert len(kept) == 1
+    assert kept[0].value.endswith("数量的30%。"), "留下的是截短的摘要，不是完整版"
+
+
+def test_duplicate_dropped_is_zero_when_nothing_to_merge():
+    facts = [
+        Fact(key="hp", label="生命值", value="1328", page_title="三月七•存护"),
+        Fact(key="atk", label="攻击力", value="448", page_title="三月七•存护"),
+    ]
+    kept, dropped = dedupe_same_page_facts(facts)
+    assert dropped == 0
+    assert len(kept) == 2
+
+
+def test_genuinely_different_values_on_same_page_are_kept_both():
+    """同页同 key 但两个取值**谁也不包含谁** —— 必须两条都留。
+
+    这是本规则最重要的一条边界。把规则放宽成「同 key 就留最长的」
+    会让这种真分歧消失，而它恰恰是这个模块应该替用户暴露的东西。
+    只测「能合并」的那一面的话，放宽规则一样能让测试全绿。
+    """
+    facts = [
+        Fact(key="星魂6描述", label="星魂6描述",
+             value="长夜月在场时抗性穿透提高20%。", page_title="长夜月"),
+        Fact(key="星魂6描述", label="星魂6描述",
+             value="施放终结技后暴击伤害提高50%。", page_title="长夜月"),
+    ]
+    kept, dropped = dedupe_same_page_facts(facts)
+    assert dropped == 0, "互不包含的两条不是截断回声，不该合并"
+    assert len(kept) == 2
+
+
+def test_dedup_ignores_different_pages():
+    """同 key 不同页**永远不算重复** —— 那正是冲突检测要处理的输入。
+
+    若这里也合并，detect_conflicts 就再也拿不到两条互斥取值，
+    冲突检测会静默变成永远 0 条。
+    """
+    facts = [
+        Fact(key="hp_80", label="80级生命值", value="1328", page_title="三月七•存护"),
+        Fact(key="hp_80", label="80级生命值", value="1256", page_title="三月七•存护/攻略"),
+    ]
+    kept, dropped = dedupe_same_page_facts(facts)
+    assert dropped == 0
+    assert len(kept) == 2
+    assert len(detect_conflicts(kept)) == 1, "去重不该影响冲突检测的输入"
+
+
+def test_dedup_tolerates_whitespace_and_case_in_key():
+    """key 归一化后才比较 —— 模型可能写「星魂6描述」和「星魂6 描述」。"""
+    facts = [
+        Fact(key="星魂6描述", label="星魂6描述",
+             value="长夜月在场时抗性穿透提高20%。", page_title="长夜月"),
+        Fact(key="星魂6 描述", label="星魂6描述",
+             value="长夜月在场时抗性穿透提高20%。", page_title="长夜月"),
+    ]
+    kept, dropped = dedupe_same_page_facts(facts)
+    assert dropped == 1
+    assert len(kept) == 1
+
+
+def test_dedup_collapses_a_chain_of_echoes_to_the_most_complete():
+    """三条同页同 key、逐级变长的回声 -> 只留最完整的一条。
+
+    这条同时钉住「每次都覆盖到**已匹配的那一条**」：
+    覆盖若落错位置，最终留在表里的可能不是最长的那条。
+    """
+    facts = [
+        Fact(key="k", label="L", value="短版", page_title="长夜月", source_url="u1"),
+        Fact(key="k", label="L", value="短版完整版更长", page_title="长夜月", source_url="u2"),
+        Fact(key="k", label="L", value="短版完整版更长而且最全", page_title="长夜月",
+             source_url="u3"),
+    ]
+    kept, dropped = dedupe_same_page_facts(facts)
+    assert dropped == 2
+    assert [f.value for f in kept] == ["短版完整版更长而且最全"]
+
+
+def test_dedup_keeps_the_long_one_even_when_it_comes_first():
+    """长短顺序不影响结果 —— 短的在后也要把长的换上去。"""
+    facts = [
+        Fact(key="k", label="L", value="短版完整版更长", page_title="长夜月"),
+        Fact(key="k", label="L", value="短版", page_title="长夜月"),
+    ]
+    kept, dropped = dedupe_same_page_facts(facts)
+    assert dropped == 1
+    assert [f.value for f in kept] == ["短版完整版更长"]

@@ -32,6 +32,29 @@ const SAMPLES = [
   '整理三月七•存护的突破材料与行迹',
 ]
 
+/**
+ * 交付物标题 → 下载文件名（不含扩展名）。
+ *
+ * 原来用 `run_id`（16 位十六进制）当文件名，下载下来是
+ * `4022ebe9d6c74a29.md` —— 对人类毫无意义，多下几次就分不清是哪一份。
+ *
+ * 必须转成 ASCII 安全名：Windows 的文件系统不允许 `\ / : * ? " < > |`，
+ * 而标题里出现「/」是很常见的（「三月七•存护/攻略」）。
+ * 浏览器不会替你转义，非法字符会让下载静默失败或文件名被系统改写。
+ *
+ * 保留 run_id 作为**后缀**而不是前缀：它是同一份产物的唯一标识，
+ * 排查时对得上 `_meta.run_id` 与产物里的 run 字段。
+ */
+function fileStem(topic: string, runId: string): string {
+  const cleaned = (topic || '')
+    .replace(/[\\/:*?"<>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  // 超长标题会让下载对话框难读，且各平台的文件名长度上限不一。
+  const stem = cleaned.slice(0, 32).trim()
+  return `${stem || '交付物'}-${runId.slice(0, 8)}`
+}
+
 function download(name: string, text: string, type: string) {
   const blob = new Blob([text], { type })
   const a = document.createElement('a')
@@ -294,7 +317,11 @@ export function DeliverablePanel({ health }: Props) {
             <button
               className="ghost mini"
               onClick={() =>
-                download(`${res.json.run_id}.md`, res.markdown, 'text/markdown;charset=utf-8')
+                download(
+                  `${fileStem(res.json.topic, res.json.run_id)}.md`,
+                  res.markdown,
+                  'text/markdown;charset=utf-8',
+                )
               }
             >
               下载 .md
@@ -303,7 +330,7 @@ export function DeliverablePanel({ health }: Props) {
               className="ghost mini"
               onClick={() =>
                 download(
-                  `${res.json.run_id}.json`,
+                  `${fileStem(res.json.topic, res.json.run_id)}.json`,
                   JSON.stringify(res.json, null, 2),
                   'application/json;charset=utf-8',
                 )

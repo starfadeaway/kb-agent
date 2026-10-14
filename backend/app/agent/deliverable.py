@@ -190,6 +190,9 @@ class SubtaskResult:
     #: 「交付物少了几条数据但没人知道为什么」。
     offtopic_dropped: int = 0
     offtopic_pages: list[str] = field(default_factory=list)
+    #: 同页同 key 的截断回声被合并掉的数量（见 dedupe_same_page_facts）。
+    #: 同样必须留痕：静默去重会让 facts_total 凭空变小。
+    duplicate_dropped: int = 0
 
 
 @dataclass
@@ -346,6 +349,74 @@ def subject_matches(subject: str, page_title: str) -> bool:
     return s_norm in t_norm or t_norm in s_norm
 
 
+def dedupe_same_page_facts(facts: list[Fact]) -> tuple[list[Fact], int]:
+    """同一页 + 同一 key 上，**一个取值是另一个的前缀**时，只留更完整的那个。
+
+    ## 实测到的现象
+
+    「长夜月的星魂」子任务抽出了两条 `星魂6描述`，同一个页面、同一个 key：
+
+        长夜月在场时，我方全体目标的全属性抗性穿透提高20%。
+        长夜月在场时，我方全体目标的全属性抗性穿透提高20%。忆灵「长夜」施放
+        【迷梦，流失，如露】后，长夜月获得本次攻击消耗【忆质】数量的30%。
+
+    短的那条是 wiki 列表页里的**摘要**，长的是详情页的**全文** ——
+    两条 chunk 都被召回了，模型各抽了一次。表里于是出现两行，
+    一行少一半内容，看起来像「数据自相矛盾」，其实是一条被截断了。
+
+    ## 为什么规则这么窄
+
+    只在「归一化后互为前缀」时才合并。两条同 key 的取值如果
+    **谁也不包含谁**，那是真正的不确定（同一页不同段落给了不同说法），
+    合并掉就是把矛盾藏起来 —— 而这个模块的整个立场是
+    「只陈述、不替用户判断」。所以那种情况**两条都保留**。
+
+    宽一点的规则（比如「同 key 就留最长的」）会把上面那种真歧义也吃掉，
+    而且吃得更隐蔽：表里干干净净，看不出曾经有过分歧。
+
+    ## 为什么在子任务内去重而不是全局
+
+    同一个页面出现在两个子任务是正常的（角色页同时供「基础属性」和
+    「星魂」两个子任务使用），那两条记录的 `subtask` 不同，
+    放进各自的段落里是对的。只有**同一个子任务内**同页同 key 的重复
+    才是抽取噪声。
+
+    返回合并掉的数量，是为了让这件事在产物里可见 ——
+    静默去重会让「事实数」这个数字凭空变小而没人知道为什么。
+    """
+    kept: list[Fact] = []
+    dropped = 0
+    for f in facts:
+        hit_i = -1
+        for i, k in enumerate(kept):
+            # 页面标题与 key 都归一化后比较：模型可能对同一页
+            # 写出「星魂6描述」和「星魂6 描述」两种 key。
+            if normalize_value(k.page_title) != normalize_value(f.page_title):
+                continue
+            if normalize_value(k.key) != normalize_value(f.key):
+                continue
+            a, b = k.norm(), f.norm()
+            # 前缀关系：b 是 a 的真前缀或反之。相等时也当重复（只留一条）。
+            if a == b or a.startswith(b) or b.startswith(a):
+                hit_i = i
+                break
+        if hit_i < 0:
+            kept.append(f)
+            continue
+        dropped += 1
+        # 留长的那一条。label/unit 一并跟过来，短的那条往往是列表摘要，
+        # 它的 label 更笼统（「星魂6」而不是「星魂6描述」）。
+        #
+        # 用下标而不是 `kept.index(hit)`：Fact 是普通 dataclass，
+        # `index()` 走字段级 __eq__，语义上依赖「表里不存在两条字段全同的事实」
+        # 这个不变量。那条不变量确实成立（第二条会被上面的前缀判据立刻合并），
+        # 所以这里用下标**不是**在修一个可达的 bug，只是让「覆盖哪一条」
+        # 在代码里就一眼可见，不必读者去推那个不变量。
+        if len(f.norm()) > len(kept[hit_i].norm()):
+            kept[hit_i] = f
+    return kept, dropped
+
+
 def detect_conflicts(facts: list[Fact]) -> list[Conflict]:
     """**同一主语 + 同一 key** 下出现不同规范化取值才是冲突。
 
@@ -493,6 +564,7 @@ def build_json(res: DeliverableResult) -> dict:
                 # 只在服务端日志里记等于没记。
                 "offtopic_dropped": st.offtopic_dropped,
                 "offtopic_pages": st.offtopic_pages,
+                "duplicate_dropped": st.duplicate_dropped,
                 "facts": [asdict(f) for f in st.facts],
             }
             for st in res.subtasks
@@ -735,11 +807,20 @@ class DeliverableAgent:
             ))
         st.offtopic_dropped = dropped
         st.offtopic_pages = sorted(dropped_pages)
-        if dropped:
+        # 去重在主题闸门之后：闸门挡掉的是「别人的字段」，
+        # 这里处理的是「同一个字段被抽了两次」，两件事互不干扰，
+        # 顺序换了也不会互相掩盖。
+        st.facts, st.duplicate_dropped = dedupe_same_page_facts(st.facts)
+        if st.offtopic_dropped:
             st.notes = (
-                f"主题闸门拦下 {dropped} 条来自无关页面的事实（"
+                f"主题闸门拦下 {st.offtopic_dropped} 条来自无关页面的事实（"
                 f"{'、'.join(st.offtopic_pages)}）。"
                 "这些页被共享属性词召回，内容讲的是别的对象。")
+        if st.duplicate_dropped:
+            st.notes = (
+                (st.notes + " ") if st.notes else "") + (
+                f"另有 {st.duplicate_dropped} 条同一页同字段的截断回声"
+                "（短版本是列表摘要、长版本是正文全文），已保留更完整的那条。")
         if not st.facts and st.status == "ok":
             st.status = "empty"
             st.notes = (st.notes + " " if st.notes else "") + (
@@ -782,6 +863,7 @@ class DeliverableAgent:
             "topic_gate_enabled": bool(subject),
             "facts_offtopic_dropped": sum(s.offtopic_dropped for s in res.subtasks),
             "offtopic_pages": sorted({p for s in res.subtasks for p in s.offtopic_pages}),
+            "facts_duplicate_dropped": sum(s.duplicate_dropped for s in res.subtasks),
             "conflicts_total": len(res.conflicts),
             "conflict_policy": "只标出冲突与各来源修订时间，不按时间判对错",
             "known_limits": (
