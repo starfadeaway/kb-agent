@@ -1,10 +1,13 @@
 import type { Health } from '../types'
 import type { Theme } from '../prefs'
 
+/** 侧栏三个页签。加新页签时这里和 App.tsx 的 useState 类型要同时改。 */
+export type TabId = 'chat' | 'retrieve' | 'deliverable'
+
 interface Props {
   health: Health | null
-  tab: 'chat' | 'retrieve'
-  onTab: (t: 'chat' | 'retrieve') => void
+  tab: TabId
+  onTab: (t: TabId) => void
   open?: boolean
   theme?: Theme
   onToggleTheme?: () => void
@@ -70,6 +73,12 @@ export function Sidebar({
           onClick={() => onTab('retrieve')}
         >
           检索调试
+        </button>
+        <button
+          className={tab === 'deliverable' ? 'nav-item active' : 'nav-item'}
+          onClick={() => onTab('deliverable')}
+        >
+          交付物
         </button>
       </nav>
 

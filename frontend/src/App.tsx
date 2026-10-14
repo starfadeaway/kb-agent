@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getHealth, streamChat } from './api'
 import type { Health, StreamEvent, Turn } from './types'
 import { ChatPanel } from './components/ChatPanel'
-import { Sidebar } from './components/Sidebar'
+import { DeliverablePanel } from './components/DeliverablePanel'
+import { Sidebar, type TabId } from './components/Sidebar'
 import { RetrievePanel } from './components/RetrievePanel'
 import { applyTheme, loadBg, readStoredTheme, saveTheme, type BgSettings, type Theme } from './prefs'
 
 export default function App() {
-  const [tab, setTab] = useState<'chat' | 'retrieve'>('chat')
+  const [tab, setTab] = useState<TabId>('chat')
   const [health, setHealth] = useState<Health | null>(null)
   const [turns, setTurns] = useState<Turn[]>([])
   const [busy, setBusy] = useState(false)
@@ -173,6 +174,8 @@ export default function App() {
             onStop={stop}
             onReset={reset}
           />
+        ) : tab === 'deliverable' ? (
+          <DeliverablePanel health={health} />
         ) : (
           <RetrievePanel health={health} onOpenSettings={() => setShowSettings((v) => !v)} />
         )}

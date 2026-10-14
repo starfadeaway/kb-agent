@@ -1,11 +1,5 @@
 /** 与后端 FastAPI 的类型契约。改了后端就改这里，前后端类型对不上是这类项目最常见的返工来源。 */
 
-export interface ChatBackend {
-  id: string
-  model: string
-  configured: boolean
-}
-
 /** 可切换的 Chat 基座。由 /api/health 下发 —— 后端加 provider 只改后端，前端不用动。 */
 export interface ChatBackend {
   id: string
@@ -117,6 +111,14 @@ export interface ToolCallView {
 export interface Ref {
   url: string
   /**
+   * 页面标题。
+   *
+   * **只有交付物任务会填**：它按证据编号反查 chunk，能拿到 page_title。
+   * 问答链路（`_collect_refs`）只解析 `出处：<url> | 修订 ...` 这一行，
+   * 拿不到标题，所以这里是可选的 —— 别把它当必填。
+   */
+  title?: string
+  /**
    * 该来源所在 wiki 页面**最后一次编辑**的日期（YYYY-MM-DD）。
    *
    * 注意语义：这是「页面最后修订」，**不是**「数据截至」——
@@ -145,4 +147,86 @@ export interface Turn {
   error: string | null
   /** 命中的未收录游戏；非空时这轮是「越界拒答」而不是检索未命中 */
   outOfScope: string | null
+}
+
+/* -------------------------------------------------------------------------- */
+/* 交付物任务（/api/deliverable）                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 一条结构化事实。
+ *
+ * `revision` 的语义与 `Ref.last_revision_ts` **完全一样**：页面最后一次编辑的
+ * 时间，不是数据生效时间。所以 UI 上只能写「页面修订」，
+ * 不能写「数据截至 / 已过时」—— 否则是用一个更隐蔽的误导替换掉沉默。
+ */
+export interface DeliverableFact {
+  key: string
+  label: string
+  value: string
+  unit: string
+  source_url: string
+  page_title: string
+  revision: string | null
+  subtask: string
+}
+
+/**
+ * 一处跨来源冲突。
+ *
+ * `verdict` 由后端写死为「系统无法判断」—— 前端**不要**自己根据 revision
+ * 去排序、去挑一个「更新的」显示。那等于把「页面何时被编辑」当成
+ * 「内容是否正确」，而实测三库都是版本驱动批量维护，两者并不等价。
+ */
+export interface DeliverableConflict {
+  key: string
+  /** 冲突所属的主语（从页面标题去掉 / 之后的部分推出） */
+  subject: string
+  label: string
+  kind: string
+  verdict: string
+  variants: Array<{
+    value: string
+    unit: string
+    page_title: string
+    source_url: string
+    revision: string | null
+    subtask: string
+  }>
+}
+
+export interface DeliverableSection {
+  name: string
+  goal: string
+  /** ok / empty / error / truncated —— 四种都要能在界面上区分开 */
+  status: 'ok' | 'empty' | 'error' | 'truncated'
+  queries: string[]
+  pages: string[]
+  notes: string
+  latency_ms: number
+  facts: DeliverableFact[]
+}
+
+export interface DeliverableJson {
+  run_id: string
+  topic: string
+  question: string
+  game: string
+  generated_at: string
+  elapsed_ms: number
+  plan: Array<{ name: string; goal: string; queries: string[] }>
+  sections: DeliverableSection[]
+  conflicts: DeliverableConflict[]
+  refs: Ref[]
+  meta: Record<string, unknown>
+}
+
+export interface DeliverableResponse {
+  /** 人读版。后端渲染，前端原样展示 —— 不在前端二次渲染 Markdown，
+   *  两套 Markdown 解析器迟早会对不齐。 */
+  markdown: string
+  json: DeliverableJson
+  status_counts: Record<string, number>
+  conflicts_total: number
+  elapsed_ms: number
 }

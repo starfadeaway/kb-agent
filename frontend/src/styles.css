@@ -1084,3 +1084,195 @@ button.mini {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --------------------------------------------------------------------------- *
+ * 交付物面板
+ *
+ * 视觉上有意和检索调试台拉开距离：那一页是「调参数看指标」，
+ * 这一页是「给人读的交付物」。所以用分隔线和小标题而不是控制面板的密度。
+ * --------------------------------------------------------------------------- */
+.dv-sub {
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.dv-input {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  margin-bottom: 8px;
+}
+
+.dv-hint {
+  font-size: 12px;
+  align-self: center;
+  padding-left: 4px;
+}
+
+.dv-thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.dv-result {
+  margin-top: 14px;
+}
+
+.dv-actions {
+  gap: 8px;
+  margin: 10px 0 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.dv-h3 {
+  margin: 14px 0 4px;
+  font-size: 17px;
+}
+
+.dv-conflicts {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+}
+
+.dv-conflict {
+  margin-top: 12px;
+}
+
+.dv-conflict-head {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.dv-verdict {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.dv-section {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.dv-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  flex-wrap: wrap;
+}
+
+.dv-goal {
+  font-size: 12px;
+  margin: 6px 0;
+}
+
+.dv-note {
+  font-size: 12px;
+  margin: 6px 0;
+  color: var(--warn);
+}
+
+.dv-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dv-ok {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+.dv-empty {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+}
+
+.dv-warn {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+.dv-bad {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+}
+
+.dv-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.dv-table th {
+  text-align: left;
+  font-weight: 600;
+  opacity: 0.7;
+  border-bottom: 1px solid var(--line);
+  padding: 5px 8px;
+}
+
+.dv-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  vertical-align: top;
+}
+
+.dv-value {
+  font-weight: 600;
+  /* 数值可能是一长串倍率表，不让它把整张表撑变形 */
+  word-break: break-word;
+  max-width: 34ch;
+}
+
+.dv-rev {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.dv-md {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.dv-limits {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.dv-refs {
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 1.9;
+}

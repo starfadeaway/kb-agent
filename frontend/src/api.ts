@@ -1,4 +1,10 @@
-import type { Health, RetrieveResponse, RunRecord, StreamEvent } from './types'
+import type {
+  DeliverableResponse,
+  Health,
+  RetrieveResponse,
+  RunRecord,
+  StreamEvent,
+} from './types'
 
 const BASE = '/api'
 
@@ -31,6 +37,14 @@ export const retrieve = (body: {
   /** 只在这些页面里检索；留空 = 全库 */
   page_titles?: string[]
 }) => json<RetrieveResponse>('/retrieve', { method: 'POST', body: JSON.stringify(body) })
+
+/**
+ * 交付物任务。**这是个慢接口**（实测 6 个子任务约 30-60s），
+ * 所以超时必须放宽，而且**不能**拿它做轮询。
+ * 超时不足的表现是前端拿到一个没有原因的错误 —— 那比慢更难查。
+ */
+export const postDeliverable = (body: { question: string; game: string }) =>
+  json<DeliverableResponse>('/deliverable', { method: 'POST', body: JSON.stringify(body) })
 
 /**
  * 流式问答。SSE 不能用 fetch + await 直接读，必须手动解析 \n\n 分隔的帧。
