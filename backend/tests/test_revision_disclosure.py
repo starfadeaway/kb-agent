@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import types
+from pathlib import Path
 
 import pytest
 from app.agent.react import AgentState, ReActAgent
@@ -312,6 +313,54 @@ def test_no_misleading_freshness_wording(forbidden):
         f"「{forbidden}」" in tools_src
     ), (
         f"tools.py 的输出文案里出现了「{forbidden}」"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 5b. 同一条措辞纪律，前端侧
+#
+# 原来 5 号断言只查 Python（系统提示词 + tools.py）。前端是**用户实际看到
+# 文字的地方**，而交付物面板（DeliverablePanel.tsx）是后来才加的 ——
+# 它渲染 revision 字段，最有可能在这里写下「数据截至」。
+#
+# 不补这条的后果：前端写出「数据截至 2026-03-27」时，
+# 后端全绿、pytest 全绿，只有用户看到那句误导 —— 而 `page_revision` 在
+# 界面上是和数据并排显示的，最容易被当成「这条数据的日期」。
+#
+# 读法与 Python 侧一致：注释里为了说明「为什么不能这么写」而引用这些词是允许的，
+# 所以只查真正的 UI 文案字符串（引号包裹的中文字面量），不查注释。
+# --------------------------------------------------------------------------- #
+_FRONTEND_SRC = Path(__file__).resolve().parents[2] / "frontend" / "src"
+
+
+@pytest.mark.skipif(not _FRONTEND_SRC.is_dir(), reason="未找到 frontend/src")
+@pytest.mark.parametrize("forbidden", [
+    "数据截至", "数据更新于", "截至今天", "最新版本数据", "当前版本数据",
+])
+def test_frontend_ui_text_avoids_misleading_freshness_wording(forbidden):
+    """前端 UI 文案不得把「页面修订」说成「数据截至」。
+
+    双向验证不适用（新增测试，前端代码本就存在），
+    手工变异验证：往 DeliverablePanel.tsx 的 JSX 里写一句
+    「数据截至 {revision}」，本断言必须由绿转红。
+    """
+    offenders: list[str] = []
+    for path in _FRONTEND_SRC.rglob("*.ts*"):
+        # 排除测试文件本身 —— 断言里要写出禁用词来定义规则。
+        if ".test." in path.name or ".spec." in path.name:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for i, line in enumerate(text.splitlines(), 1):
+            if forbidden not in line:
+                continue
+            # 注释行（// 或 * 开头）是在解释规则，放行。
+            stripped = line.strip()
+            if stripped.startswith("//") or stripped.startswith("*") or stripped.startswith("/*"):
+                continue
+            offenders.append(f"{path.relative_to(_FRONTEND_SRC)}:{i}")
+    assert not offenders, (
+        f"前端 UI 文案里出现了「{forbidden}」：{offenders} —— "
+        f"页面修订 ≠ 数据生效时间，界面上这么写等于告诉用户一个假的日期。"
     )
 
 

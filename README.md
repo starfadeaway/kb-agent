@@ -8,9 +8,9 @@
 |---|---|---|
 | 检索策略消融（n=29, top_k=3） | 纯 BM25 0.793 → 纯向量 0.828 → 融合 0.828 → **+重排 0.897**（A3 仍是最优档）。旧 2306-chunk 语料下为 0.897/0.828/0.897/**0.966**，补抓 368 页角色页后指标整体下移，退化项**全部**来自攻略页挤占 | [`data/eval/exp_A_role_pages.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
 | 分块 / embed_mode 消融 | `embed_mode title→text` 使 MRR **0.736→0.506（−23.0pt，p=0.0001）**；chunk_size 在 500/800/1200 下 **A3 指标完全相同**（差异被重排吸收） | [`data/eval/exp_B0..B3_sr_k3.json`](data/eval) |
-| Agent 能力消融（生成侧，Judge；n=15/13/13） | 无工具 **2.90** → `search_kb` **4.77** → 全套工具 4.73；C0→C1 配对 Δ=+1.88（p<0.0001, d=2.02） | [`data/eval/exp_C.json`](data/eval/exp_C.json) · [`EVALUATION.md`](EVALUATION.md) |
+| Agent 能力消融（生成侧，Judge；**三库逐库**，n=32/12/12，judge 均值为剔除超时后的 n_ok 口径） | sr：无工具 **2.67** → `search_kb` **4.72** → 全套工具 4.59；C0→C2 Δ=+2.04（p<1e-10, d=2.16）。三库 C0→C2 **全部极显著**，d=2.16/3.72/2.78 | [`data/eval/exp_C_{sr,ys,zzz}.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
 | 假前提题（幻觉测试） | 无检索 3.83 → 有检索 **5.00**（模型学会"明确说不知道"） | 同上 |
-| Chat 基座对比（n=14/14，DeepSeek⇄MiniMax） | 质量 **4.79 vs 4.29，p=0.0848 未达显著**（不敢说谁更强）；token **1.85×**。⚠️ 延迟结论本轮作废（E1 工具失败率 0→0.222，WAF 配额被打满）。两者失败模式**互补** | [`data/eval/exp_E.json`](data/eval/exp_E.json) |
+| Chat 基座对比（**三库逐库**，n=15/12/12，DeepSeek⇄MiniMax，judge 为 n_ok 口径） | ⚠️ **三库均未达显著**（Δ=−0.70 / −0.16 / −0.38，p=0.070/0.674/0.283），**不敢说谁更强**。成本三库一致：MiniMax prompt token ×1.55~2.85、延迟 ×2.56~3.65。两者失败模式**互补** | [`data/eval/exp_E_{sr,ys,zzz}.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
 | 代价 | 挂知识库 = prompt token **×20.2**、延迟 3.5 倍（串行实测口径）；C2 比 C1 多花 **23%** token，judge 只涨 0.14 且 p=0.16 未达显著 | [`docs/cost_latency_quality.md`](docs/cost_latency_quality.md) |
 | 并发（真实问题压测） | 并发 4 吞吐 **×3.40**（4.10 req/s），1/4/8 三档 top-5 结果**逐条一致** | [`docs/concurrency.md`](docs/concurrency.md) |
 | 流式 | 首个 SSE 事件 **860ms** vs 非流式全量 3410ms，总耗时仅差 264ms。⚠ **不是「第一个字」**：上游无 token 级流式，是拿完整答案后切片推送；且为单次测量 | [`data/eval/probe_stream_latency.json`](data/eval) |
@@ -524,7 +524,7 @@ cd kb-agent\backend
 | 评测 | 评测集 **56 条三库全覆盖**（星铁 32 / 绝区零 12 / 原神 12）；实验 A/B/C/D/E 均已出真实数据 |
 | 检索实验覆盖 | **A / B / D 均已扩到三库**（sr 29 / ys 9 / zzz 10 = 48 条有 gold 的题），汇总按库分节、逐库配对检验，不混口径 |
 | 已知偏差 | `eval_cases` 表仍是 32 条，评测集已扩到 56 条，重跑一次评测即可同步 |
-| 工程 | pytest **660 项**全绿 + smoke 自检 41 项；ruff 全清；前端 vitest 9 项；GitHub Actions 跑 pytest + ruff + 前端测试 + 前端构建 + 密钥卫生 |
+| 工程 | pytest **665 项**全绿 + smoke 自检 41 项；ruff 全清；前端 vitest 9 项；GitHub Actions 跑 pytest + ruff + 前端测试 + 前端构建 + 密钥卫生 |
 
 一条命令自检：
 

@@ -100,7 +100,7 @@ def test_retrieve_endpoint_accepts_explicit_game():
 
 
 def test_retrieve_endpoint_defaults_game_to_primary(settings):
-    """不��� game 时回落到 .env 的主库，而不是 None。"""
+    """不传 game 时回落到 .env 的主库，而不是 None。"""
     req = RetrieveRequest(query="三月七")
     assert req.game is None, "RetrieveRequest.game 必须是 None，否则会盖掉 .env 默认值"
     assert (req.game or settings.game_primary) == settings.game_primary
