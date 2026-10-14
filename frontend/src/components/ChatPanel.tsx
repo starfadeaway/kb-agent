@@ -292,10 +292,17 @@ export function ChatPanel({
                   <Markdownish text={t.answer} />
                   <CopyButton text={t.answer} />
                 </>
-              ) : t.error ? null : (
+              ) : t.error ? null : !t.done ? (
+                // 「思考中」必须同时要求 **流还没结束**。
+                // 只判 `!t.answer` 是不够的：越界拒答不产生 token 事件，
+                // 答案只在 done 里，所以会出现「done 到了却还在转圈」。
+                // 拿 done 当兜底判据，任何将来「不靠 token 送答案」的路径
+                // 都不会再把界面永久卡在加载态。
                 <span className="muted thinking">
                   <span className="spinner" /> 思考中…
                 </span>
+              ) : (
+                <span className="muted">（本次没有输出内容）</span>
               )}
               {t.error && (
                 <div className="error">

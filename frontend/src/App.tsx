@@ -236,6 +236,12 @@ function handleEvent(
       backend: ev.data.backend ?? t.backend,
       refs: ev.data.refs ?? [],
       outOfScope: ev.data.out_of_scope ?? t.outOfScope,
+      // **必须在这里回填 answer。** 越界拒答那条路径不发任何 token 事件，
+      // 答案只存在于 done 里 —— 漏了这一行，气泡会因为 `!t.answer`
+      // 永远停在「思考中…」，哪怕 done 早就到了（实测踩过）。
+      // 用 `t.answer ||` 而不是直接赋值：正常问答的答案来自 token 逐段追加，
+      // 那是更细粒度的来源，不能被 done 里被截断过的整段覆盖掉。
+      answer: t.answer || ev.data.answer || '',
       done: ev.data,
     }))
   }
