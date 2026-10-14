@@ -585,7 +585,13 @@
         "E1": 15,
         "E2": 15
       },
-      "note": "本文件由分档产物合并而来，per-label 聚合值沿用各自源文件"
+      "note": "本文件由分档产物合并而来，per-label 聚合值沿用各自源文件",
+      "legacy": {
+        "status": "legacy",
+        "why": "旧代码版本产出：build_meta 的 _meta.script 恒为 exp_common.py（当时未修），且 Judge 客户端未关 SDK 静默重试。与现行分库产物 exp_E_<game>.json 不可混用。",
+        "superseded_by": "data/eval/exp_E_sr.json / exp_E_ys.json / exp_E_zzz.json",
+        "do_not": "汇总表请只读 exp_E_<game>.json；本文件仅作历史留档。"
+      }
     }
   }
 ]

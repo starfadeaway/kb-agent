@@ -276,5 +276,13 @@
         "answer": "根据搜索结果，**折断的龙骨**的两件套效果为：\n\n- 使装备者的效果抵抗提高10%\n- **当装备者的效果抵抗≥30%时，我方全体暴击伤害提高10%**\n\n你的角色效果抵抗为25%，低于30%的触发阈值，因此：\n\n**暴击伤害提高0%**（未达到触发条件）\n\n只有当效果抵抗达到30%及以上时，才能获得10%的暴击伤害加成。"
       }
     ]
+  },
+  {
+    "_legacy": {
+      "status": "legacy",
+      "why": "旧代码版本产出：build_meta 的 _meta.script 恒为 exp_common.py（当时未修），且 Judge 客户端未关 SDK 静默重试。与现行分库产物 exp_E_<game>.json 不可混用。",
+      "superseded_by": "data/eval/exp_E_sr.json / exp_E_ys.json / exp_E_zzz.json",
+      "do_not": "汇总表请只读 exp_E_<game>.json；本文件仅作历史留档。"
+    }
   }
 ]
