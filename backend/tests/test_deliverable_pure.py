@@ -490,3 +490,45 @@ def test_dedup_keeps_the_long_one_even_when_it_comes_first():
     kept, dropped = dedupe_same_page_facts(facts)
     assert dropped == 1
     assert [f.value for f in kept] == ["短版完整版更长"]
+
+
+def test_same_key_different_label_are_distinct_slots_not_echoes():
+    """同页同 key 但 **label 不同** = 模型在区分槽位，三条都要留。
+
+    这条是实测踩出来的真缺陷，不是假想边界：
+    重跑「整理三月七的养成指南」时，「遗器推荐」子任务从同一页
+    抽出了三条 key 都是 `relic_set`、取值都是「4件套」的事实，
+    label 分别是「隧洞遗器1 / 2 / 3」—— 它们是**三个不同的遗器位**。
+
+    只比 key+value 会把它们判成「同 key 同值」的重复，一次吃掉两条，
+    表里只剩一个遗器位。症状看起来像「数据缺失」，而实际是去重吃过了头。
+    """
+    facts = [
+        Fact(key="relic_set", label="隧洞遗器1", value="4件套",
+             page_title="三月七•存护/攻略", source_url="u"),
+        Fact(key="relic_set", label="隧洞遗器2", value="4件套",
+             page_title="三月七•存护/攻略", source_url="u"),
+        Fact(key="relic_set", label="隧洞遗器3", value="4件套",
+             page_title="三月七•存护/攻略", source_url="u"),
+    ]
+    kept, dropped = dedupe_same_page_facts(facts)
+    assert dropped == 0, "label 不同就是不同槽位，不是截断回声"
+    assert len(kept) == 3
+    assert [f.label for f in kept] == ["隧洞遗器1", "隧洞遗器2", "隧洞遗器3"]
+
+
+def test_same_key_same_label_same_value_still_collapses():
+    """加 label 维度**不能**把真回声放过 —— 同页同 key 同 label 同值仍要合并。
+
+    上一条如果实现成「label 不同就无条件全放行」，这一条会挂。
+    两条一起守，才锁住「按 label 分组、组内仍走前缀判据」这个结构。
+    """
+    facts = [
+        Fact(key="relic_set", label="隧洞遗器1", value="4件套",
+             page_title="三月七•存护/攻略"),
+        Fact(key="relic_set", label="隧洞遗器1", value="4件套",
+             page_title="三月七•存护/攻略"),
+    ]
+    kept, dropped = dedupe_same_page_facts(facts)
+    assert dropped == 1
+    assert len(kept) == 1

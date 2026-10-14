@@ -44,8 +44,11 @@ const SAMPLES = [
  *
  * 保留 run_id 作为**后缀**而不是前缀：它是同一份产物的唯一标识，
  * 排查时对得上 `_meta.run_id` 与产物里的 run 字段。
+ *
+ * 导出是为了让 vitest 直接测它 —— 这段逻辑改过一次（原本用 run_id 当文件名，
+ * 下载下来是 `4022ebe9d6c74a29.md`），纯函数 + 有测试才不会再退回去。
  */
-function fileStem(topic: string, runId: string): string {
+export function fileStem(topic: string, runId: string): string {
   const cleaned = (topic || '')
     .replace(/[\\/:*?"<>|]/g, ' ')
     .replace(/\s+/g, ' ')

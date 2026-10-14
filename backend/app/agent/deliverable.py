@@ -350,7 +350,7 @@ def subject_matches(subject: str, page_title: str) -> bool:
 
 
 def dedupe_same_page_facts(facts: list[Fact]) -> tuple[list[Fact], int]:
-    """同一页 + 同一 key 上，**一个取值是另一个的前缀**时，只留更完整的那个。
+    """同一页 + 同一 key + 同一 label 上，**一个取值是另一个的前缀**时，只留更完整的那个。
 
     ## 实测到的现象
 
@@ -374,6 +374,11 @@ def dedupe_same_page_facts(facts: list[Fact]) -> tuple[list[Fact], int]:
     宽一点的规则（比如「同 key 就留最长的」）会把上面那种真歧义也吃掉，
     而且吃得更隐蔽：表里干干净净，看不出曾经有过分歧。
 
+    ⚠️ 比较维度必须包含 `label`，这一点也是实测踩出来的：
+    同一页同 key 但 label 不同（「隧洞遗器1 / 2 / 3」）是**模型在区分
+    不同槽位**，不是重复抽取。只比 key+value 会把合法的多值字段误吃，
+    表现是「表里只剩一个遗器位」，看起来像数据缺失而不是去重。
+
     ## 为什么在子任务内去重而不是全局
 
     同一个页面出现在两个子任务是正常的（角色页同时供「基础属性」和
@@ -394,6 +399,17 @@ def dedupe_same_page_facts(facts: list[Fact]) -> tuple[list[Fact], int]:
             if normalize_value(k.page_title) != normalize_value(f.page_title):
                 continue
             if normalize_value(k.key) != normalize_value(f.key):
+                continue
+            # label 也要一起比，否则会吃掉**合法的多值字段**。
+            # 实测踩到：三月七的「遗器推荐」子任务里，同一页同 key `relic_set`
+            # 抽出三条，label 分别是「隧洞遗器1 / 2 / 3」、取值都是「4件套」。
+            # 这三条是**三个不同的遗器位**，各自独立，不是重复抽取 ——
+            # 只比 key+value 会把它们当成「同 key 同值」判成重复，
+            # 一次吃掉两条，表里只剩一个遗器位，看着像数据缺失。
+            #
+            # label 不同 = 模型在区分不同的槽位/条目，此时即使取值相同
+            # 也必须都保留；只有 label 也相同才谈得上前缀回声。
+            if normalize_value(k.label) != normalize_value(f.label):
                 continue
             a, b = k.norm(), f.norm()
             # 前缀关系：b 是 a 的真前缀或反之。相等时也当重复（只留一条）。

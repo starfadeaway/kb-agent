@@ -42,6 +42,9 @@ _tmp_*.py
 node_modules/
 dist/
 .vite/
+# tsc -b 的增量编译缓存：每次构建都会变，内容与源码重复，
+# 提交它只会让 diff 全是噪声（本地是一次无关的构建顺手带出来的）。
+frontend/tsconfig.tsbuildinfo
 
 # 编辑器
 .idea/

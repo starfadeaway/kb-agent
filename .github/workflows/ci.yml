@@ -48,7 +48,7 @@ jobs:
         run: python -m pytest -p no:cacheprovider
 
   frontend:
-    name: 前端类型检查 + 构建
+    name: 前端测试 + 类型检查 + 构建
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -66,6 +66,11 @@ jobs:
       # tsc -b 不是摆设：Sidebar 那次"虚高 4.4 倍"的统计 bug 就是
       # 类型不匹配（collection 缺 game/variant 字段）被 tsc 挡下来的。
       - run: npm run build
+
+      # 下载文件名守卫（fileStem）。这个函数改过一次 —— 原本用 run_id 当文件名，
+      # 下载下来是 `4022ebe9d6c74a29.md`，对人类毫无意义。
+      # 只靠浏览器手测的话，改回去不会有任何东西报警。
+      - run: npm test
 
   secrets:
     name: 仓库卫生（密钥不得入库）

@@ -1,191 +1,40 @@
 {
-  "run_id": "5eaa896ecb994956",
+  "run_id": "60a5371814ae4b57",
   "topic": "三月七养成指南",
   "question": "整理三月七的养成指南",
   "game": "sr",
-  "generated_at": "2026-10-14T08:44:35+00:00",
-  "elapsed_ms": 31280,
-  "plan": [
-    {
-      "name": "三月七基础信息",
-      "goal": "获取三月七的命途、属性、稀有度、阵营等基础档案信息",
-      "queries": [
-        "三月七 命途 属性",
-        "三月七 角色介绍",
-        "三月七 稀有度 阵营"
-      ]
-    },
-    {
-      "name": "三月七技能与行迹",
-      "goal": "获取三月七的战技、终结技、天赋、秘技及行迹效果的具体描述",
-      "queries": [
-        "三月七 技能 行迹",
-        "三月七 战技 终结技",
-        "三月七 天赋 秘技"
-      ]
-    },
-    {
-      "name": "三月七星魂效果",
-      "goal": "获取三月七各星魂等级的具体效果描述",
-      "queries": [
-        "三月七 星魂",
-        "三月七 命座 效果",
-        "三月七 星魂 推荐"
-      ]
-    },
-    {
-      "name": "三月七光锥推荐",
-      "goal": "获取适合三月七使用的光锥列表及推荐理由",
-      "queries": [
-        "三月七 光锥 推荐",
-        "三月七 光锥 搭配",
-        "三月七 四星光锥"
-      ]
-    },
-    {
-      "name": "三月七遗器推荐",
-      "goal": "获取适合三月七的遗器套装、主词条、副词条推荐",
-      "queries": [
-        "三月七 遗器 推荐",
-        "三月七 遗器 词条",
-        "三月七 套装 选择"
-      ]
-    },
-    {
-      "name": "三月七配队与培养材料",
-      "goal": "获取三月七的阵容搭配建议以及等级、行迹突破所需材料清单",
-      "queries": [
-        "三月七 配队 阵容",
-        "三月七 突破材料",
-        "三月七 培养材料 行迹"
-      ]
-    }
-  ],
+  "subject": "三月七",
+  "generated_at": "2026-10-14 18:37:53",
+  "elapsed_ms": 26995,
+  "plan": [],
   "sections": [
     {
       "name": "三月七基础信息",
-      "goal": "获取三月七的命途、属性、稀有度、阵营等基础档案信息",
+      "goal": "获取三月七的稀有度、命途、属性、阵营等基础档案信息",
       "status": "ok",
       "queries": [
-        "三月七 命途 属性",
+        "三月七 稀有度 命途 属性",
         "三月七 角色介绍",
-        "三月七 稀有度 阵营"
+        "三月七 基础信息"
       ],
       "pages": [
         "三月七•存护",
         "三月七•巡猎",
-        "不死途",
         "大墓啊，深藏轮回的秘密",
-        "那刻夏",
         "长夜月"
       ],
-      "notes": "",
-      "latency_ms": 9050,
+      "notes": "主题闸门拦下 6 条来自无关页面的事实（长夜月）。这些页被共享属性词召回，内容讲的是别的对象。",
+      "latency_ms": 4728,
+      "offtopic_dropped": 6,
+      "offtopic_pages": [
+        "长夜月"
+      ],
+      "duplicate_dropped": 0,
       "facts": [
         {
-          "key": "name",
-          "label": "名称",
-          "value": "三月七•巡猎",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七基础信息"
-        },
-        {
           "key": "rarity",
           "label": "稀有度",
           "value": "4星",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "faction",
-          "label": "阵营",
-          "value": "星穹列车",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "path",
-          "label": "命途",
-          "value": "巡猎",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "element",
-          "label": "元素属性",
-          "value": "虚数",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "gender",
-          "label": "性别",
-          "value": "女",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "limited",
-          "label": "限定",
-          "value": "否",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "path",
-          "label": "命途",
-          "value": "巡猎",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "name",
-          "label": "名称",
-          "value": "三月七",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
-          "page_title": "三月七•存护",
-          "revision": "2026-07-28",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "rarity",
-          "label": "稀有度",
-          "value": "4星",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
-          "page_title": "三月七•存护",
-          "revision": "2026-07-28",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "faction",
-          "label": "阵营",
-          "value": "星穹列车",
           "unit": "",
           "source_url": "https://wiki.biligame.com/sr/三月七•存护",
           "page_title": "三月七•存护",
@@ -213,13 +62,23 @@
           "subtask": "三月七基础信息"
         },
         {
-          "key": "gender",
-          "label": "性别",
-          "value": "女",
+          "key": "faction",
+          "label": "阵营",
+          "value": "星穹列车",
           "unit": "",
           "source_url": "https://wiki.biligame.com/sr/三月七•存护",
           "page_title": "三月七•存护",
           "revision": "2026-07-28",
+          "subtask": "三月七基础信息"
+        },
+        {
+          "key": "rarity",
+          "label": "稀有度",
+          "value": "4星",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
+          "page_title": "三月七•巡猎",
+          "revision": "2025-11-09",
           "subtask": "三月七基础信息"
         },
         {
@@ -233,74 +92,107 @@
           "subtask": "三月七基础信息"
         },
         {
-          "key": "name",
-          "label": "名称",
-          "value": "长夜月",
+          "key": "element",
+          "label": "元素属性",
+          "value": "虚数",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/长夜月",
-          "page_title": "长夜月",
-          "revision": "2026-03-27",
-          "subtask": "三月七基础信息"
-        },
-        {
-          "key": "rarity",
-          "label": "稀有度",
-          "value": "5星",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/长夜月",
-          "page_title": "长夜月",
-          "revision": "2026-03-27",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
+          "page_title": "三月七•巡猎",
+          "revision": "2025-11-09",
           "subtask": "三月七基础信息"
         },
         {
           "key": "faction",
           "label": "阵营",
-          "value": "翁法罗斯",
+          "value": "星穹列车",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/长夜月",
-          "page_title": "长夜月",
-          "revision": "2026-03-27",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
+          "page_title": "三月七•巡猎",
+          "revision": "2025-11-09",
           "subtask": "三月七基础信息"
         },
         {
-          "key": "path",
-          "label": "命途",
-          "value": "记忆",
+          "key": "limited",
+          "label": "限定",
+          "value": "否",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/长夜月",
-          "page_title": "长夜月",
-          "revision": "2026-03-27",
+          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
+          "page_title": "三月七•存护",
+          "revision": "2026-07-28",
           "subtask": "三月七基础信息"
         },
         {
-          "key": "element",
-          "label": "元素属性",
-          "value": "冰",
+          "key": "limited",
+          "label": "限定",
+          "value": "否",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/长夜月",
-          "page_title": "长夜月",
-          "revision": "2026-03-27",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
+          "page_title": "三月七•巡猎",
+          "revision": "2025-11-09",
+          "subtask": "三月七基础信息"
+        },
+        {
+          "key": "gender",
+          "label": "性别",
+          "value": "女",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
+          "page_title": "三月七•存护",
+          "revision": "2026-07-28",
+          "subtask": "三月七基础信息"
+        },
+        {
+          "key": "gender",
+          "label": "性别",
+          "value": "女",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
+          "page_title": "三月七•巡猎",
+          "revision": "2025-11-09",
+          "subtask": "三月七基础信息"
+        },
+        {
+          "key": "body_type",
+          "label": "体型",
+          "value": "女青年",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
+          "page_title": "三月七•存护",
+          "revision": "2026-07-28",
+          "subtask": "三月七基础信息"
+        },
+        {
+          "key": "body_type",
+          "label": "体型",
+          "value": "女青年",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
+          "page_title": "三月七•巡猎",
+          "revision": "2025-11-09",
           "subtask": "三月七基础信息"
         }
       ]
     },
     {
       "name": "三月七技能与行迹",
-      "goal": "获取三月七的战技、终结技、天赋、秘技及行迹效果的具体描述",
+      "goal": "获取三月七的战技、终结技、天赋、秘技效果及行迹加成内容",
       "status": "ok",
       "queries": [
-        "三月七 技能 行迹",
-        "三月七 战技 终结技",
-        "三月七 天赋 秘技"
+        "三月七 技能 效果",
+        "三月七 行迹 加点",
+        "三月七 终结技 战技"
       ],
       "pages": [
         "三月七•存护",
         "三月七•巡猎",
-        "姬子",
+        "三月七•巡猎/攻略",
         "得其雨露，安其壤土"
       ],
-      "notes": "",
-      "latency_ms": 5211,
+      "notes": "另有 1 条同一页同字段的截断回声（短版本是列表摘要、长版本是正文全文），已保留更完整的那条。",
+      "latency_ms": 4606,
+      "offtopic_dropped": 0,
+      "offtopic_pages": [],
+      "duplicate_dropped": 1,
       "facts": [
         {
           "key": "skill_speed_up",
@@ -325,7 +217,7 @@
         {
           "key": "ult_desc",
           "label": "终结技描述",
-          "value": "对指定敌方单体造成等同于三月七144%/240%攻击力的虚数属性伤害。",
+          "value": "对指定敌方单体造成等同于三月七144%/240%攻击力的虚数属性伤害。 使下一次强化普攻的初始段数增加2段，额外造成伤害的固定概率提高20%。",
           "unit": "",
           "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
           "page_title": "三月七•巡猎",
@@ -343,29 +235,9 @@
           "subtask": "三月七技能与行迹"
         },
         {
-          "key": "basic_atk_desc",
-          "label": "普攻描述",
-          "value": "对指定敌方单体造成等同于三月七50%/100%攻击力的虚数属性伤害，随后获得1点充能。",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七技能与行迹"
-        },
-        {
-          "key": "enhanced_basic_desc",
-          "label": "强化普攻描述",
-          "value": "初始造成3段伤害，每段对指定敌方单体造成等同于三月七40%/80%攻击力的虚数属性伤害。每当造成最后1段伤害后，有60%的固定概率再造成1段伤害，最多额外造成3段伤害。施放强化普攻恢复的能量不随段数提高而提高。 强化普攻无法恢复战技点。",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七技能与行迹"
-        },
-        {
-          "key": "ult_desc",
-          "label": "终结技描述",
-          "value": "对指定敌方单体造成等同于三月七144%/240%攻击力的虚数属性伤害。 使下一次强化普攻的初始段数增加2段，额外造成伤害的固定概率提高20%。",
+          "key": "ult_dmg",
+          "label": "终结技属性1：单体伤害",
+          "value": "144.0%攻击力/153.6%攻击力/163.2%攻击力/172.8%攻击力/182.4%攻击力/192.0%攻击力/204.0%攻击力/216.0%攻击力/228.0%攻击力/240.0%攻击力/249.6%攻击力/259.2%攻击力/268.8%攻击力/278.4%攻击力/288.0%攻击力",
           "unit": "",
           "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
           "page_title": "三月七•巡猎",
@@ -401,56 +273,6 @@
           "page_title": "三月七•巡猎",
           "revision": "2025-11-09",
           "subtask": "三月七技能与行迹"
-        },
-        {
-          "key": "talent_name",
-          "label": "天赋",
-          "value": "师父，我悟了！",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七技能与行迹"
-        },
-        {
-          "key": "ult_name",
-          "label": "终结技",
-          "value": "盖世女侠三月七",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七技能与行迹"
-        },
-        {
-          "key": "skill_name",
-          "label": "战技",
-          "value": "师父，请喝茶！",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七技能与行迹"
-        },
-        {
-          "key": "basic_atk_name",
-          "label": "普攻",
-          "value": "荡涤妖邪琉璃剑",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七技能与行迹"
-        },
-        {
-          "key": "enhanced_basic_name",
-          "label": "强化普攻",
-          "value": "一扎眉攒，二扎心",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七技能与行迹"
         }
       ]
     },
@@ -459,18 +281,24 @@
       "goal": "获取三月七各星魂等级的具体效果描述",
       "status": "ok",
       "queries": [
-        "三月七 星魂",
-        "三月七 命座 效果",
+        "三月七 星魂 效果",
+        "三月七 命座 解锁",
         "三月七 星魂 推荐"
       ],
       "pages": [
         "三月七•存护",
         "三月七•存护/攻略",
         "三月七•巡猎",
-        "三月七•巡猎/攻略"
+        "三月七•巡猎/攻略",
+        "大墓啊，深藏轮回的秘密",
+        "安灵布奠，天清路远",
+        "得其雨露，安其壤土"
       ],
       "notes": "",
-      "latency_ms": 5292,
+      "latency_ms": 5199,
+      "offtopic_dropped": 0,
+      "offtopic_pages": [],
+      "duplicate_dropped": 0,
       "facts": [
         {
           "key": "eidolon_1_name",
@@ -676,28 +504,35 @@
     },
     {
       "name": "三月七光锥推荐",
-      "goal": "获取适合三月七使用的光锥列表及推荐理由",
+      "goal": "获取适合三月七使用的光锥名称及推荐理由",
       "status": "empty",
       "queries": [
         "三月七 光锥 推荐",
-        "三月七 光锥 搭配",
-        "三月七 四星光锥"
+        "三月七 四星光锥",
+        "三月七 最佳光锥"
       ],
       "pages": [
         "克拉拉/攻略",
         "卡芙卡/攻略",
         "流萤/攻略",
         "海瑟音/攻略",
+        "猎物的视线",
         "白厄/攻略",
         "知更鸟/攻略",
         "等价交换",
+        "芳华待灼",
         "记忆中的模样",
         "镂月裁云之意",
         "长夜月/攻略",
         "风堇/攻略"
       ],
-      "notes": "召回到 11 个 chunk，但没有抽到可用的结构化事实。",
-      "latency_ms": 2165,
+      "notes": "主题闸门拦下 8 条来自无关页面的事实（芳华待灼）。这些页被共享属性词召回，内容讲的是别的对象。 召回到 13 个 chunk，但没有抽到可用于「三月七」的结构化事实。",
+      "latency_ms": 3093,
+      "offtopic_dropped": 8,
+      "offtopic_pages": [
+        "芳华待灼"
+      ],
+      "duplicate_dropped": 0,
       "facts": []
     },
     {
@@ -705,21 +540,23 @@
       "goal": "获取适合三月七的遗器套装、主词条、副词条推荐",
       "status": "ok",
       "queries": [
-        "三月七 遗器 推荐",
+        "三月七 遗器 套装",
         "三月七 遗器 词条",
-        "三月七 套装 选择"
+        "三月七 遗器 推荐"
       ],
       "pages": [
-        "三月七•存护",
         "三月七•存护/攻略",
-        "三月七•巡猎",
         "三月七•巡猎/攻略",
         "开拓者•记忆/攻略",
         "星期日/攻略",
+        "海瑟音/攻略",
         "遐蝶/攻略"
       ],
       "notes": "",
-      "latency_ms": 3073,
+      "latency_ms": 2731,
+      "offtopic_dropped": 0,
+      "offtopic_pages": [],
+      "duplicate_dropped": 0,
       "facts": [
         {
           "key": "relic_set",
@@ -766,8 +603,8 @@
           "label": "遗器类型",
           "value": "隧洞遗器",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•存护/攻略",
-          "page_title": "三月七•存护/攻略",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎/攻略",
+          "page_title": "三月七•巡猎/攻略",
           "revision": "2026-02-13",
           "subtask": "三月七遗器推荐"
         },
@@ -776,8 +613,8 @@
           "label": "遗器类型",
           "value": "位面饰品",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•存护/攻略",
-          "page_title": "三月七•存护/攻略",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎/攻略",
+          "page_title": "三月七•巡猎/攻略",
           "revision": "2026-02-13",
           "subtask": "三月七遗器推荐"
         },
@@ -786,8 +623,8 @@
           "label": "遗器类型",
           "value": "隧洞遗器",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎/攻略",
-          "page_title": "三月七•巡猎/攻略",
+          "source_url": "https://wiki.biligame.com/sr/三月七•存护/攻略",
+          "page_title": "三月七•存护/攻略",
           "revision": "2026-02-13",
           "subtask": "三月七遗器推荐"
         },
@@ -796,8 +633,8 @@
           "label": "遗器类型",
           "value": "位面饰品",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎/攻略",
-          "page_title": "三月七•巡猎/攻略",
+          "source_url": "https://wiki.biligame.com/sr/三月七•存护/攻略",
+          "page_title": "三月七•存护/攻略",
           "revision": "2026-02-13",
           "subtask": "三月七遗器推荐"
         }
@@ -805,12 +642,12 @@
     },
     {
       "name": "三月七配队与培养材料",
-      "goal": "获取三月七的阵容搭配建议以及等级、行迹突破所需材料清单",
+      "goal": "获取三月七的阵容搭配建议以及等级突破、行迹升级所需材料清单",
       "status": "ok",
       "queries": [
         "三月七 配队 阵容",
         "三月七 突破材料",
-        "三月七 培养材料 行迹"
+        "三月七 行迹材料"
       ],
       "pages": [
         "三月七•存护",
@@ -819,33 +656,76 @@
         "三月七•巡猎/攻略",
         "长夜月"
       ],
-      "notes": "",
-      "latency_ms": 3410,
+      "notes": "另有 2 条同一页同字段的截断回声（短版本是列表摘要、长版本是正文全文），已保留更完整的那条。",
+      "latency_ms": 3490,
+      "offtopic_dropped": 0,
+      "offtopic_pages": [],
+      "duplicate_dropped": 2,
       "facts": [
+        {
+          "key": "ascension_material",
+          "label": "晋阶属性材料",
+          "value": "风雪之角",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
+          "page_title": "三月七•巡猎",
+          "revision": "2025-11-09",
+          "subtask": "三月七配队与培养材料"
+        },
+        {
+          "key": "ascension_series_material",
+          "label": "晋阶系列材料",
+          "value": "虚卒",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
+          "page_title": "三月七•巡猎",
+          "revision": "2025-11-09",
+          "subtask": "三月七配队与培养材料"
+        },
+        {
+          "key": "weekly_boss_material",
+          "label": "周本材料",
+          "value": "毁灭者的末路",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
+          "page_title": "三月七•巡猎",
+          "revision": "2025-11-09",
+          "subtask": "三月七配队与培养材料"
+        },
+        {
+          "key": "ascension_material",
+          "label": "晋阶属性材料",
+          "value": "风雪之角",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
+          "page_title": "三月七•存护",
+          "revision": "2026-07-28",
+          "subtask": "三月七配队与培养材料"
+        },
+        {
+          "key": "ascension_series_material",
+          "label": "晋阶系列材料",
+          "value": "虚卒",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
+          "page_title": "三月七•存护",
+          "revision": "2026-07-28",
+          "subtask": "三月七配队与培养材料"
+        },
+        {
+          "key": "weekly_boss_material",
+          "label": "周本材料",
+          "value": "毁灭者的末路",
+          "unit": "",
+          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
+          "page_title": "三月七•存护",
+          "revision": "2026-07-28",
+          "subtask": "三月七配队与培养材料"
+        },
         {
           "key": "path_material",
           "label": "命途材料",
           "value": "巡猎2",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "rarity",
-          "label": "稀有度",
-          "value": "4星",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "element",
-          "label": "元素属性",
-          "value": "虚数",
           "unit": "",
           "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
           "page_title": "三月七•巡猎",
@@ -863,103 +743,23 @@
           "subtask": "三月七配队与培养材料"
         },
         {
-          "key": "element",
-          "label": "元素属性",
-          "value": "冰",
+          "key": "team_comp",
+          "label": "阵容搭配",
+          "value": "队伍1、队伍2",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
-          "page_title": "三月七•存护",
-          "revision": "2026-07-28",
+          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎/攻略",
+          "page_title": "三月七•巡猎/攻略",
+          "revision": "2026-02-13",
           "subtask": "三月七配队与培养材料"
         },
         {
-          "key": "ascension_attr_material",
-          "label": "晋阶属性材料",
-          "value": "风雪之角",
+          "key": "team_comp",
+          "label": "阵容搭配",
+          "value": "队伍1、队伍2",
           "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "ascension_series_material",
-          "label": "晋阶系列材料",
-          "value": "虚卒",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "weekly_boss_material",
-          "label": "周本材料",
-          "value": "毁灭者的末路",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•巡猎",
-          "page_title": "三月七•巡猎",
-          "revision": "2025-11-09",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "ascension_attr_material",
-          "label": "晋阶属性材料",
-          "value": "风雪之角",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
-          "page_title": "三月七•存护",
-          "revision": "2026-07-28",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "ascension_series_material",
-          "label": "晋阶系列材料",
-          "value": "虚卒",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
-          "page_title": "三月七•存护",
-          "revision": "2026-07-28",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "weekly_boss_material",
-          "label": "周本材料",
-          "value": "毁灭者的末路",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/三月七•存护",
-          "page_title": "三月七•存护",
-          "revision": "2026-07-28",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "ascension_attr_material",
-          "label": "晋阶属性材料",
-          "value": "海妖残鳍",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/长夜月",
-          "page_title": "长夜月",
-          "revision": "2026-03-27",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "ascension_series_material",
-          "label": "晋阶系列材料",
-          "value": "黑潮",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/长夜月",
-          "page_title": "长夜月",
-          "revision": "2026-03-27",
-          "subtask": "三月七配队与培养材料"
-        },
-        {
-          "key": "weekly_boss_material",
-          "label": "周本材料",
-          "value": "阳雷的遥想",
-          "unit": "",
-          "source_url": "https://wiki.biligame.com/sr/长夜月",
-          "page_title": "长夜月",
-          "revision": "2026-03-27",
+          "source_url": "https://wiki.biligame.com/sr/三月七•存护/攻略",
+          "page_title": "三月七•存护/攻略",
+          "revision": "2026-02-13",
           "subtask": "三月七配队与培养材料"
         }
       ]
@@ -968,19 +768,14 @@
   "conflicts": [],
   "refs": [
     {
-      "url": "https://wiki.biligame.com/sr/三月七•巡猎",
-      "title": "三月七•巡猎",
-      "last_revision_ts": "2025-11-09"
-    },
-    {
       "url": "https://wiki.biligame.com/sr/三月七•存护",
       "title": "三月七•存护",
       "last_revision_ts": "2026-07-28"
     },
     {
-      "url": "https://wiki.biligame.com/sr/长夜月",
-      "title": "长夜月",
-      "last_revision_ts": "2026-03-27"
+      "url": "https://wiki.biligame.com/sr/三月七•巡猎",
+      "title": "三月七•巡猎",
+      "last_revision_ts": "2025-11-09"
     },
     {
       "url": "https://wiki.biligame.com/sr/三月七•存护/攻略",
@@ -999,9 +794,17 @@
     "subtasks_empty": 1,
     "subtasks_error": 0,
     "subtasks_truncated": 0,
-    "facts_total": 77,
+    "facts_total": 60,
+    "subject": "三月七",
+    "topic_gate_enabled": true,
+    "facts_offtopic_dropped": 14,
+    "offtopic_pages": [
+      "芳华待灼",
+      "长夜月"
+    ],
+    "facts_duplicate_dropped": 3,
     "conflicts_total": 0,
     "conflict_policy": "只标出冲突与各来源修订时间，不按时间判对错",
-    "known_limits": "主语靠页面标题去掉 / 之后的部分推出（wiki 子页面约定）；同一对象若有两页标题无公共前缀会被当成不同主语 -> 漏报。key 由模型抽取，同义 key 不归并 -> 漏报。同页不同修订不算冲突（wiki 改过内容属正常）。「推荐类」子任务（配什么遗器/光锥）通常抽不到可核对的事实，会落在 empty —— 这是如实反馈，不是失败。"
+    "known_limits": "主语靠页面标题去掉 / 之后的部分推出（wiki 子页面约定）；同一对象若有两页标题无公共前缀会被当成不同主语 -> 漏报。key 由模型抽取，同义 key 不归并 -> 漏报。同页不同修订不算冲突（wiki 改过内容属正常）。「推荐类」子任务（配什么遗器/光锥）通常抽不到可核对的事实，会落在 empty —— 这是如实反馈，不是失败。主题闸门已启用（subject=三月七）：来源页标题不含主题词的事实会被拦下，代价是标题不含主题词的**合法**页面也会被误杀。"
   }
 }
