@@ -343,6 +343,17 @@ export function DeliverablePanel({ health }: Props) {
 
               {limits && <div className="dv-limits">已知限制：{limits}</div>}
 
+              {res.json.sections.some((s) => s.offtopic_dropped > 0) && (
+                <div className="dv-limits">
+                  主题闸门：共拦下{' '}
+                  {res.json.sections.reduce(
+                    (n, s) => n + s.offtopic_dropped,
+                    0,
+                  )}{' '}
+                  条（逐子任务明细见上方各卡片）
+                </div>
+              )}
+
               {res.json.refs.length > 0 && (
                 <div className="dv-refs">
                   <div className="group-title">出处</div>

@@ -63,7 +63,7 @@ import re
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, Protocol
 
 from app.agent.tools import ToolContext
@@ -98,9 +98,14 @@ PLAN_PROMPT = """把下面这个请求拆成 3-6 个可以**分别检索**的子
 2. 每个子任务给出 2-4 个检索关键词（中文，用于向量检索）；
 3. 不要写「总结」「综述」这类无法检索的子任务；
 4. 知识库只覆盖 {covered}，不要规划超出这个范围的内容。
+5. 如果请求指向一个**具体对象**（角色/装备/道具），把它填进 `subject`，
+   用知识库里那个对象的正式名称，不要带「•命途」「/子页」等后缀
+   （例如「三月七」而不是「三月七•存护」）。
+   如果请求不是围绕某个具体对象（例如「整理遗器套装有哪些」），
+   `subject` 留空字符串 —— 留空会让主题闸门放行全部证据，那比乱猜一个名字好。
 
 只输出 JSON：{schema}
-{{"topic": "交付物标题", "subtasks": [
+{{"topic": "交付物标题", "subject": "本次交付物讨论的核心对象，无则空字符串", "subtasks": [
   {{"name": "子任务名", "goal": "这一子任务要拿到什么", "queries": ["关键词1", "关键词2"]}}
 ]}}"""
 
@@ -179,6 +184,12 @@ class SubtaskResult:
     notes: str = ""
     pages: list[str] = field(default_factory=list)
     latency_ms: int = 0
+    #: 被主题闸门拦下的事实条数，以及它们的来源页名。
+    #: **必须有**而不是只丢不记：闸门会误杀标题不含主题词的合法页面
+    #: （见 subject_matches 的已知代价），不记下来就等于
+    #: 「交付物少了几条数据但没人知道为什么」。
+    offtopic_dropped: int = 0
+    offtopic_pages: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -191,6 +202,8 @@ class DeliverableResult:
     subtasks: list[SubtaskResult] = field(default_factory=list)
     conflicts: list[Conflict] = field(default_factory=list)
     generated_at: str = ""
+    #: 本次交付物讨论的核心对象（规划器给的），为空表示主题闸门未启用。
+    subject: str = ""
     elapsed_ms: int = 0
     meta: dict = field(default_factory=dict)
 
@@ -258,6 +271,79 @@ def subject_of(page_title: str) -> str:
     t = str(page_title or "").strip()
     # 用第一个 "/" 切而不是 rsplit：`A/B/C` 的主语是 `A`，不是 `A/B`。
     return t.split("/", 1)[0].strip() if "/" in t else t
+
+
+#: wiki 角色页用 `•` 分隔命途：`三月七•存护` 的主语是 `三月七`。
+#: 比较主语时必须先把它去掉，否则交付物主题写「三月七」、
+#: 来源页写「三月七•存护」时判不出关系，会被闸门误杀。
+_SUBJECT_SEP = "•"
+
+
+def _stamp_now() -> str:
+    """交付物生成时间：`2026-10-14 17:01:24`，**本地时间、无时区后缀**。
+
+    为什么不用 ISO8601（早先用的是 `...T09:01:24+00:00`）：
+    这个字段是给**人**看的交付物抬头，读者要拿它和自己的钟对照。
+    `+00:00` 会让人以为显示的是 UTC，于是把「下午 5 点生成的交付物」
+    读成「早上 9 点生成的」—— 一次纯粹由格式造成的误读。
+    去掉后缀又保留 UTC 数字更糟：那等于把一个不带说明的时区当成本地时间。
+
+    机器可读的那一份仍然是 ISO（`build_meta` 里的 `generated_at`），
+    两者用途不同，不要互相套用格式。
+
+    用本地时间还意味着产物**不可跨时区比较**。交付物是单次运行的快照，
+    不参与任何跨库/跨档对比，所以这个代价可以接受；
+    真要参与对比的时间戳一律走 `exp_common.build_meta`。
+    """
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def subject_matches(subject: str, page_title: str) -> bool:
+    """这条事实的**来源页**和交付物主题是不是同一个对象。
+
+    ## 要挡的是什么（实测）
+
+    交付物「整理三月七的养成指南」跑出 77 条事实，其中 5 条来自
+    **另一个角色「长夜月」**：检索因为「冰属性 / 存护命途」这些共享词
+    把它召回来了，抽取层忠实于证据，于是长夜月的命途、稀有度、
+    属性全被当成三月七的事实写进了交付物。
+
+    根因不是抽取跑偏（它确实忠实于召回），而是**没有任何一层问过
+    「这条证据是不是在说本次要讲的那个对象」**。
+    `detect_conflicts` 里的 `subject_of` 只用来给 key 加限定，
+    挡得住「把两个对象当同一字段比」，挡不住「把别人的字段搬进来」。
+
+    ## 为什么用标题包含而不是语义相似度
+
+    纯函数、可单测、无额外模型调用，而且这个语料的约定足够规整
+    （角色页 = 角色名 + 可选 `•命途` + 可选 `/子页`）。
+    上语义相似度会引入一个新的不可复现环节，而这个位置要的是
+    「宁可漏也不要把别人的数据混进来」——**精度优先于召回**。
+
+    ## 已知代价（必须说清）
+
+    1. **会误杀标题不含主题词的合法页面**。比如主题是「三月七」，
+       但某条「存护命途机制」讲的是通用机制、标题里没有「三月七」，
+       这条事实会被丢掉。当前语料里这种情况不多，但确实存在 ——
+       所以 `_run_subtask` 会把被丢掉的页名记进 notes 并计入 meta，
+       让误杀**可见**，而不是悄悄少一条数据。
+    2. `subject` 为空时**一律放行**（`return True`）。闸门拿不到主题
+       就等于没有闸门，此时若选择「全部拦掉」，交付物会直接变成空的；
+       放行 + 在 meta 里标注「本轮未启用闸门」才是诚实的结果。
+    """
+    s = str(subject or "").strip()
+    if not s:
+        return True
+    title = subject_of(page_title).split(_SUBJECT_SEP, 1)[0].strip()
+    if not title:
+        return True
+    s_norm = _PUNCT.sub("", s.lower())
+    t_norm = _PUNCT.sub("", title.lower())
+    if not s_norm or not t_norm:
+        return True
+    # 双向包含：主题可能比标题更完整（「三月七•巡猎」vs「三月七」），
+    # 也可能只是标题的一部分（「钟离」vs「岩王钟离攻略」）。
+    return s_norm in t_norm or t_norm in s_norm
 
 
 def detect_conflicts(facts: list[Fact]) -> list[Conflict]:
@@ -389,6 +475,7 @@ def build_json(res: DeliverableResult) -> dict:
         "topic": res.topic,
         "question": res.question,
         "game": res.game,
+        "subject": res.subject,
         "generated_at": res.generated_at,
         "elapsed_ms": res.elapsed_ms,
         "plan": res.plan,
@@ -401,6 +488,11 @@ def build_json(res: DeliverableResult) -> dict:
                 "pages": st.pages,
                 "notes": st.notes,
                 "latency_ms": st.latency_ms,
+                # 闸门留痕要进 JSON 产物，不能只活在运行时对象上：
+                # 下载下来的 .json 是别人复核的依据，
+                # 只在服务端日志里记等于没记。
+                "offtopic_dropped": st.offtopic_dropped,
+                "offtopic_pages": st.offtopic_pages,
                 "facts": [asdict(f) for f in st.facts],
             }
             for st in res.subtasks
@@ -487,11 +579,17 @@ class DeliverableAgent:
         self.top_k = top_k
 
     # ---------------- 规划 ---------------- #
-    async def plan(self, question: str) -> tuple[str, list[dict]]:
-        """产出 (topic, subgoals)。失败时返回空计划，**不**退回硬编码模板。
+    async def plan(self, question: str) -> tuple[str, str, list[dict]]:
+        """产出 (topic, subject, subgoals)。失败时返回空计划，**不**退回硬编码模板。
 
         退回模板看起来更稳，但那样就分不清「模型规划失败」和「真的只有这几项」，
         而交付物的完整性恰恰取决于计划 —— 所以宁可显式空着。
+
+        `subject` 是主题闸门（`subject_matches`）的唯一输入。
+        它必须来自规划器而不是正则抠题面：中文里「整理三月七的养成指南」
+        的主语既不总是请求开头，也不总是第一个名词短语，
+        正则抠出来的名字错一个字，闸门就会把**全部**事实拦掉，
+        表现为交付物空了 —— 而闸门本身没有任何报错。
         """
         covered = "、".join(self.s.games.values()) or "（未配置）"
         prompt = PLAN_PROMPT.format(
@@ -503,13 +601,21 @@ class DeliverableAgent:
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("交付物规划失败: %s: %s", type(exc).__name__, exc)
-            return question, []
+            return question, "", []
         data = _parse_json(raw["content"]) or {}
         subs = [s for s in (data.get("subtasks") or []) if isinstance(s, dict) and s.get("name")]
-        return str(data.get("topic") or question), subs[:6]
+        subject = str(data.get("subject") or "").strip()
+        if subject:
+            logger.info("交付物主题闸门已启用：subject=%r", subject)
+        else:
+            # 不是 warning 级的噪音，是需要让人知道的事实：
+            # subject 为空时闸门放行全部证据（见 subject_matches 的第 2 条代价）。
+            logger.info("交付物未取到 subject，本轮主题闸门放行全部证据")
+        return str(data.get("topic") or question), subject, subs[:6]
 
     # ---------------- 单个子任务 ---------------- #
-    async def _run_subtask(self, spec: dict, ctx: ToolContext) -> SubtaskResult:
+    async def _run_subtask(self, spec: dict, ctx: ToolContext,
+                            subject: str = "") -> SubtaskResult:
         """检索 → 抽取事实 → 回填出处。**一个子任务的完整生命周期。**
 
         这里的每个 Fact 都能追溯到具体 chunk，而且**模型全程没碰过 URL**：
@@ -592,6 +698,8 @@ class DeliverableAgent:
         # 出处**不**由模型提供，而是按编号从 chunk 反查 ——
         # 所以模型没机会编造 URL，「抄错出处」这一整类问题从根上消失了。
         # 编号越界就整条丢弃：越界通常说明模型已经数错、跑偏了。
+        dropped = 0
+        dropped_pages: set[str] = set()
         for item in (data or {}).get("facts") or []:
             if not isinstance(item, dict):
                 continue
@@ -608,6 +716,13 @@ class DeliverableAgent:
                 logger.warning("丢弃越界证据编号的事实 key=%s i=%s (共%d条)", key, idx, len(hits))
                 continue
             chunk = hits[idx - 1].chunk
+            # --- 主题闸门 ---
+            # 放在**回填出处之后、写入 facts 之前**：
+            # 出处已经从 chunk 解析好了，丢弃时不产生任何未回填的中间态。
+            if not subject_matches(subject, chunk.page_title):
+                dropped_pages.add(chunk.page_title)
+                dropped += 1
+                continue
             st.facts.append(Fact(
                 key=key,
                 label=str(item.get("label") or key),
@@ -618,9 +733,18 @@ class DeliverableAgent:
                 revision=(str(chunk.metadata.get("last_revision_ts") or "")[:10] or None),
                 subtask=name,
             ))
+        st.offtopic_dropped = dropped
+        st.offtopic_pages = sorted(dropped_pages)
+        if dropped:
+            st.notes = (
+                f"主题闸门拦下 {dropped} 条来自无关页面的事实（"
+                f"{'、'.join(st.offtopic_pages)}）。"
+                "这些页被共享属性词召回，内容讲的是别的对象。")
         if not st.facts and st.status == "ok":
             st.status = "empty"
-            st.notes = f"召回到 {len(hits)} 个 chunk，但没有抽到可用的结构化事实。"
+            st.notes = (st.notes + " " if st.notes else "") + (
+                f"召回到 {len(hits)} 个 chunk，但没有抽到可用于「{subject}」的"
+                "结构化事实。")
         st.latency_ms = int((time.perf_counter() - t0) * 1000)
         return st
 
@@ -632,11 +756,13 @@ class DeliverableAgent:
             ctx.game = game
         res = DeliverableResult(
             run_id=uuid.uuid4().hex[:16], topic=question, question=question,
-            game=ctx.game, generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+            game=ctx.game, generated_at=_stamp_now(),
         )
-        res.topic, res.plan = await self.plan(question)
-        for spec in res.plan:
-            res.subtasks.append(await self._run_subtask(spec, ctx))
+        # 时间戳用**本地时间**且不带时区后缀，理由见 `_stamp_now` 的 docstring。
+        res.topic, subject, plan = await self.plan(question)
+        res.subject = subject
+        for spec in plan:
+            res.subtasks.append(await self._run_subtask(spec, ctx, subject))
 
         res.conflicts = detect_conflicts([f for st in res.subtasks for f in st.facts])
         res.elapsed_ms = int((time.perf_counter() - t0) * 1000)
@@ -649,6 +775,13 @@ class DeliverableAgent:
             # 而是「本来能抽到但输出超预算被砍了」，混进 empty 会低估覆盖率。
             "subtasks_truncated": sum(1 for s in res.subtasks if s.status == "truncated"),
             "facts_total": sum(len(s.facts) for s in res.subtasks),
+            "subject": subject,
+            # 闸门是否真的在工作，必须能从产物里一眼看出来。
+            # 「开了闸门但一条没拦到」和「根本没开闸门」在事实数上长得一样，
+            # 只有记下开关状态才分得清。
+            "topic_gate_enabled": bool(subject),
+            "facts_offtopic_dropped": sum(s.offtopic_dropped for s in res.subtasks),
+            "offtopic_pages": sorted({p for s in res.subtasks for p in s.offtopic_pages}),
             "conflicts_total": len(res.conflicts),
             "conflict_policy": "只标出冲突与各来源修订时间，不按时间判对错",
             "known_limits": (
@@ -658,6 +791,13 @@ class DeliverableAgent:
                 "同页不同修订不算冲突（wiki 改过内容属正常）。"
                 "「推荐类」子任务（配什么遗器/光锥）通常抽不到可核对的事实，"
                 "会落在 empty —— 这是如实反馈，不是失败。"
+                + (
+                    f"主题闸门已启用（subject={subject}）：来源页标题不含主题词的"
+                    "事实会被拦下，代价是标题不含主题词的**合法**页面也会被误杀。"
+                    if subject else
+                    "本轮未取到 subject，主题闸门未启用："
+                    "别的对象的字段可能被当作本主题的事实写进来。"
+                )
             ),
         }
         return res

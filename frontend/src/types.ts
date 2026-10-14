@@ -204,6 +204,14 @@ export interface DeliverableSection {
   pages: string[]
   notes: string
   latency_ms: number
+  /**
+   * 主题闸门拦下的事实条数与来源页名。
+   * 后端默认给 0 / []，所以这里不用 optional —— 旧产物缺这两个字段时
+   * 读出来是 undefined，`n > 0` 会得到 false，表现和 0 一致，
+   * 不必为此在每个使用点写 `?? 0`。
+   */
+  offtopic_dropped: number
+  offtopic_pages: string[]
   facts: DeliverableFact[]
 }
 
@@ -212,6 +220,9 @@ export interface DeliverableJson {
   topic: string
   question: string
   game: string
+  /** 本次交付物讨论的核心对象；空串表示主题闸门未启用 */
+  subject: string
+  /** 本地时间 `YYYY-MM-DD HH:MM:SS`，不带时区后缀（给人对钟用） */
   generated_at: string
   elapsed_ms: number
   plan: Array<{ name: string; goal: string; queries: string[] }>

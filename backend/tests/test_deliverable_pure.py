@@ -27,10 +27,12 @@ from app.agent.deliverable import (
     DeliverableResult,
     Fact,
     SubtaskResult,
+    _stamp_now,
     build_json,
     detect_conflicts,
     normalize_value,
     render_markdown,
+    subject_matches,
     subject_of,
 )
 
@@ -275,3 +277,103 @@ def test_same_subject_different_pages_still_conflict():
     assert len(c) == 1, "同主语不同页的互斥取值必须报出来"
     assert c[0].subject == "三月七•存护"
     assert {v.value for v in c[0].variants} == {"1328", "1256"}
+
+
+# --------------------------------------------------------------------------- #
+# 主题闸门 subject_matches
+#
+# 它挡的是 `detect_conflicts` 挡不住的那一类问题：
+# 检索把**别的角色**召回进来了，抽取层忠实于证据，于是长夜月的字段
+# 被当成三月七的事实写进交付物。冲突检测只回答「同一对象的两个值
+# 互不兼容吗」，回答不了「这个值根本不是这个对象的」。
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("subject,page,expect", [
+    ("三月七", "三月七•巡猎", True),
+    ("三月七", "三月七•存护", True),
+    ("三月七", "三月七•存护/攻略", True),
+    ("三月七", "三月七", True),
+    # 交付物真正在挡的：长夜月因为「冰属性 / 存护命途」被召回来
+    ("三月七", "长夜月", False),
+    ("三月七", "长夜月/攻略", False),
+    # 主题比标题更完整，以及标题只是主题的一部分，两个方向都要认
+    ("三月七•巡猎", "三月七", True),
+    ("钟离", "岩王钟离攻略", True),
+    ("丁尼", "邦布券", False),
+])
+def test_subject_matches(subject, page, expect):
+    assert subject_matches(subject, page) is expect
+
+
+@pytest.mark.parametrize("subject", ["", "   ", None])
+def test_subject_gate_is_disabled_without_subject(subject):
+    """subject 为空 → 一律放行，且**不能**反过来全拦。
+
+    这是刻意选的失败方向：拿不到主题时若选择「全部拦掉」，
+    交付物会直接变成空的，而闸门自己一声不响。
+    放行 + 在 meta.known_limits 里写明「本轮闸门未启用」才是诚实结果。
+    """
+    assert subject_matches(subject, "三月七•巡猎") is True
+    assert subject_matches(subject, "长夜月") is True
+
+
+def test_subject_gate_ignores_wiki_path_and_path_suffix_noise():
+    """`•命途` 与 `/子页` 两种后缀都不该影响判定。
+
+    少了任何一步剥离，三月七的主题与三月七•存护的页面就会判为不匹配，
+    表现为**整个交付物被清空** —— 而不是少一条事实。
+    后果量级差很多，所以这两条单独钉住。
+    """
+    assert subject_matches("三月七", "三月七•存护") is True
+    assert subject_matches("三月七", "三月七•存护/攻略") is True
+    assert subject_matches(" 三月七 ", "三月七 ") is True
+
+
+def test_stamp_has_no_timezone_suffix():
+    """交付物抬头的时间戳必须是人读的本地时间，不带 `+00:00`。
+
+    `+00:00` 会让人把下午 5 点生成的交付物读成早上 9 点 ——
+    一次纯粹由格式造成的误读，而这字段恰恰是给人对钟用的。
+    """
+    import re
+
+    s = _stamp_now()
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", s), (
+        f"交付物时间戳格式不对：{s!r}（应为 YYYY-MM-DD HH:MM:SS，无时区后缀）"
+    )
+    for bad in ("T", "+00", "Z", "UTC"):
+        assert bad not in s, f"时间戳里不该出现 {bad!r}：{s!r}"
+
+
+def test_known_limits_discloses_whether_the_gate_ran():
+    """闸门开没开必须能从 known_limits 里看出来。
+
+    「开了闸门但一条没拦到」和「压根没开闸门」在 facts_total 上长得一模一样，
+    而这两者的交付物可信度完全不同 —— 前者过滤过，后者没过滤过。
+    """
+    on = DeliverableResult(run_id="r", topic="t", question="q", game="sr",
+                           subject="三月七")
+    on.meta = {"topic_gate_enabled": True,
+               "known_limits": "主题闸门已启用（subject=三月七）"}
+    assert "主题闸门已启用" in on.meta["known_limits"]
+    assert on.meta["topic_gate_enabled"] is True
+
+    off = DeliverableResult(run_id="r", topic="t", question="q", game="sr", subject="")
+    off.meta = {"topic_gate_enabled": False,
+                "known_limits": "本轮未取到 subject，主题闸门未启用"}
+    assert "闸门未启用" in off.meta["known_limits"]
+    assert off.meta["topic_gate_enabled"] is False
+
+
+def test_subtask_result_carries_offtopic_accounting():
+    """被闸门拦下的事实必须留痕。
+
+    只丢不记的话，闸门误杀（标题不含主题词的合法页面）会让交付物
+    少掉几条数据，而**没有任何地方能看出为什么**。
+    """
+    st = SubtaskResult(name="三月七基础信息", goal="g")
+    assert st.offtopic_dropped == 0
+    assert st.offtopic_pages == []
+    st.offtopic_dropped = 5
+    st.offtopic_pages = ["长夜月"]
+    assert st.offtopic_dropped == 5
+    assert st.offtopic_pages == ["长夜月"]
