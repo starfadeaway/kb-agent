@@ -62,6 +62,11 @@ export default function App() {
         answer: '',
         tools: [],
         refs: [],
+        at: new Date().toLocaleTimeString('zh-CN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }),
         done: null,
         error: null,
         outOfScope: null,

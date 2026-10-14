@@ -1,8 +1,113 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Health, Turn } from '../types'
+import type { Health, Ref, Turn } from '../types'
 import type { BgSettings, Theme } from '../prefs'
 import { ToolTimeline } from './ToolTimeline'
 import { SettingsPanel } from './SettingsPanel'
+
+/**
+ * 超过这个月数就算「较早」。
+ *
+ * 定 12 而不是 6：游戏数值一个版本周期的跨度在半年到一年，
+ * 6 个月会把正常的跨版本内容也标成警告，标多了就等于没标。
+ */
+const STALE_MONTHS = 12
+
+function monthsSince(iso: string): number {
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return 0
+  return (Date.now() - t) / (1000 * 60 * 60 * 24 * 30.44)
+}
+
+/**
+ * 引用时效汇总。
+ *
+ * 为什么要**分三档**而不是只显示一个日期区间：
+ * 静默显示日期等于没显示 —— 没人会去读右下角那串小字。
+ * 本项目实测 sr 库 30% 的页面是两年前的内容，如果不提示，
+ * 用户会把六年前的条目当成当前版本依据。
+ *
+ * `ok`   全部较新，正常显示
+ * `some` 混了较旧的，提示「部分来源较早」
+ * `all`  全部较旧，答案很可能建立在过时数据上，必须警示
+ * `unknown` 一个修订时间都没有 —— 这种情况要单独说，
+ *        不能当成"很新"，也不能当成"很旧"，而是"不知道"
+ */
+function revisionStats(refs: Ref[]) {
+  const dates = refs.map((r) => r.last_revision_ts).filter((d): d is string => !!d)
+  if (!dates.length) {
+    return {
+      level: 'unknown' as const,
+      label: '',
+      span: '',
+      title: '这些来源没有记录页面修订时间',
+    }
+  }
+  const sorted = [...dates].sort()
+  const oldest = sorted[0]
+  const newest = sorted[sorted.length - 1]
+  const span = sorted.length === 1 ? newest : `${oldest} ~ ${newest}`
+  const missing = refs.length - dates.length
+
+  const level =
+    monthsSince(newest) > STALE_MONTHS ? 'all' : monthsSince(oldest) > STALE_MONTHS ? 'some' : 'ok'
+  const label = level === 'all' ? '来源均较早' : level === 'some' ? '部分来源较早' : ''
+  const hint = missing > 0 ? `另有 ${missing} 条来源没有修订时间。` : ''
+  return {
+    level,
+    label,
+    span,
+    title:
+      `「页面修订」是 wiki 页面最后一次编辑的时间，不是数据生效日期 —— ` +
+      `页面昨天改了个错别字，也会显示昨天。${hint}`,
+  }
+}
+
+function pageName(url: string): string {
+  return url.replace(/^https?:\/\/wiki\.biligame\.com\//, '')
+}
+
+/**
+ * 气泡右下角的元信息行。
+ *
+ * 三件事各归其位，不要混：
+ *   回答于   —— **本机时钟**，说的是「什么时候问的」，与内容新旧无关；
+ *   页面修订 —— **语料时钟**，说的是「答案依据的内容多新」；
+ *   来源     —— 可点开核对，这是用户唯一能验证 AI 的手段。
+ *
+ * 三者颜色不同：时钟用弱化的灰，修订在陈旧时转警示色，
+ * 来源保持可点击的强调色 —— 视觉上先看到警示，点不动就等于没提示。
+ */
+function MetaLine({ turn }: { turn: Turn }) {
+  const s = revisionStats(turn.refs)
+  return (
+    <div className="meta-line" data-level={s.level}>
+      <span className="meta-when">回答于 {turn.at}</span>
+
+      <span className="meta-rev" title={s.title}>
+        {s.span ? `页面修订 ${s.span}` : '页面修订未知'}
+        {s.label && <em className="meta-warn">{s.label}</em>}
+      </span>
+
+      <span className="meta-src">
+        {turn.refs.map((r) => (
+          <a
+            key={r.url}
+            href={r.url}
+            target="_blank"
+            rel="noreferrer"
+            title={
+              r.last_revision_ts
+                ? `${pageName(r.url)} · 页面最后修订 ${r.last_revision_ts}`
+                : `${pageName(r.url)} · 页面修订时间未知`
+            }
+          >
+            {pageName(r.url)}
+          </a>
+        ))}
+      </span>
+    </div>
+  )
+}
 
 /** 样例问题覆盖三个库，方便演示"加一个游戏 = 多个体系都能查" */
 const SAMPLES = [
@@ -216,14 +321,7 @@ export function ChatPanel({
             </div>
 
             {t.refs.length > 0 && (
-              <div className="refs">
-                <span className="refs-title">引用来源</span>
-                {t.refs.map((r) => (
-                  <a key={r.url} href={r.url} target="_blank" rel="noreferrer">
-                    {r.url.replace(/^https?:\/\/wiki\.biligame\.com\//, '')}
-                  </a>
-                ))}
-              </div>
+              <MetaLine turn={t} />
             )}
 
             {t.done && (

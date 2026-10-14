@@ -101,6 +101,42 @@ def _truncate(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[:limit] + f"\n...[已截断，原长度 {len(text)}]"
 
 
+def _fmt_revision(ts: object) -> str:
+    """ISO8601 UTC 时间戳 → `YYYY-MM-DD`。取不到就返回空串。
+
+    为什么只保留日期：模型要判断的是「这条内容大概多新」，
+    `2026-07-15T04:48:04Z` 里的时分秒对它没有决策价值，却要占 token。
+
+    **不要在这里做任何"智能"转换**：解析不了就返回空，
+    空着比给一个猜出来的日期安全 —— 编一个日期比不给日期坏得多。
+    """
+    s = str(ts or "").strip()
+    return s[:10] if len(s) >= 10 else ""
+
+
+def _revision_span(hits) -> str:
+    """这批命中页面的修订时间跨度，给模型一个整体的新旧感知。
+
+    为什么放在 header 而不是每条都写全：逐条写会让每条多 20+ 字符，
+    而模型对"这批数据整体有多新"和"具体某条多新"是两个不同需求 ——
+    前者决定要不要声明时效，后者放在每条行内。
+
+    ⚠ 用词必须是「页面修订」而不是「数据截至」。
+    `last_revision_ts` 是**页面最后一次编辑时间**，一页 2020 年建的 wiki
+    昨天改了个错别字它就是昨天 —— 写成「数据截至」会造出比不给日期
+    更隐蔽的误导。
+    """
+    stamps = sorted(
+        {d for d in (_fmt_revision(h.chunk.metadata.get("last_revision_ts"))
+                     for h in hits) if d}
+    )
+    if not stamps:
+        return ""
+    if len(stamps) == 1:
+        return f" 页面修订 {stamps[0]}"
+    return f" 页面修订 {stamps[0]}~{stamps[-1]}"
+
+
 # --------------------------------------------------------------------------- #
 @tool(
     "search_kb",
@@ -155,14 +191,24 @@ async def search_kb(args: dict, ctx: ToolContext) -> str:
     header = (
         f"[search_kb] status=ok hits={len(hits)} top_score={top.score:.3f} "
         f"top_page={top.chunk.page_title} {dt}ms 来源={top.rank_source}"
+        f"{_revision_span(hits)}"
     )
     lines = [header]
     for i, h in enumerate(hits, 1):
         c = h.chunk
+        rev = _fmt_revision(c.metadata.get("last_revision_ts"))
+        # 修订日期同时出现在**行内**和**出处行**：
+        #   行内 → 模型读到这条内容时就知道它多新，就近判断，不用来回对照 header；
+        #   出处行 → `_collect_refs` 靠「出处：」前缀扫引用，顺带把它带进
+        #           前端的引用列表（否则前端拿不到时间戳，右下角就无从展示）。
+        # 两处同源，不要在别处再算一次。
+        rev_tail = f" | 修订 {rev}" if rev else ""
+        section = c.metadata.get("section", "")
         lines.append(
-            f"\n[{i}] 分数 {h.score:.4f} | {c.page_title} > {c.metadata.get('section', '')}\n"
+            f"\n[{i}] 分数 {h.score:.4f} | {c.page_title} > {section}"
+            f"{f' | 页面修订 {rev}' if rev else ''}\n"
             f"{_truncate(c.text, s.tool_chunk_chars)}\n"
-            f"出处：{c.source_url}"
+            f"出处：{c.source_url}{rev_tail}"
         )
     return "\n".join(lines)
 
@@ -208,9 +254,16 @@ async def get_page(args: dict, ctx: ToolContext) -> str:
 
     text = clean_wikitext(page.wikitext)
     dt = int((time.perf_counter() - t0) * 1000)
+    # 早先这里直接把 `page.last_revision` 拼进句子 —— 它是 ISO 串
+    # （2026-07-15T04:48:04Z），模型既读不出时效，时分秒还在吃 token。
+    # 换成只给日期，并在措辞上说清是「页面修订」而不是「数据截至」。
+    rev = _fmt_revision(page.last_revision)
+    rev_txt = f"页面最后修订 {rev}" if rev else "页面修订时间未知"
     return (
-        f"《{page.title}》最后修订 {page.last_revision}（{dt}ms，共 {len(text)} 字）\n"
-        f"出处：{ctx.settings.wiki_base}/{game}/{page.title}\n\n{_truncate(text, ctx.settings.tool_page_chars)}"
+        f"《{page.title}》{rev_txt}（{dt}ms，共 {len(text)} 字）\n"
+        f"出处：{ctx.settings.wiki_base}/{game}/{page.title}"
+        f"{f' | 修订 {rev}' if rev else ''}\n\n"
+        f"{_truncate(text, ctx.settings.tool_page_chars)}"
     )
 
 

@@ -74,7 +74,7 @@ export type StreamEvent =
         prompt_tokens: number
         completion_tokens: number
         guard?: Record<string, number>
-        refs: Array<{ url: string }>
+        refs: Ref[]
         persisted?: unknown
         /** 被拒答时告知是哪个未收录游戏 */
         out_of_scope?: string | null
@@ -114,6 +114,21 @@ export interface ToolCallView {
   chars?: number
 }
 
+export interface Ref {
+  url: string
+  /**
+   * 该来源所在 wiki 页面**最后一次编辑**的日期（YYYY-MM-DD）。
+   *
+   * 注意语义：这是「页面最后修订」，**不是**「数据截至」——
+   * 一页 2020 年建的 wiki 昨天改了个错别字，它也是昨天。
+   * 所以 UI 上只能写「页面修订」，不能写「数据更新于」，
+   * 否则就是用一个更隐蔽的误导替换掉原本的沉默。
+   *
+   * 可能为空：老数据或某些 chunk 的 metadata 里没有这个字段。
+   */
+  last_revision_ts?: string
+}
+
 /** 一轮问答 */
 export interface Turn {
   id: string
@@ -123,7 +138,9 @@ export interface Turn {
   backend: string
   answer: string
   tools: ToolCallView[]
-  refs: Array<{ url: string }>
+  refs: Ref[]
+  /** 发出这一轮的本地时间（HH:MM），用于气泡右下角的「回答于」 */
+  at: string
   done: Extract<StreamEvent, { event: 'done' }>['data'] | null
   error: string | null
   /** 命中的未收录游戏；非空时这轮是「越界拒答」而不是检索未命中 */

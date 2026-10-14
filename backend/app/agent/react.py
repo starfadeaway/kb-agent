@@ -46,6 +46,9 @@ SYSTEM_PROMPT = """你是一个游戏知识库助手，知识库覆盖这些游�
 2. search_kb 结果不足时，用 get_page 补全页面正文；不确定该查哪个库时先 list_games 确认。
 3. 需要算数时用 calculator，不要心算。
 4. 引用信息时在句末标注出处，格式如「[三月七]」。
+5. 检索结果带有**页面最后修订日期**。游戏数值会随版本改动，
+   涉及具体数值时优先采信修订较新的条目；如果引用的条目修订日期明显早于其他条目，
+   在回答末尾用一句话说明该数据的页面修订日期，提醒用户可能已过时。
 
 约束：
 - 知识库之外的最新版本改动、B站攻略作者观点，一律说明"知识库未收录"。
@@ -497,18 +500,34 @@ class ReActAgent:
             self._collect_refs(state)
 
     def _collect_refs(self, state: AgentState) -> None:
-        """从工具结果里抽引用，供前端展示与忠实度评测。"""
+        """从工具结果里抽引用，供前端展示与忠实度评测。
+
+        顺带把**页面修订日期**一起抽出来：`出处：` 行现在的格式是
+        `出处：<url> | 修订 YYYY-MM-DD`，那个修订时间是前端气泡右下角
+        要展示的东西。没有它，引用就只有链接没有时效，
+        而一份没有时效标注的引用，正是「用户把旧数据当新数据」的开端。
+
+        注意：URL 后面挂的是**竖线分隔的修订**，不是 query 参数。
+        这里用 `partition("|")` 而不是 split，避免 URL 里出现 `|` 时截错。
+        """
         seen: set[str] = set()
         for msg in state.messages:
             if msg.get("role") != "tool":
                 continue
             content = msg.get("content", "")
             for line in content.splitlines():
-                if line.startswith("出处："):
-                    url = line.replace("出处：", "").strip()
-                    if url and url not in seen:
-                        seen.add(url)
-                        state.refs.append({"url": url})
+                if not line.startswith("出处："):
+                    continue
+                url, _, tail = line[len("出处：") :].partition("|")
+                url = url.strip()
+                if not url or url in seen:
+                    continue
+                seen.add(url)
+                ref: dict = {"url": url}
+                rev = tail.strip()
+                if rev.startswith("修订"):
+                    ref["last_revision_ts"] = rev[len("修订") :].strip()
+                state.refs.append(ref)
 
     async def _exec_call(
         self, call: dict, ctx: ToolContext, guard: SearchGuard, state: AgentState
