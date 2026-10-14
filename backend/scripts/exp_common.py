@@ -329,6 +329,36 @@ def save(results: Sequence[dict], name: str) -> Path:
     return out
 
 
+def _caller_script_name(depth: int = 1) -> str:
+    """返回调用方所在脚本的文件名，用在 `_meta.script` 里。
+
+    `depth` 的含义是「从本函数再往上数几帧」：
+    `depth=1` = 本函数的**直接调用方**；`depth=2` = 调用方的调用方
+    （`build_meta` 就是这种情况：它要的是**自己**的调用者）。
+    写错这一层，script 会记成 pytest 的 `python.py` 之类完全无关的文件名，
+    而且**不报错** —— 比原来那个恒定值更隐蔽。
+
+    为什么不用 `sys.argv[0]`：`python -c` 下它是 `"-c"`，被当作模块 import
+    再调用时它指向的是宿主进程，跟产物来源无关。帧的 `__file__` 是可靠的。
+
+    取不到时返回 `<unknown-caller>` 而不是编一个名字 ——
+    与其静默写个假的出处，不如让「来源不明」显式暴露在产物里。
+    """
+    import inspect
+
+    frame = inspect.currentframe()
+    try:
+        for _ in range(depth):
+            if frame is None:
+                return "<unknown-caller>"
+            frame = frame.f_back
+        path = frame.f_globals.get("__file__") if frame is not None else None
+    finally:
+        # 帧对象互相引用会形成引用环；不显式断开会拖住 GC。
+        del frame
+    return Path(path).name if path else "<unknown-caller>"
+
+
 def build_meta(args) -> dict:
     """产物的出处块：脚本、时间、commit，以及**当时那个索引的规模**。
 
@@ -345,10 +375,17 @@ def build_meta(args) -> dict:
     import subprocess as _sp
 
     meta = {
-        # 注意：Path(__file__).name 恒为 "exp_common.py"（本文件自己的名字，
-        # 不是调用方的）。真正能区分产物出处的是下面的 experiment / variant /
-        # game / labels —— 靠 script 字段判来源会得到「所有实验都是 exp_common」。
-        "script": Path(__file__).name,
+        # `script` 必须记**调用方**的脚本名，而不是本文件的。
+        # 这里原先写的是 `Path(__file__).name`，而 `__file__` 恒等于 `exp_common.py`，
+        # 于是所有实验产物的出处字段都指向这个公共底座 ——
+        # 靠 script 判来源只会得到「所有实验都是 exp_common」，溯源功能等于失效。
+        # 缺陷之所以一直没被发现：experiment / variant / game / labels 仍然能区分，
+        # 数字是对的，只是出处字段是错的。
+        #
+        # 取调用方帧的 `__file__` 而不是 `sys.argv[0]`：后者在 `python -c`、
+        # 被当作模块 import 后调用、或同进程跑多个脚本时都不可靠。
+        # 同仓已有正确先例：probe_io.py 的 build_meta 用 `Path(sys.argv[0]).name`。
+        "script": _caller_script_name(depth=2),
         "generated_at": _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
         "experiment": getattr(args, "experiment", None),
         "game": getattr(args, "game", None),
