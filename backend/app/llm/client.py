@@ -234,6 +234,23 @@ class LLMClient:
         而且不报任何错。
 
         默认值仍然回落到 SiliconFlow，所以不配 `JUDGE_BASE_URL` 的行为不变。
+
+        `max_retries=0` 是**刻意**关掉 SDK 的静默重试，不是漏配。
+
+        SDK 默认 `max_retries=2` / `timeout=600s`，而 `Judge.score` 外层
+        套了 `asyncio.wait_for(120)`。这两层叠在一起是**结构性冲突**：
+
+        - Judge 单次实测 37-51s（6000 字符 payload），单次尝试至少要留 60s；
+        - 60s x 3 次重试 + 退避 ≈ 190s，**装不进 120s 的外层预算**；
+        - 于是重试还没跑完，外层 wait_for 先砍断 -> 抛 TimeoutError，
+          而 `str(TimeoutError())` 是空串，日志只剩「Judge 调用失败: 」。
+
+        实测代价：2026-10-14 实验 E 连跑两轮各白跑一次（n=2 里挂 1、
+        scored=0），根因就是这层看不见的重试把慢调用拖过了外层上限。
+
+        保留重试对实验**表面上**更稳（能吸收偶发 429），但在这个延迟量级下
+        它和超时预算不可能共存。选「失败可见」而不是「慢速失败」——
+        前者能定位，后者只能看到 `scored=0`。
         """
         if self._judge is None:
             if not self.s.siliconflow_api_key:
@@ -241,6 +258,7 @@ class LLMClient:
             self._judge = AsyncOpenAI(
                 api_key=self.s.siliconflow_api_key,
                 base_url=self.s.judge_base_url or self.s.siliconflow_base_url,
+                max_retries=0,
             )
         return self._judge
 

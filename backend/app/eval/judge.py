@@ -19,13 +19,20 @@ import asyncio
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 from app.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
-# Judge 单次实测约 28.5s（SiliconFlow Qwen3-8B），120s 留了四倍余量。
+# Judge 单次实测（SiliconFlow Qwen3-8B，真实 6000 字符 payload）：37–46s，
+# 短输入可低至 2s。120s 相对 46s 约 2.6 倍余量 —— 原注释写的「28.5s、四倍余量」
+# 已不成立，实测尾部到过 51s。
+#
+# 保持 120s 不改：改超时会让新旧产物落在不同样本集上，等于给实验换一个变量。
+# 真要解决超时，先查 `LLMClient.judge_client` 的 SDK 默认 `max_retries=2`
+# （静默重试会撑爆外层 wait_for），而不是放宽上限。
 DEFAULT_JUDGE_TIMEOUT = 120.0
 
 _JSON_RE = re.compile(r"\{[\s\S]*\}")
@@ -149,12 +156,20 @@ class Judge:
             answer=answer.strip(),
         )
         try:
+            t0 = time.perf_counter()
             raw = await asyncio.wait_for(
                 self.llm.judge(prompt, model=self.model),
                 timeout=self.timeout,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Judge 调用失败: %s", exc)
+            # 必须打类型 + 耗时。原实现只打 `%s`（异常消息），而 asyncio.TimeoutError
+            # 的 str() 是空串 —— 日志里只剩一行「Judge 调用失败: 」，看不出是超时、
+            # 429 还是连接断开。这个空日志已经让实验 E 白跑了两轮（2026-10-14）。
+            logger.warning(
+                "Judge 调用失败: %s: %s (耗时 %.1fs, 上限 %.0fs)",
+                type(exc).__name__, exc or "<无消息>",
+                time.perf_counter() - t0, self.timeout,
+            )
             return JudgeScore(0, 0, 0, f"judge_error:{type(exc).__name__}", "")
 
         data = _parse_json(raw)
@@ -208,12 +223,17 @@ class Judge:
                 b=second.strip(),
             )
             try:
+                t0 = time.perf_counter()
                 raw = await asyncio.wait_for(
                     self.llm.judge(prompt, model=self.model),
                     timeout=self.timeout,
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Judge 成对比较失败: %s", exc)
+                logger.warning(
+                    "Judge 成对比较失败: %s: %s (耗时 %.1fs, 上限 %.0fs)",
+                    type(exc).__name__, exc or "<无消息>",
+                    time.perf_counter() - t0, self.timeout,
+                )
                 return "TIE", f"judge_error:{type(exc).__name__}（未得到有效结论，非真实平局）"
 
             data = _parse_json(raw)
