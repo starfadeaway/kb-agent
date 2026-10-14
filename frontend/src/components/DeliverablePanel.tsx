@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { postDeliverable } from '../api'
+import { download, fileStem } from '../exportMd'
 import type {
   DeliverableConflict,
   DeliverableResponse,
@@ -33,39 +34,12 @@ const SAMPLES = [
 ]
 
 /**
- * 交付物标题 → 下载文件名（不含扩展名）。
+ * 交付物标题 → 下载文件名（不含扩展名）与 `download()` 都搬到了
+ * `../exportMd`，和问答导出的 Markdown 共用同一套规则。
  *
- * 原来用 `run_id`（16 位十六进制）当文件名，下载下来是
- * `4022ebe9d6c74a29.md` —— 对人类毫无意义，多下几次就分不清是哪一份。
- *
- * 必须转成 ASCII 安全名：Windows 的文件系统不允许 `\ / : * ? " < > |`，
- * 而标题里出现「/」是很常见的（「三月七•存护/攻略」）。
- * 浏览器不会替你转义，非法字符会让下载静默失败或文件名被系统改写。
- *
- * 保留 run_id 作为**后缀**而不是前缀：它是同一份产物的唯一标识，
- * 排查时对得上 `_meta.run_id` 与产物里的 run 字段。
- *
- * 导出是为了让 vitest 直接测它 —— 这段逻辑改过一次（原本用 run_id 当文件名，
- * 下载下来是 `4022ebe9d6c74a29.md`），纯函数 + 有测试才不会再退回去。
+ * 两边各写一份的后果已经出现过：交付物这边原本用 run_id 当文件名，
+ * 问答那边再写一次就会把这个 bug 复制一遍。现在改一处即两处生效。
  */
-export function fileStem(topic: string, runId: string): string {
-  const cleaned = (topic || '')
-    .replace(/[\\/:*?"<>|]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  // 超长标题会让下载对话框难读，且各平台的文件名长度上限不一。
-  const stem = cleaned.slice(0, 32).trim()
-  return `${stem || '交付物'}-${runId.slice(0, 8)}`
-}
-
-function download(name: string, text: string, type: string) {
-  const blob = new Blob([text], { type })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(a.href)
-}
 
 /** 冲突块。**不提供任何「挑一个」的交互** —— 见 DeliverableConflict 的注释。 */
 function ConflictBlock({ c }: { c: DeliverableConflict }) {

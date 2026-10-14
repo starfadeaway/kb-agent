@@ -1,17 +1,19 @@
 /**
- * 交付物面板的纯函数守卫。
+ * 交付物面板的下载文件名守卫。
  *
- * 为什么需要它：这个面板改过两次「看起来没问题但用户能直接看到」的问题 ——
- * 下载文件名从 `4022ebe9d6c74a29.md`（run_id）改成 `三月七养成指南-c924fee1.md`，
- * 以及去重把「隧洞遗器1/2/3」误当成重复吃掉两条。两处都只有浏览器手测，
- * 没有自动化守卫 —— 也就是说**改回去也不会有任何测试失败**。
+ * `fileStem` / `download` 现在住在 `../exportMd`，与问答导出的 Markdown 共用 ——
+ * 两边各写一份的话，交付物这边「用 run_id 当文件名」的历史 bug 会被复制一遍。
+ *
+ * 为什么需要这个守卫：这个面板改过「看起来没问题但用户能直接看到」的问题 ——
+ * 下载文件名从 `4022ebe9d6c74a29.md`（run_id）改成 `三月七养成指南-c924fee1.md`。
+ * 只靠浏览器手测的话，改回去不会有任何东西报警。
  *
  * 这里只测纯函数。渲染与网络交互不覆盖：它们需要 jsdom + fetch mock，
  * 收益不足以支撑引入那套依赖，而纯函数才是真正出过 bug 的位置。
  */
 import { describe, expect, it } from 'vitest'
 
-import { fileStem } from './DeliverablePanel'
+import { fileStem } from '../exportMd'
 
 describe('fileStem', () => {
   it('用标题而不是 run_id 当主体，run_id 只留后 8 位', () => {

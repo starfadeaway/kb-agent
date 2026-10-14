@@ -14,21 +14,22 @@
 :root {
   color-scheme: light;
 
-  --bg: #f6f7f9;
-  --panel: #ffffff;
-  --panel-2: #eef0f4;
-  --panel-3: #e4e7ec;
-  --line: #d8dce3;
-  --line-soft: #e8ebf0;
-  --text: #1a1d23;
-  --text-strong: #000;
-  --muted: #646b78;
-  --faint: #8d94a1;
-  --accent: #2563eb;
-  --accent-soft: #dbe6ff;
-  --ok: #14804a;
-  --bad: #c62828;
-  --warn: #a16207;
+  /* 档案纸：暖白，比 #f6f7f9 那种冷灰更接近纸张本身 */
+  --bg: #faf7f2;
+  --panel: #fffdf9;
+  --panel-2: #f2ede4;
+  --panel-3: #e8e2d6;
+  --line: #ddd5c7;
+  --line-soft: #ece5da;
+  --text: #23201b;
+  --text-strong: #14110d;
+  --muted: #6b6355;
+  --faint: #948b7b;
+  --accent: #b4700e;
+  --accent-soft: #f7e6c8;
+  --ok: #1a7f5a;
+  --bad: #b3352c;
+  --warn: #9a6b09;
 
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
   --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08);
@@ -37,39 +38,48 @@
   --radius: 12px;
   --radius-sm: 8px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* 数字是这个界面的一等公民（步数 / token / 命中率），单独给一份等宽族，
+     并配合 tabular-nums 让多行数字能对齐 —— 仪表读数不对齐会很难读。 */
+  --mono-num: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --bg-scrim: 0;
-  --sidebar-bg: rgba(255, 255, 255, 0.92);
-  --surface: rgba(255, 255, 255, 0.86);
-  --surface-solid: #ffffff;
+  --sidebar-bg: rgba(255, 253, 249, 0.92);
+  --surface: rgba(255, 253, 249, 0.86);
+  --surface-solid: #fffdf9;
+
+  /* 动效时长集中在这里，而不是每处各写一个魔法数 */
+  --t-fast: 140ms;
+  --t-mid: 240ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --bg: #0e1116;
-  --panel: #161b22;
-  --panel-2: #1c2230;
-  --panel-3: #232b3a;
-  --line: #2a313d;
-  --line-soft: #222834;
-  --text: #e6edf3;
-  --text-strong: #fff;
-  --muted: #8b949e;
-  --faint: #6e7681;
-  --accent: #4c8dff;
-  --accent-soft: #1b2b4d;
-  --ok: #3fb950;
-  --bad: #f85149;
-  --warn: #d29922;
+  /* 档案墨：近黑的暖调，不是 #0e1116 那种冷黑 */
+  --bg: #0c0b09;
+  --panel: #14120f;
+  --panel-2: #1c1915;
+  --panel-3: #262119;
+  --line: #2e2820;
+  --line-soft: #221e18;
+  --text: #e8e2d6;
+  --text-strong: #fdfbf7;
+  --muted: #9d9280;
+  --faint: #776d5d;
+  --accent: #e8a33d;
+  --accent-soft: #3a2c12;
+  --ok: #4ec98d;
+  --bad: #ff7a6e;
+  --warn: #f0b429;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
 
-  --sidebar-bg: rgba(22, 27, 34, 0.9);
-  --surface: rgba(22, 27, 34, 0.88);
-  --surface-solid: #161b22;
+  --sidebar-bg: rgba(20, 18, 15, 0.90);
+  --surface: rgba(20, 18, 15, 0.88);
+  --surface-solid: #14120f;
 }
 
 * {
@@ -1275,4 +1285,249 @@ button.mini {
   margin-top: 16px;
   font-size: 13px;
   line-height: 1.9;
+}
+
+/* ==========================================================================
+   动效与仪表读数条（本轮新增）
+   --------------------------------------------------------------------------
+   ## 预算说明
+   这个界面同时要「能演示」和「能长时间盯着看」，所以动效只加在
+   **状态发生变化**的地方（气泡进场、页签切换、导航指示），
+   而不是每次 hover 都加 —— 后者才是「AI 生成感」的来源。
+
+   `prefers-reduced-motion` 在文件上方已有统一降级，这里新增的动画
+   全部在末尾那条规则里被清掉，不单独写第二套。
+
+   ## 为什么指标要「长」这样
+   .metrics 做成一排刻度而不是一排圆角标签：这个产品与其他 RAG demo
+   最大的区别就是**敢把成本和质量指标摆在台面上**（步数、token、失败率、
+   终止原因）。常见做法是把它们塞进一个「详情」折叠区，
+   这里是直接铺开、用仪表读数的语汇呈现 —— 它本身就是卖点的一部分。
+   ========================================================================== */
+
+/* ---------- 页签切换：内容淡入 + 轻微上移 ---------- */
+/*
+ * 用 animation 而不是 transition：页签切换是「换了一整块 DOM」，
+ * 元素重新挂载，transition 没有「上一个状态」可过渡。
+ */
+/* 三个页签的根元素分别是 .chat / .retrieve（交付物面板用的是 "retrieve dv"），
+ * 所以下面这条规则覆盖的是前两者 —— dv 的动画由 .retrieve 顺带带上。 */
+.chat,
+.retrieve {
+  animation: panel-in var(--t-mid) var(--ease) both;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- 气泡逐条进场 ----------
+ * nth-child 只给前几条加 delay：长会话里第 20 条还等着入场会很怪，
+ * 而且 delay 越往后越久，等于让用户干等。
+ */
+.turn {
+  animation: turn-in var(--t-mid) var(--ease) both;
+}
+.turn:nth-child(1) { animation-delay: 0ms; }
+.turn:nth-child(2) { animation-delay: 40ms; }
+.turn:nth-child(3) { animation-delay: 80ms; }
+.turn:nth-child(4) { animation-delay: 120ms; }
+.turn:nth-child(n + 5) { animation-delay: 140ms; }
+
+@keyframes turn-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- 导航：琥珀色指示条 ---------- */
+.nav {
+  position: relative;
+}
+
+.nav-item {
+  position: relative;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    padding-left var(--t-fast) var(--ease);
+}
+
+/*
+ * 选中项左侧的竖条。不用 border 免得撑高元素，
+ * hover 时整个 item 右移 4px —— 位移很轻，但给了「选中」一个物理确认感。
+ */
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+
+.nav-item:hover:not(.active) {
+  padding-left: 16px;
+}
+
+/* ---------- 仪表读数条：覆盖上面 .metrics/.stat 的默认外观 ---------- */
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin-top: 12px;
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  /* 读数之间的分隔线靠 gap + 容器底色实现，
+     而不是给每个 stat 加边框 —— 后者在圆角处会出现错位的断线。 */
+}
+
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 11px;
+  background: var(--surface-solid);
+  font-family: var(--mono-num);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.stat em {
+  font-style: normal;
+  font-family: inherit;
+  color: var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+/* 有语义的读数给一道左侧色条：一眼扫过去就知道哪几个数字有问题 */
+.stat[data-tone] {
+  box-shadow: inset 2px 0 0 currentColor;
+}
+.stat[data-tone='ok'] { color: var(--ok); }
+.stat[data-tone='bad'] { color: var(--bad); }
+.stat[data-tone='warn'] { color: var(--warn); }
+/* 数值本身回到正文色：整块变红会让数字读不出来 */
+.stat[data-tone] em {
+  color: inherit;
+  opacity: 0.75;
+}
+
+/* ---------- 答案区的操作按钮组 ---------- */
+.a-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  opacity: 0.72;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.a:hover .a-actions,
+.a:focus-within .a-actions {
+  opacity: 1;
+}
+
+/* ---------- 思考中 ---------- */
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- 分段控件 ---------- */
+.seg {
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+/* 选中档是琥珀底，字必须深 —— 理由同主按钮那一段 */
+.seg.active {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  color: #1a1206;
+}
+
+/* ---------- 焦点可见性：键盘用户必须看得见自己在哪 ---------- */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---------- 工具时间线依次点亮 ---------- */
+.tl-item {
+  animation: turn-in var(--t-mid) var(--ease) both;
+}
+
+/* ==========================================================================
+   降级：系统开了「减少动态效果」就全部关掉
+   —— 不是把时长调短，而是真的移除，避免残留 transform 卡住点击区域。
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .chat,
+  .retrieve,
+  .turn,
+  .tl-item {
+    animation: none !important;
+  }
+  .nav-item,
+  .seg,
+  .a-actions {
+    transition: none !important;
+  }
+  .nav-item:hover:not(.active) {
+    padding-left: 12px;
+  }
+}
+
+/* ==========================================================================
+   琥珀色按钮上的文字
+   --------------------------------------------------------------------------
+   主按钮原本是 `background: var(--accent); color: #fff` —— 那在蓝色
+   accent 上成立（蓝底白字对比度足够），换成琥珀色之后就不成立了：
+   白字压在 #e8a33d 上对比度约 1.9:1，远低于 4.5:1，**按钮几乎读不出来**。
+   这类问题不会报任何错，只会让界面「看起来怪」，所以必须显式压住。
+
+   用固定深墨色而不是 var(--text)：--text 随主题变（深色主题下是浅色），
+   套上去会变成浅底浅字。压在琥珀上的字，两个主题都必须是深的。
+
+   ⚠️ 必须用 `:where()`：它把优先级压到 0，否则 `.composer-side > button`
+   这类更具体的选择器会盖掉它 —— 实测踩过：规则写对了却没生效，
+   按钮一直是暗底暗字。改完必须去浏览器里看实际渲染，别只看 CSS 写没写。
+   只改主按钮，其余按钮（ghost / icon-btn / danger）保持原有继承逻辑。
+   ========================================================================== */
+:where(button):not(.ghost, .icon-btn, .danger, .seg, .sample) {
+  color: #1a1206;
+}
+
+/* ghost / icon-btn 走继承，拿 --text；深色主题下才够亮 */
+:where(.ghost, .icon-btn) {
+  color: var(--text);
+}
+:where(button.ghost.active, button.icon-btn.active) {
+  color: var(--text-strong);
+}
+/* danger 底色是红，白字是唯一合理选择 */
+:where(.danger) {
+  color: #fff;
 }

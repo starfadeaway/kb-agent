@@ -6,15 +6,21 @@
 
 | 维度 | 结果 | 出处 |
 |---|---|---|
-| 检索策略消融（n=29, top_k=3） | 纯 BM25 0.793 → 纯向量 0.828 → 融合 0.828 → **+重排 0.897**（A3 仍是最优档）。旧 2306-chunk 语料下为 0.897/0.828/0.897/**0.966**，补抓 368 页角色页后指标整体下移，退化项**全部**来自攻略页挤占 | [`data/eval/exp_A_role_pages.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
-| 分块 / embed_mode 消融 | `embed_mode title→text` 使 MRR **0.736→0.506（−23.0pt，p=0.0001）**；chunk_size 在 500/800/1200 下 **A3 指标完全相同**（差异被重排吸收） | [`data/eval/exp_B0..B3_sr_k3.json`](data/eval) |
+| 检索策略消融（**三库逐库**，A0→A3，top_k=3，n=29/9/10） | recall@3：**sr 0.793→0.897** / ys 0.889→**1.000** / zzz 1.000→**1.000**。⚠️ **重排增益只在 sr 成立** —— ys/zzz 在 A1（纯向量）就已打满，A2/A3 没有可提升空间，三库**不可合并成一个均值**。sr 补抓 368 页角色页后指标整体下移，退化项全部来自攻略页挤占 | [`data/eval/exp_A_all_k3.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
+| 分块 / embed_mode 消融（**三库逐库** B0–B3，n=29/9/10） | MRR title→text：**sr 0.736→0.506（−23.0pt，p=0.0001）** / ys 0.833→0.722 / zzz 0.950→0.950。⚠️ 方向三库一致但**幅度差很大**，只有 sr 达到显著；chunk_size 在 500/800/1200 下 **sr A3 指标完全相同**（差异被重排吸收） | [`data/eval/exp_B{0..3}_{sr,ys,zzz}_k3.json`](data/eval) |
 | Agent 能力消融（生成侧，Judge；**三库逐库**，n=32/12/12，judge 均值为剔除超时后的 n_ok 口径） | sr：无工具 **2.67** → `search_kb` **4.72** → 全套工具 4.59；C0→C2 Δ=+2.04（p<1e-10, d=2.16）。三库 C0→C2 **全部极显著**，d=2.16/3.72/2.78 | [`data/eval/exp_C_{sr,ys,zzz}.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
+| Embedding 模型对比（**三库逐库** D，n=29/9/10） | **保留 bge-m3**，依据是 reranker 配套而非质量：A2 融合档跨模型配对 **p=0.6743 无法区分**，且三库方向互相矛盾（sr Qwen 略优 0.810→0.822 / ys 打平 1.000 / zzz bge 优 0.850→1.000）。Qwen 在融合档显著更快（sr −28ms，p<1e-10） | [`data/eval/exp_D_*_k3.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
 | 假前提题（幻觉测试） | 无检索 3.83 → 有检索 **5.00**（模型学会"明确说不知道"） | 同上 |
 | Chat 基座对比（**三库逐库**，n=15/12/12，DeepSeek⇄MiniMax，judge 为 n_ok 口径） | ⚠️ **三库均未达显著**（Δ=−0.70 / −0.16 / −0.38，p=0.070/0.674/0.283），**不敢说谁更强**。成本三库一致：MiniMax prompt token ×1.55~2.85、延迟 ×2.56~3.65。两者失败模式**互补** | [`data/eval/exp_E_{sr,ys,zzz}.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
 | 代价 | 挂知识库 = prompt token **×20.2**、延迟 3.5 倍（串行实测口径）；C2 比 C1 多花 **23%** token，judge 只涨 0.14 且 p=0.16 未达显著 | [`docs/cost_latency_quality.md`](docs/cost_latency_quality.md) |
 | 并发（真实问题压测） | 并发 4 吞吐 **×3.40**（4.10 req/s），1/4/8 三档 top-5 结果**逐条一致** | [`docs/concurrency.md`](docs/concurrency.md) |
 | 流式 | 首个 SSE 事件 **860ms** vs 非流式全量 3410ms，总耗时仅差 264ms。⚠ **不是「第一个字」**：上游无 token 级流式，是拿完整答案后切片推送；且为单次测量 | [`data/eval/probe_stream_latency.json`](data/eval) |
 | 失败模式 | 4 类，含「答案全对但引用了不存在的页面」 | [`docs/failure_analysis.md`](docs/failure_analysis.md) |
+
+> 📄 **「我做了一个 RAG 知识库，区别在哪、还差什么、面试怎么讲」**
+> 见 [`docs/comparison_with_rag.md`](docs/comparison_with_rag.md) ——
+> 里面有五条实打实的差异、**一份比亮点还长的差距清单**，以及两种面试讲法
+> （哪种会被追问穿、哪种能接住追问）。
 
 ## 📌 所有数字可复现
 
@@ -508,8 +514,9 @@ cd kb-agent\backend
 | 语料 | 星铁 706 页→3932 chunk；绝区零 260 页→1498；原神 434 页→5413；合计 **10843 chunk**，**全程 0 次 WAF 硬失败** |
 | 向量库 | LanceDB 0.40，暴力精确扫描，跨进程读回已验证；NumPy 实现保留为 fallback |
 | 检索 | BM25 + 向量 RRF + 重排，A0–A3 消融已完成（n=29，见 `EVALUATION.md`） |
-| 分块 | 实验 B 四组完成（3932 chunk 语料）：**embed_mode=title 显著更优（p=0.0001）**；chunk_size 在 500/800/1200 下 A3 指标完全相同 |
-| Embedding | 实验 D：**保留 bge-m3**，依据是 reranker 配套而非质量（A2 跨模型配对 p=0.6743，无法区分，且两模型方向互相矛盾）；Qwen 在融合档显著更快（−28ms，p<1e-10） |
+| 分块 | 实验 B 四组**三库逐库**完成：MRR title→text sr **−23.0pt（p=0.0001）** / ys −13.3% / zzz **0.0%** —— 方向一致但强度差两个数量级；chunk_size 在 500/800/1200 下 sr A3 指标完全相同 |
+| Embedding | 实验 D **三库逐库**：**保留 bge-m3**，依据是 reranker 配套而非质量（A2 跨模型配对 p=0.6743 无法区分，三库方向互相矛盾）；Qwen 在融合档显著更快（sr −28ms，p<1e-10） |
+| 检索 | A0–A3 **三库逐库**（n=29/9/10）：recall@3 sr 0.793→0.897 / ys 0.889→1.000 / zzz 1.000→1.000。⚠️ **重排增益只有 sr 有样本支撑**，ys/zzz 在纯向量档已打满（见 `EVALUATION.md`） |
 | 延迟 | A3 检索 785ms（纯 BM25 144ms 的 5.4 倍）；感知延迟靠流式 −85%；KV cache 自动生效，无需配置。⚠️ 索引从 2306 涨到 3932 chunk 后，A3 延迟从 567ms 涨到 785ms（+38%） |
 | 并发 | 实测 1/4/8 并发：4 并发吞吐 3.40x，8 并发 5.18x；同 query 各并发度下 top5 完全一致。冷缓存并发从"8 次重复建索引"降到 1 次（`docs/concurrency.md`） |
 | 安全 | 间接 Prompt 注入：11 条规则分两级，10843 chunk 真实语料误报 **0**、攻击样本召回 **13/13**；工具结果一律包进不受信任数据区（`docs/injection_guard.md`） |
@@ -678,9 +685,18 @@ embedding / rerank / judge **同时失效**，但：
    抽样会在题型构成上引入新的隐藏变量，不如按全集跑。
    代价是三库样本量不齐，显著性判断必须**逐库看**，见第 2 条。
 
-   三库跑完还推翻了一条原本当成跨库稳健的结论：「embed_mode=title 优于 text」
-   在 zzz 上 A0 侧**一题都没差别**（逐题 diff 后只有 1 题受影响），
-   目前只有 sr 有样本支撑（+0.230，10/29 题）。
+   三库跑完还修正了一条原本当成跨库稳健的结论：「embed_mode=title 优于 text」
+   的**幅度**并不跨库一致。逐题 diff（`exp_A_all_k3.json`）：
+   sr MRR 0.736→0.506（−23.0pt，p=0.0001，仅 sr 达显著）、
+   ys 0.833→0.722（−13.3%）、zzz 0.950→0.950（**零变化**）。
+   也就是说「title 优于 text」在 zzz 上**完全没有效果**，
+   在 sr 上则是决定性的 —— 方向一致但强度差两个数量级，
+   所以只能写成「sr 上显著更优，ys 上同向但未显著，zzz 上无差异」，
+   不能写成一句跨库通用的结论。
+
+   A 档另一条值得注意：**ys/zzz 在 A1（纯向量）就已打满**
+   （recall@3 1.000），重排（A3）在两库上**没有可提升空间**。
+   「重排收益最大」这条结论目前**只有 sr 有样本支撑**。
 
 2. **评测集继续加量（当前最大的统计缺口）**
    检索侧三库 48 条（sr 29 / ys 9 / zzz 10），生成侧 C 三库 **32/12/12**、

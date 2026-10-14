@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Health, Ref, Turn } from '../types'
 import type { BgSettings, Theme } from '../prefs'
+import { download, turnFileName, turnToMarkdown } from '../exportMd'
 import { ToolTimeline } from './ToolTimeline'
 import { SettingsPanel } from './SettingsPanel'
 
@@ -290,7 +291,10 @@ export function ChatPanel({
               {t.answer ? (
                 <>
                   <Markdownish text={t.answer} />
-                  <CopyButton text={t.answer} />
+                  <div className="a-actions">
+                    <CopyButton text={t.answer} />
+                    <DownloadTurn turn={t} gameLabel={gameLabel(t.game, health)} />
+                  </div>
                 </>
               ) : t.error ? null : !t.done ? (
                 // 「思考中」必须同时要求 **流还没结束**。
@@ -396,6 +400,43 @@ function Segmented({
         </button>
       ))}
     </div>
+  )
+}
+
+/**
+ * 导出这一轮问答为 Markdown。
+ *
+ * 导出的**不只是答案**：工具过程、出处（含页面修订）、运行指标一起写进去。
+ * 只导出正文的话，这份 .md 拿出去没法核对 —— 而「能不能核对」正是这个项目
+ * 想证明的事。
+ */
+function DownloadTurn({ turn, gameLabel }: { turn: Turn; gameLabel: string }) {
+  const [done, setDone] = useState(false)
+  return (
+    <button
+      className="ghost mini"
+      onClick={() => {
+        const md = turnToMarkdown({
+          question: turn.question,
+          game: turn.game,
+          gameLabel,
+          backend: turn.backend,
+          backendLabel: BACKEND_LABELS[turn.backend] ?? turn.backend,
+          answer: turn.answer,
+          at: turn.at,
+          outOfScope: turn.outOfScope,
+          tools: turn.tools,
+          refs: turn.refs,
+          done: turn.done,
+        })
+        download(turnFileName(turn), md, 'text/markdown;charset=utf-8')
+        setDone(true)
+        setTimeout(() => setDone(false), 1600)
+      }}
+      title="导出这一轮的答案、检索过程、出处与运行指标为 Markdown"
+    >
+      {done ? '已导出' : '导出 Markdown'}
+    </button>
   )
 }
 
