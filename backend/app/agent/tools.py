@@ -28,6 +28,15 @@ class ToolContext:
     retriever: HybridRetriever
     store: VectorStore
     game: str = "sr"
+    #: 实验 F 的消融开关：`search_kb` / `get_page` 是否输出页面修订日期。
+    #: 默认 True —— 生产行为就是披露。
+    #:
+    #: 与已删除的 `TOOL_TRANSPORT` 有本质区别，必须说清：
+    #: 那个字段全仓**没有一处分支读它**，改 .env 完全不生效；
+    #: 这个字段在 `search_kb` / `get_page` 里都有**真实分支**，
+    #: 且 `test_revision_disclosure.py` 断言两条路径的输出确实不同。
+    #: 守卫断言的是行为，不是「某个值等于某状态」。
+    disclose_revision: bool = True
 
     @classmethod
     def build(cls, game: str = "sr") -> ToolContext:
@@ -188,15 +197,18 @@ async def search_kb(args: dict, ctx: ToolContext) -> str:
         return f"{header}\n知识库中没有与「{query}」相关的内容。"
 
     top = hits[0]
+    span = _revision_span(hits) if ctx.disclose_revision else ""
     header = (
         f"[search_kb] status=ok hits={len(hits)} top_score={top.score:.3f} "
-        f"top_page={top.chunk.page_title} {dt}ms 来源={top.rank_source}"
-        f"{_revision_span(hits)}"
+        f"top_page={top.chunk.page_title} {dt}ms 来源={top.rank_source}{span}"
     )
     lines = [header]
     for i, h in enumerate(hits, 1):
         c = h.chunk
-        rev = _fmt_revision(c.metadata.get("last_revision_ts"))
+        rev = (
+            _fmt_revision(c.metadata.get("last_revision_ts"))
+            if ctx.disclose_revision else ""
+        )
         # 修订日期同时出现在**行内**和**出处行**：
         #   行内 → 模型读到这条内容时就知道它多新，就近判断，不用来回对照 header；
         #   出处行 → `_collect_refs` 靠「出处：」前缀扫引用，顺带把它带进
@@ -257,8 +269,11 @@ async def get_page(args: dict, ctx: ToolContext) -> str:
     # 早先这里直接把 `page.last_revision` 拼进句子 —— 它是 ISO 串
     # （2026-07-15T04:48:04Z），模型既读不出时效，时分秒还在吃 token。
     # 换成只给日期，并在措辞上说清是「页面修订」而不是「数据截至」。
-    rev = _fmt_revision(page.last_revision)
-    rev_txt = f"页面最后修订 {rev}" if rev else "页面修订时间未知"
+    rev = _fmt_revision(page.last_revision) if ctx.disclose_revision else ""
+    rev_txt = (
+        f"页面最后修订 {rev}" if rev
+        else ("页面修订时间未知" if ctx.disclose_revision else "")
+    )
     return (
         f"《{page.title}》{rev_txt}（{dt}ms，共 {len(text)} 字）\n"
         f"出处：{ctx.settings.wiki_base}/{game}/{page.title}"

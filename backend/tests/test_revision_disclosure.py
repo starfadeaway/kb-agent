@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import types
 
 import pytest
@@ -65,11 +66,14 @@ class _FakeRetriever:
         return self._hits
 
 
-def _run_search(hits, **overrides) -> str:
+def _run_search(hits, *, disclose: bool = True, **overrides) -> str:
     import dataclasses
 
     s = dataclasses.replace(get_settings(), **overrides) if overrides else get_settings()
-    ctx = ToolContext(settings=s, retriever=_FakeRetriever(hits), store=None, game="sr")
+    ctx = ToolContext(
+        settings=s, retriever=_FakeRetriever(hits), store=None, game="sr",
+        disclose_revision=disclose,
+    )
     return asyncio.run(search_kb({"query": "三月七 基础生命值", "top_k": len(hits)}, ctx))
 
 
@@ -203,6 +207,64 @@ def test_get_page_shows_revision_date_not_raw_iso(monkeypatch):
     assert "页面最后修订 2026-07-28" in out
     # 早先这里直接把 ISO 串拼进句子，模型既读不出时效，时分秒还吃 token
     assert "T04:48:04Z" not in out, "get_page 不该再暴露原始 ISO 串"
+
+
+# --------------------------------------------------------------------------- #
+# 4.5 消融开关必须是**真分支**
+# --------------------------------------------------------------------------- #
+def test_disclose_switch_changes_search_kb_output():
+    """`disclose_revision` 关掉，输出里必须真的没有日期。
+
+    这条是专门对着刚删掉的 `TOOL_TRANSPORT` 写的：
+    那个字段定义了、文档写了、.env 列了，**却没有任何一处代码读它**，
+    当时的守卫只断言「配置值 != mcp」，什么都没测。
+
+    所以这里断言的是**行为**：同一个检索、同一个 ctx，
+    只有 `disclose_revision` 不同，两次输出必须有实质差异。
+    若哪天有人把分支删了、把字段删了，这里会红。
+    """
+    hits = [_hit("三月七", "2026-07-28T04:48:04Z")]
+    on = _run_search(hits, disclose=True)
+    off = _run_search(hits, disclose=False)
+    assert "页面修订 2026-07-28" in on
+    assert "页面修订" not in off, "disclose_revision=False 仍然输出了日期 —— 分支没接上"
+    # 关掉后仍要能正常检索，不能因为关掉一个功能就少了内容
+    assert f"出处：{WIKI}/三月七" in off
+    assert "三月七" in off
+
+
+def test_disclose_switch_changes_get_page_output(monkeypatch):
+    import app.ingest.wiki_client as wc_mod
+
+    class _WC:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def fetch_page(self, title):
+            return types.SimpleNamespace(
+                title=title, wikitext="正文", last_revision="2020-11-06T00:00:00Z",
+                revision_id=1700000000,
+            )
+
+    monkeypatch.setattr(wc_mod, "WikiClient", _WC)
+    base = ToolContext(settings=get_settings(), retriever=None, store=None, game="sr")
+    on = asyncio.run(get_page({"title": "三月七"}, base))
+    off = asyncio.run(get_page(
+        {"title": "三月七"},
+        dataclasses.replace(base, disclose_revision=False),
+    ))
+    assert "页面最后修订 2020-11-06" in on
+    assert "2020-11-06" not in off and "页面修订时间未知" not in off, (
+        "关掉披露后 get_page 仍带日期 —— 分支没接上。"
+        "注意「页面修订时间未知」也不能出现：那等于把「没披露」说成「查不到」，"
+        "同样是谎。"
+    )
 
 
 # --------------------------------------------------------------------------- #
