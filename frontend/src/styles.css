@@ -562,8 +562,12 @@ body {
 /* 气泡右下角的元信息行。
    三种语义用三种视觉权重，别让它们看起来一样重要：
    - 回答于（本机时钟）：最弱，它不承载任何关于内容新旧的语义；
-   - 页面修订（语料时钟）：居中，陈旧时转警示色；
-   - 来源：唯一可点开核对的东西，保持强调色。 */
+   - 页面修订（溯源信息）：居中，纯陈述，不做陈旧告警；
+   - 来源：唯一可点开核对的东西，保持强调色。
+
+   这里**刻意没有警示色**：实测表明 wiki 是版本更新驱动的批量维护
+   （Top12 日期占 40.5%），「页面很久没动」推不出「内容已过时」。
+   用无法支撑的推断标红，比不标更糟。 */
 .meta-line {
   display: flex;
   flex-wrap: wrap;
@@ -580,35 +584,6 @@ body {
 
 .meta-when {
   opacity: 0.6;
-}
-
-.meta-warn {
-  margin-left: 6px;
-  font-style: normal;
-  padding: 0 5px;
-  border-radius: 4px;
-  font-weight: 600;
-}
-
-.meta-line[data-level='some'] .meta-warn {
-  color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 14%, transparent);
-}
-
-/* 全部来源都旧：这不是"注意"，这是"答案可能建立在过时数据上"。 */
-.meta-line[data-level='all'] .meta-warn {
-  color: var(--bad);
-  background: color-mix(in srgb, var(--bad) 16%, transparent);
-}
-
-/* 陈旧时日期本身也提亮，让警示不只依赖那四个字 */
-.meta-line[data-level='some'] .meta-rev,
-.meta-line[data-level='all'] .meta-rev {
-  color: var(--text);
-}
-
-.meta-line[data-level='unknown'] .meta-rev {
-  opacity: 0.75;
 }
 
 .meta-src {

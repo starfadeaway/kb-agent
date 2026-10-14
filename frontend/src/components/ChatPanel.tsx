@@ -5,60 +5,48 @@ import { ToolTimeline } from './ToolTimeline'
 import { SettingsPanel } from './SettingsPanel'
 
 /**
- * 超过这个月数就算「较早」。
+ * 引用修订时间汇总。
  *
- * 定 12 而不是 6：游戏数值一个版本周期的跨度在半年到一年，
- * 6 个月会把正常的跨版本内容也标成警告，标多了就等于没标。
- */
-const STALE_MONTHS = 12
-
-function monthsSince(iso: string): number {
-  const t = Date.parse(iso)
-  if (Number.isNaN(t)) return 0
-  return (Date.now() - t) / (1000 * 60 * 60 * 24 * 30.44)
-}
-
-/**
- * 引用时效汇总。
+ * ## 这里曾经有一版「陈旧告警」，被实测推翻了
  *
- * 为什么要**分三档**而不是只显示一个日期区间：
- * 静默显示日期等于没显示 —— 没人会去读右下角那串小字。
- * 本项目实测 sr 库 30% 的页面是两年前的内容，如果不提示，
- * 用户会把六年前的条目当成当前版本依据。
+ * 最初的设计是按 12 个月为界分三档（正常 / 部分来源较早 / 来源均较早），
+ * 超过阈值就标红色。**那是错的**，因为它把两个几乎解耦的东西当成了一个：
  *
- * `ok`   全部较新，正常显示
- * `some` 混了较旧的，提示「部分来源较早」
- * `all`  全部较旧，答案很可能建立在过时数据上，必须警示
- * `unknown` 一个修订时间都没有 —— 这种情况要单独说，
- *        不能当成"很新"，也不能当成"很旧"，而是"不知道"
+ * - 页面最后编辑时间 = 整页最后一次被动的时刻
+ * - 这条内容的新鲜度 = 这条内容上一次被验证的时刻
+ *
+ * 实测（`scripts/probe_revision_clustering.py`，sr 706 页）：
+ * **Top12 个日期就占了全部页面的 40.5%**（2026-02-13 一天改了 63 页），
+ * 说明 wiki 是**版本更新驱动的批量维护**，不是零散编辑。
+ *
+ * 于是「页面很久没动」最可能的解释是「wiki 认为它不需要改」，
+ * 而不是「内容悄悄过期了」。拿修订时间去推断内容过时，
+ * 是一个**数据支撑不了的推断** —— 而误导性警示比不警示更糟。
+ *
+ * 所以现在只陈述事实：这段区间是多少。判断留给用户。
  */
 function revisionStats(refs: Ref[]) {
   const dates = refs.map((r) => r.last_revision_ts).filter((d): d is string => !!d)
+  const missing = refs.length - dates.length
   if (!dates.length) {
     return {
-      level: 'unknown' as const,
-      label: '',
+      known: false,
       span: '',
-      title: '这些来源没有记录页面修订时间',
+      title:
+        '这些来源没有记录页面修订时间。' +
+        '注意：即使有修订时间，也只说明「这一页最近一次被编辑是什么时候」，' +
+        '**不能**推出某条数值是否仍然正确 —— wiki 的批量维护会让这两件事脱钩。',
     }
   }
   const sorted = [...dates].sort()
-  const oldest = sorted[0]
-  const newest = sorted[sorted.length - 1]
-  const span = sorted.length === 1 ? newest : `${oldest} ~ ${newest}`
-  const missing = refs.length - dates.length
-
-  const level =
-    monthsSince(newest) > STALE_MONTHS ? 'all' : monthsSince(oldest) > STALE_MONTHS ? 'some' : 'ok'
-  const label = level === 'all' ? '来源均较早' : level === 'some' ? '部分来源较早' : ''
-  const hint = missing > 0 ? `另有 ${missing} 条来源没有修订时间。` : ''
+  const span = sorted.length === 1 ? sorted[0] : `${sorted[0]} ~ ${sorted[sorted.length - 1]}`
   return {
-    level,
-    label,
+    known: true,
     span,
     title:
-      `「页面修订」是 wiki 页面最后一次编辑的时间，不是数据生效日期 —— ` +
-      `页面昨天改了个错别字，也会显示昨天。${hint}`,
+      '「页面修订」是 wiki 页面最后一次被编辑的时间，**不是数据生效日期**。' +
+      '本页两年没被动过，通常意味着 wiki 认为它不需要改，而不是内容已过时。' +
+      (missing > 0 ? `另有 ${missing} 条来源没有修订时间。` : ''),
   }
 }
 
@@ -71,21 +59,20 @@ function pageName(url: string): string {
  *
  * 三件事各归其位，不要混：
  *   回答于   —— **本机时钟**，说的是「什么时候问的」，与内容新旧无关；
- *   页面修订 —— **语料时钟**，说的是「答案依据的内容多新」；
+ *   页面修订 —— **溯源信息**，说的是「这条记录是什么时候录的」；
  *   来源     —— 可点开核对，这是用户唯一能验证 AI 的手段。
  *
- * 三者颜色不同：时钟用弱化的灰，修订在陈旧时转警示色，
- * 来源保持可点击的强调色 —— 视觉上先看到警示，点不动就等于没提示。
+ * 刻意**没有**陈旧告警：修订时间推不出内容是否仍正确（见 revisionStats 的
+ * docstring），用它标红等于制造无法支撑的焦虑。
  */
 function MetaLine({ turn }: { turn: Turn }) {
   const s = revisionStats(turn.refs)
   return (
-    <div className="meta-line" data-level={s.level}>
+    <div className="meta-line">
       <span className="meta-when">回答于 {turn.at}</span>
 
       <span className="meta-rev" title={s.title}>
-        {s.span ? `页面修订 ${s.span}` : '页面修订未知'}
-        {s.label && <em className="meta-warn">{s.label}</em>}
+        {s.known ? `页面修订 ${s.span}` : '页面修订未知'}
       </span>
 
       <span className="meta-src">
