@@ -42,12 +42,18 @@ def load_cases(limit: int = 0, game: str = "sr"):
     from exp_common import parse_games
 
     games = parse_games(game)
+    # 返回值就是后续的**分母**：所有均值、配对检验的 n 都来自过滤后的 len(cases)。
     if len(games) <= 1:
         from app.eval.cases import ALL_CASES
         key = games[0] if games else "sr"
         by_id = {c.case_id: c for c in ALL_CASES.get(key, [])}
+        # 分母是过滤后的 len(cases)，不是 len(SUBSET_IDS)：子集里写了而在
+        # cases 中已改名/删除的 id 会被 `if i in by_id` 静默跳过 ——
+        # 样本从 15 缩到 13 时不会有任何报错，只有 n 能看出来。
         ids = SUBSET_IDS if key == "sr" else [c.case_id for c in ALL_CASES.get(key, [])]
         cases = [by_id[i] for i in ids if i in by_id]
+        # limit 在**过滤之后**生效，所以 --limit 3 取的是「子集里的前 3 条」，
+        # 不是随机 3 条 —— 换 limit 就换了题集，跨 limit 的数字不可比。
         return cases[:limit] if limit else cases
 
     # 多库：按题型分层合并，而不是把三库题直接堆一起。
@@ -55,6 +61,12 @@ def load_cases(limit: int = 0, game: str = "sr"):
     # 为什么必须分层 —— 直接堆的话，ys 会有 7/9 是 single_hop（可用题里），
     # zzz 是 8/10，三库均值的差别主要来自**题型构成**而不是库本身。
     # 「哪个库的 Agent 更强」这个问题会被读成「哪个库的题更简单」。
+    #
+    # **当前状态要说明白：分层只是意图，行为上并没有做。** 下面就是按固定库序
+    # 把各库可用题拼起来，没有按 category 做配额抽样。所以 `all` 的题型构成
+    # 仍由各库原始分布决定，跨库均值里混着题型构成。
+    # 拿它出结论前先跑 subset_composition 把构成分数打出来；
+    # 真要做分层抽样会改变样本集，也就不能再和历史产物比 —— 这是取舍不是遗漏。
     from app.eval.cases import ALL_CASES
     out: list = []
     for g in games:
@@ -133,14 +145,22 @@ def aggregate_rows(rows: Sequence[dict], *, exclude=None) -> dict:
     kept = [r for r in rows if keep(r)]
     # 全部被排除时退回全量，避免除零；但必须留下 all_failed 标记 ——
     # 否则「评测链路全挂」会被读成「模型全答错」，方向完全相反。
+    # 注意 ok 就是下面所有均值与分母的来源：ok 为空回退成 rows，
+    # 于是那一行的均值是**全 0**，只能靠 all_failed 认出它不是真实成绩。
     ok = kept or list(rows)
     n_ok = len(ok) or 1
     all_failed = not kept and bool(rows)
 
     def avg(key: str, cast=float, default=0):
+        # 逐指标各算各的分母：某条 row 没有 latency_ms 时它不参与延迟均值，
+        # 但仍参与 judge_score。**一行 aggregate 里不同列的 n 可能不同** ——
+        # 跨列做比值或相关之前，先分别核对 n 与 n_ok。
         vals = [cast(r[key]) for r in ok if r.get(key) is not None]
         return round(sum(vals) / len(vals), 4) if vals else default
 
+    # 步数取自 ok（已被剔除的 case 不贡献）—— 副作用是「工具失败最多的那几条
+    # 恰好被判为链路故障而剔除」时，tool_failure_rate 会显得好看。
+    # errors / judge_errors 两列就是这个偏差的对照，别只看失败率一个数。
     steps_total = sum(r.get("steps", 0) for r in ok)
     return {
         "judge_score": avg("judge_score"),
@@ -155,6 +175,8 @@ def aggregate_rows(rows: Sequence[dict], *, exclude=None) -> dict:
         "ref_coverage": round(sum(1 for r in ok if r.get("has_refs")) / n_ok, 4),
         "avg_latency_ms": int(avg("latency_ms")),
         "errors": sum(1 for r in rows if r.get("error")),
+        # 注意上面 errors / 下面 judge_errors 的分母是**全量 rows**，不是 ok：
+        # 它们要回答的是「这一档丢了多少条」，被剔除的失败恰恰是重点。
         # Judge 侧失败单列：它是评测链路的健康度，不是被测系统的能力，
         # 但确实会拉低均值，必须能一眼看出某个 0 分是「答错」还是「没评成」
         "judge_errors": sum(1 for r in rows if judge_failed(r)),
@@ -177,6 +199,9 @@ def print_summary(results: Sequence[dict], title: str) -> None:
     print("\n" + "=" * 96)
     print(f"  {title}")
     print("=" * 96)
+    # 表头的「错误」列打的是 a['errors']，**只有 Agent 侧**；judge_errors 没进表。
+    # 所以表里 Judge 侧失败表现为一个 0 分 —— 看着像「答崩了」，实际是「没评成」。
+    # 要区分只能回产物 JSON 数 judge_errors / 看 all_failed。
     print(f"{'配置':<5}{'judge':>8}{'correct':>9}{'faith':>8}"
           f"{'prompt tok':>12}{'步数':>8}{'引用':>7}{'工具失败':>10}{'延迟ms':>9}{'错误':>6}")
     for r in results:
@@ -186,6 +211,8 @@ def print_summary(results: Sequence[dict], title: str) -> None:
               f"{a['ref_coverage']:>7.2f}{a['tool_failure_rate']:>10.3f}"
               f"{a['avg_latency_ms']:>9}{a['errors']:>6}")
 
+    # 分类别的列序必须和 results 的顺序一致（print_category_matrix 按同序取列），
+    # 且 categories 只看第一档 —— 各档 rows 的 category 集合必须相同，否则列会错位。
     cats = sorted({r["category"] for r in results[0]["rows"] if r.get("category")})
     if cats:
         print("\n--- 按题型拆开（幻觉 / 假前提题是「无 RAG 时会怎样」的照妖镜）---")
@@ -213,6 +240,11 @@ def category_means(results: Sequence[dict], *, metric: str = "judge_score",
     """题型 × 各档label 的均值矩阵。抽出来是为了让 print_summary 和
     analyze_significance 用**同一份实现** —— 以前两边各写一遍，
     现在改一处两边同时生效。
+
+    返回值：matrix[cat] 是与 results 等长的一列，**None 表示该档该题型
+    全部被剔除**（不是 0 分，也不是"这档题型没跑"以外的任何含义）。
+    单元格的分母是该档该题型里通过 keep 且该指标非 None 的 row 数，
+    跨格比较前要看这个分母而不是直接比均值。
     """
     keep = exclude if exclude is not None else is_kept
     cats = sorted({r["category"] for r in results[0]["rows"] if r.get("category")})
@@ -220,6 +252,8 @@ def category_means(results: Sequence[dict], *, metric: str = "judge_score",
     for cat in cats:
         col: list[float | None] = []
         for r in results:
+            # 三个条件缺一不可：题型对上、这档这条没失败、指标存在。
+            # 少判 keep 就会让链路故障混进题型均值（与 aggregate_rows 同样的病）。
             vals = [x[metric] for x in r["rows"]
                     if x.get("category") == cat and keep(x) and x.get(metric) is not None]
             col.append(round(statistics.mean(vals), 4) if vals else None)
@@ -254,10 +288,15 @@ def paired_scores(results: Sequence[dict], metric: str = "judge_score",
     """
     from app.eval.metrics import paired_test
 
+    # 返回 None 有两种含义不同的原因：档数不足（<2），或首尾档求交集后
+    # 样本 <3（下限是硬编码）。**调用方必须显式判 None** ——
+    # 当成 0 会把「没法比」写成「没有差异」，而这正是文档里会引用的那类数。
     if len(results) < 2:
         return None
     keep = exclude if exclude is not None else is_kept
     first, last = results[0], results[-1]
+    # 交集以**首档**为准：先在首档定样本集，末档只保留同一批 case_id。
+    # 反过来（从末档定）会让「末档多跑出来的那几条」混进配对分母。
     common = [r for r in first["rows"] if keep(r)]
     common_ids = {r["case_id"] for r in common}
     last_rows = [r for r in last["rows"] if r["case_id"] in common_ids and keep(r)]
@@ -274,6 +313,12 @@ def paired_scores(results: Sequence[dict], metric: str = "judge_score",
 
 
 def save(results: Sequence[dict], name: str) -> Path:
+    """落盘整轮 rows（逐条明细），聚合数字由读取方现算。
+
+    为什么存明细而不是存聚合：口径改一次就要重算全部实验，
+    存了聚合就等于把当时的分母永久焊死。汇总方读回 rows 后必须走
+    aggregate_rows，别直接用文件里的现成均值。
+    """
     import json
 
     out_dir = EVAL_DIR
@@ -300,6 +345,9 @@ def build_meta(args) -> dict:
     import subprocess as _sp
 
     meta = {
+        # 注意：Path(__file__).name 恒为 "exp_common.py"（本文件自己的名字，
+        # 不是调用方的）。真正能区分产物出处的是下面的 experiment / variant /
+        # game / labels —— 靠 script 字段判来源会得到「所有实验都是 exp_common」。
         "script": Path(__file__).name,
         "generated_at": _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
         "experiment": getattr(args, "experiment", None),
