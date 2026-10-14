@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.agent.deliverable import DeliverableAgent, build_json, render_markdown
 from app.agent.react import UNCOVERED_GAMES, ReActAgent
 from app.agent.tools import ToolContext, get_schemas
 from app.core.config import get_settings
@@ -180,6 +181,19 @@ class RetrieveRequest(BaseModel):
     min_revision_ts: str | None = None
     # 只在指定页面里检索（用于验证"某页是不是唯一来源"）
     page_titles: list[str] | None = None
+
+
+class DeliverableRequest(BaseModel):
+    """`/deliverable` 入参。
+
+    只有两个字段是刻意的：**没有 top_k、没有并发度**。
+    这两个都是子任务级参数（每个子任务各自 2-4 路检索），
+    提到 API 层会让人以为能全局调优，实际上会破坏「每个子任务独立检索」
+    这个前提 —— 而且冲突检测的分母会跟着变。
+    """
+
+    question: str = Field(..., min_length=4, description="要产出交付物的请求，如「整理三月七的养成指南」")
+    game: str = Field("sr", description="目标库 slug：sr / ys / zzz")
 
 
 class IngestRequest(BaseModel):
@@ -513,6 +527,39 @@ async def stats() -> dict:
     """
     store = get_vector_store(_settings)
     return {"collections": store.list_collections(), "mysql": db_status()}
+
+
+@api_router.post("/deliverable")
+async def deliverable(req: DeliverableRequest) -> dict:
+    """交付物任务：一次请求产出 Markdown + JSON 两份产物。
+
+    与 `/chat` 的区别是**产出形态**，不是「更长的回答」：
+    `/chat` 返回一段文本，这里返回结构化事实表 + 冲突标注 + 出处，
+    而且两种格式同时给 —— Markdown 给人看，JSON 给程序/MCP/前端吃。
+
+    前置条件与它带来的风险，一并说清楚：
+
+    - **慢**。它是「规划 + N 个子任务 × (多路检索 + 抽取)」的串行链，
+      实测 6 个子任务约 40-60s，远超普通问答。所以**不能**挂在轮询里，
+      前端要用一次性请求 + 超时放宽，别拿它当同步接口用。
+    - **成本高**。每个子任务 2-4 次检索 + 1 次 LLM 抽取。
+      这是「一次调用出多份交付物」这个需求的固有代价，不做隐藏。
+    - 抽取有长度上限，截断会被识别成 `truncated` 而不是伪装成「没查到」。
+
+    返回里 `status_counts` 是给调用方看的健康度：全 empty 说明规划或抽取
+    这条链出了问题，而不是「知识库里确实没这些内容」。
+    """
+    agent = DeliverableAgent(settings=_settings)
+    res = await agent.run(req.question, game=req.game)
+    return {
+        "markdown": render_markdown(res),
+        "json": build_json(res),
+        "status_counts": {
+            k: v for k, v in res.meta.items() if k.startswith("subtasks_")
+        },
+        "conflicts_total": len(res.conflicts),
+        "elapsed_ms": res.elapsed_ms,
+    }
 
 
 # --------------------------------------------------------------------------- #

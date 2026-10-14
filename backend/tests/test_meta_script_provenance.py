@@ -31,6 +31,12 @@ sys.path.insert(0, str(SCRIPTS))
 
 import exp_common  # noqa: E402
 
+# **修复前的固定 commit**，不是 HEAD。
+# 用 HEAD 取快照是错的：修复一旦提交，HEAD 就是修好的版本，
+# 守卫会安静地失去意义（实测踩过 —— 提交修复后这条用例立刻红了）。
+# 这个常量必须指向 build_meta 修复之前的那个提交，改代码时不要动它。
+PRE_FIX_COMMIT = "978e835"
+
 
 def _args() -> argparse.Namespace:
     return argparse.Namespace(experiment="T", game="sr", variant=None, top_k=None, labels=None)
@@ -85,14 +91,17 @@ def test_build_meta_script_varies_with_caller(tmp_path):
 def _head_snapshot(tmp_path):
     """把 HEAD 版本的 exp_common 加载成独立模块，验证修复前确实会失败。"""
     src = subprocess.run(
-        ["git", "show", "HEAD:backend/scripts/exp_common.py"],
+        ["git", "show", f"{PRE_FIX_COMMIT}:backend/scripts/exp_common.py"],
         cwd=str(SCRIPTS.parents[1]), capture_output=True,
         # 必须显式 encoding：Windows 上 text=True 会按 GBK 解码，
         # 而 git 输出是 UTF-8，中文注释直接触发 UnicodeDecodeError。
         encoding="utf-8", errors="replace", timeout=30,
     )
     if src.returncode != 0:
-        pytest.fail(f"取不到 HEAD 版本（可能已 push 且路径不对）：{(src.stderr or '')[:200]}")
+        pytest.fail(
+            f"取不到 {PRE_FIX_COMMIT} 的 exp_common.py（{((src.stderr or '')[:120])}）—— "
+            "该 commit 被 rebase 掉了，PRE_FIX_COMMIT 需要更新到新的修复前位置"
+        )
     f = tmp_path / "exp_common_head.py"
     f.write_text(src.stdout, encoding="utf-8")
     spec = importlib.util.spec_from_file_location("exp_common_head_snapshot", f)
@@ -113,6 +122,9 @@ def test_head_version_fails_this_guard(_head_snapshot):
     证明它记的是「模块自己」而不是「产物来源」。
     生产里该文件一直叫 exp_common.py，所以这个缺陷表现为
     **所有产物的 script 恒等于同一个值**，不报错、不变化、只是错的。
+
+    注意断言方向：这里断言 HEAD 侧（修复前）**抓得到缺陷**，
+    不是断言它通过。哪天这个用例开始失败，说明 PRE_FIX_COMMIT 指错了地方。
     """
     old = _head_snapshot.build_meta(_args())
     assert old["script"] == "exp_common_head.py", (
