@@ -6,6 +6,26 @@
    浅色在 :root、深色在 [data-theme='dark'] —— 深色挂属性而不是反过来，
    是为了让「JS 还没跑」的第一帧也是可读的深色（配合 index.html 的内联脚本）。
 
+   ## 配色：深靛 + 青，而不是「近黑 + 单一亮色」
+   冷色科技感最容易滑进的那个坑是「纯黑背景 + 一个荧光 cyan」——
+   那是 AI 生成 UI 的默认长相之一，一眼就能认出。所以这里刻意避开：
+
+   - 底色是**深靛蓝**（#080d14 一带）而不是中性黑。它带蓝相，
+     和青色强调色同属一个冷色家族，界面读起来是「一整套」，
+     而不是「黑底贴了个色块」；
+   - 强调色避开 Tailwind 的 cyan-500/400（#06b6d4 / #22d3ee —— 这两个色值
+     在生成式 UI 里出现频率极高），改用自定义的 **#2ad4e6**，更冷更亮；
+   - 语义色里**故意留了暖色**：warn 琥珀 #f5b942、bad 珊瑚 #ff6b81。
+     纯冷色界面偏单薄，加一点暖点才有仪表盘的质感；
+     而且红/黄本来就是「注意」的国际语汇，染成冷色反而更难辨认。
+
+   ## --on-accent 为什么存在
+   强调色一深一浅（浅色主题 #0d8fa4、深色主题 #2ad4e6），
+   压在它上面的文字颜色自然要反过来：浅色主题用白字，深色主题用深墨。
+   早先把按钮文字色写死成深墨，在暖色强调下成立，换成青色后在浅色主题
+   就必须失效。所以这里把「压在强调色上的字」收进一个变量交给主题决定 ——
+   以后再加配色不会再踩同一个坑。
+
    背景图是**独立图层**：固定定位在 body 之下，内容区一律半透明。
    关键约束：图片再好看也不能盖到影响读文字，所以永远叠一层遮罩，
    浓度由 --bg-scrim 控制（可在设置里调）。
@@ -14,24 +34,27 @@
 :root {
   color-scheme: light;
 
-  /* 档案纸：暖白，比 #f6f7f9 那种冷灰更接近纸张本身 */
-  --bg: #faf7f2;
-  --panel: #fffdf9;
-  --panel-2: #f2ede4;
-  --panel-3: #e8e2d6;
-  --line: #ddd5c7;
-  --line-soft: #ece5da;
-  --text: #23201b;
-  --text-strong: #14110d;
-  --muted: #6b6355;
-  --faint: #948b7b;
-  --accent: #b4700e;
-  --accent-soft: #f7e6c8;
-  --ok: #1a7f5a;
-  --bad: #b3352c;
-  --warn: #9a6b09;
+  /* 冷雾蓝白：比纯白低一点饱和，避免大面积死白刺眼 */
+  --bg: #f2f6f9;
+  --panel: #ffffff;
+  --panel-2: #e8eff5;
+  --panel-3: #dbe6ef;
+  --line: #c6d4e0;
+  --line-soft: #dfe8f0;
+  --text: #16202b;
+  --text-strong: #0a121b;
+  --muted: #52637a;
+  --faint: #7b8ca1;
+  /* 浅色主题的强调色必须够深 —— 青色天生高亮度，太浅就压不住白字 */
+  --accent: #0d8fa4;
+  --accent-soft: #d3f0f4;
+  /* 压在 --accent 上的文字色，由主题决定，见文件头 --on-accent 那段 */
+  --on-accent: #ffffff;
+  --ok: #12876a;
+  --bad: #d1384f;
+  --warn: #a9700a;
 
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-sm: 0 1px 2px rgba(16, 34, 51, 0.07);
   --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08);
   --shadow-lg: 0 12px 40px rgba(16, 24, 40, 0.12);
 
@@ -43,9 +66,9 @@
   --mono-num: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --bg-scrim: 0;
-  --sidebar-bg: rgba(255, 253, 249, 0.92);
-  --surface: rgba(255, 253, 249, 0.86);
-  --surface-solid: #fffdf9;
+  --sidebar-bg: rgba(255, 255, 255, 0.92);
+  --surface: rgba(255, 255, 255, 0.86);
+  --surface-solid: #ffffff;
 
   /* 动效时长集中在这里，而不是每处各写一个魔法数 */
   --t-fast: 140ms;
@@ -56,30 +79,32 @@
 [data-theme='dark'] {
   color-scheme: dark;
 
-  /* 档案墨：近黑的暖调，不是 #0e1116 那种冷黑 */
-  --bg: #0c0b09;
-  --panel: #14120f;
-  --panel-2: #1c1915;
-  --panel-3: #262119;
-  --line: #2e2820;
-  --line-soft: #221e18;
-  --text: #e8e2d6;
-  --text-strong: #fdfbf7;
-  --muted: #9d9280;
-  --faint: #776d5d;
-  --accent: #e8a33d;
-  --accent-soft: #3a2c12;
-  --ok: #4ec98d;
-  --bad: #ff7a6e;
-  --warn: #f0b429;
+  /* 深靛蓝：带蓝相的深色，和青色强调同属一个冷色家族 */
+  --bg: #080d14;
+  --panel: #0e1621;
+  --panel-2: #141f2c;
+  --panel-3: #1c2a3a;
+  --line: #23303f;
+  --line-soft: #18222e;
+  --text: #d5e2ee;
+  --text-strong: #f0f7fc;
+  --muted: #8195ab;
+  --faint: #5b6c80;
+  --accent: #2ad4e6;
+  --accent-soft: #0d3a42;
+  /* 深色主题的 accent 是亮青，压在它上面的字必须是深的 */
+  --on-accent: #04222a;
+  --ok: #45d6a4;
+  --bad: #ff6b81;
+  --warn: #f5b942;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.52);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.66);
 
-  --sidebar-bg: rgba(20, 18, 15, 0.90);
-  --surface: rgba(20, 18, 15, 0.88);
-  --surface-solid: #14120f;
+  --sidebar-bg: rgba(14, 22, 33, 0.90);
+  --surface: rgba(14, 22, 33, 0.88);
+  --surface-solid: #0e1621;
 }
 
 * {
@@ -1461,10 +1486,10 @@ button.mini {
     background var(--t-fast) var(--ease),
     color var(--t-fast) var(--ease);
 }
-/* 选中档是琥珀底，字必须深 —— 理由同主按钮那一段 */
+/* 选中档也是 accent 底，字同样走 --on-accent（理由见文件头） */
 .seg.active {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
-  color: #1a1206;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+  color: var(--on-accent);
 }
 
 /* ---------- 焦点可见性：键盘用户必须看得见自己在哪 ---------- */
@@ -1501,26 +1526,25 @@ button.mini {
 }
 
 /* ==========================================================================
-   琥珀色按钮上的文字
+   压在强调色上的文字
    --------------------------------------------------------------------------
-   主按钮原本是 `background: var(--accent); color: #fff` —— 那在蓝色
-   accent 上成立（蓝底白字对比度足够），换成琥珀色之后就不成立了：
-   白字压在 #e8a33d 上对比度约 1.9:1，远低于 4.5:1，**按钮几乎读不出来**。
-   这类问题不会报任何错，只会让界面「看起来怪」，所以必须显式压住。
+   主按钮是 `background: var(--accent)`，而强调色在两套主题里一深一浅
+   （浅色 #0d8fa4 深青 / 深色 #2ad4e6 亮青），压在它上面的文字颜色必须相反。
+   早先这里把文字色**写死**成深墨，在暖色强调下恰好成立，换成青色后
+   浅色主题立刻变成深底深字 —— 而这种问题不报任何错，只会让界面看着怪。
 
-   用固定深墨色而不是 var(--text)：--text 随主题变（深色主题下是浅色），
-   套上去会变成浅底浅字。压在琥珀上的字，两个主题都必须是深的。
+   现在统一读 `--on-accent`（见文件头），由各主题自己给出正确答案。
 
    ⚠️ 必须用 `:where()`：它把优先级压到 0，否则 `.composer-side > button`
-   这类更具体的选择器会盖掉它 —— 实测踩过：规则写对了却没生效，
-   按钮一直是暗底暗字。改完必须去浏览器里看实际渲染，别只看 CSS 写没写。
+   这类更具体的选择器会盖掉它 —— 实测踩过：规则写对了却没生效。
+   改完必须去浏览器里看实际渲染，别只看 CSS 写没写。
    只改主按钮，其余按钮（ghost / icon-btn / danger）保持原有继承逻辑。
    ========================================================================== */
 :where(button):not(.ghost, .icon-btn, .danger, .seg, .sample) {
-  color: #1a1206;
+  color: var(--on-accent);
 }
 
-/* ghost / icon-btn 走继承，拿 --text；深色主题下才够亮 */
+/* ghost / icon-btn 不吃 accent 底，走 --text；深色主题下才够亮 */
 :where(.ghost, .icon-btn) {
   color: var(--text);
 }
