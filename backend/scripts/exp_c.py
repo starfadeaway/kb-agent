@@ -37,7 +37,7 @@ BACKEND = Path(__file__).resolve().parent.parent
 ROOT = BACKEND.parent
 sys.path.insert(0, str(BACKEND))
 
-from app.agent.react import SYSTEM_PROMPT, ReActAgent  # noqa: E402
+from app.agent.react import ReActAgent, production_system_prompt  # noqa: E402
 from app.agent.tools import ToolContext, get_schemas  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.eval.judge import Judge, contexts_from_hits  # noqa: E402
@@ -81,8 +81,20 @@ async def run_case(case, *, label: str, judge: Judge, llm, schemas, ctx,
 
         try:
             if single_shot:
+                # 这里必须用**已格式化的生产提示词**，不能直接发 SYSTEM_PROMPT。
+                #
+                # 已实测的缺陷（2026-10-14 读代码时发现）：SYSTEM_PROMPT 是带
+                # `{covered}` / `{terms}` / `{security}` 占位符的**未格式化模板**，
+                # 早先这里原样当系统消息发出去，于是 C0 档模型实际收到的是
+                #   「知识库覆盖这些游戏：{covered}」…「{security}」
+                # —— 游戏名没注入，**注入防护那一整段（INSTRUCTION_NOTICE）
+                # 也从未被替换进去**，等于 C0 档裸奔。
+                #
+                # 影响范围：只有 C0（无工具单轮档）。C1/C2 走 ReActAgent，
+                # 提示词由 `_prepare` 调 build_system_prompt 现场生成，一直是对的。
+                # 所以旧 exp_C*.json 里的 C0 与 C1/C2 不可直接比较。
                 out = await llm.chat(
-                    [{"role": "system", "content": SYSTEM_PROMPT},
+                    [{"role": "system", "content": production_system_prompt()},
                      {"role": "user", "content": case.question}],
                     max_tokens=800, temperature=0.0,
                 )

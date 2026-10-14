@@ -282,19 +282,32 @@ def test_no_misleading_freshness_wording(forbidden):
 
     这条守卫守的是**措辞**，功能正常也可能在这里红，
     而红的时候它是对的：说明有人把「页面修订」改成了「数据截至」。
+
+    ⚠ 断言对象是 `production_system_prompt()`（**已格式化的生产提示词**），
+    不是 `SYSTEM_PROMPT`。后者是未格式化的模板：
+    早先这两条断言查的是模板，而模板里那句披露条款**永远在**，
+    于是它们只能证明「模板没被改」，证明不了「生产提示词里有那句话」——
+    同样查不出「生产路径上某处漏了格式化」。
+    这是断言选错对象导致假绿的一种：测试全绿，线上提示词是残的。
     """
     from pathlib import Path
 
     import app.agent.tools as tools_mod
-    from app.agent.react import SYSTEM_PROMPT
+    from app.agent.react import production_system_prompt
 
-    tools_src = Path(tools_mod.__file__).read_text(encoding="utf-8")
+    prompt = production_system_prompt()
+    # 先确认拿到的确实是格式化过的提示词，而不是模板 —— 否则下面
+    # 「占位符没被替换」这类问题会被当成措辞问题放过。
+    assert "{security}" not in prompt and "{covered}" not in prompt, (
+        "production_system_prompt() 返回的像是未格式化的模板。"
+    )
     # 注释里为了说明「为什么不能这么写」而引用这些词是允许的，
     # 所以只查真正会被模型/用户看到的字符串与提示词。
-    assert forbidden not in SYSTEM_PROMPT, (
-        f"系统提示词里出现了「{forbidden}」—— "
+    assert forbidden not in prompt, (
+        f"生产系统提示词里出现了「{forbidden}」—— "
         f"页面修订 ≠ 数据生效时间，这么写是在教模型撒谎。"
     )
+    tools_src = Path(tools_mod.__file__).read_text(encoding="utf-8")
     assert forbidden not in tools_src or f"# {forbidden}" in tools_src or (
         f"「{forbidden}」" in tools_src
     ), (
@@ -304,15 +317,87 @@ def test_no_misleading_freshness_wording(forbidden):
 
 def test_system_prompt_tells_model_to_disclose_stale_data():
     """提示词必须明确要求「引用旧条目时说明修订日期」，否则时间戳只是装饰。"""
-    from app.agent.react import SYSTEM_PROMPT
+    from app.agent.react import production_system_prompt
 
-    assert "修订" in SYSTEM_PROMPT, (
+    prompt = production_system_prompt()
+    assert "修订" in prompt, (
         "系统提示词没提修订日期。工具给了时间戳但没告诉模型该怎么用，"
         "等于白给 —— 模型会把它当噪音忽略。"
     )
-    assert "优先采信" in SYSTEM_PROMPT or "较早" in SYSTEM_PROMPT, (
+    assert "优先采信" in prompt or "较早" in prompt, (
         "提示词只说了有日期，没说**该怎么用**：什么时候该声明、什么时候该优先采信新的。"
     )
+
+
+# --------------------------------------------------------------------------- #
+# 4.6 披露层是**两半**：工具输出 + 提示词条款。消融必须两半同时关
+# --------------------------------------------------------------------------- #
+def test_prompt_disclose_switch_removes_the_whole_clause():
+    """`disclose_revision=False` 必须整条条款消失，不能只删半句。
+
+    只删「5. 检索结果带有**页面最后修订日期**。」这一行的话，
+    后面两行续行会变成一段没有编号的悬空文字 ——
+    提示词读起来仍然通顺，模型仍被告知「优先采信修订较新的条目」，
+    而结果里一个日期都没有。实验 F 会照常跑完，
+    得出「披露层对行为无影响」，而实际上消融根本没生效。
+    """
+    from app.agent.react import build_system_prompt
+
+    cov, terms = {"sr": "崩坏：星穹铁道"}, {"sr": "星穹铁道"}
+    on = build_system_prompt(cov, terms)
+    off = build_system_prompt(cov, terms, disclose_revision=False)
+
+    assert "页面最后修订日期" in on
+    for fragment in ("页面最后修订日期", "优先采信", "提醒用户可能已过时"):
+        assert fragment not in off, (
+            f"消融档提示词里还留着「{fragment}」—— 条款没删干净。"
+        )
+    # 条款编号也不能留：留下「5.」开头却没有第 5 条，
+    # 或者删掉第 5 条却让「约束：」顶着 5 的号继续数，都属于版式没对上。
+    assert "\n5. " not in off, "消融档里还留着一条编号为 5 的条款"
+
+
+def test_prompt_disclosure_and_tool_disclosure_come_from_one_flag():
+    """提示词与工具输出必须由**同一个**字段驱动，否则消融只能做一半。
+
+    这是实验 F 的前提。实验脚本要的是一个赋值就能关掉整层披露；
+    如果两处各读各的（比如一个读 ToolContext 字段、一个读 settings），
+    就会出现「工具不给日期、提示词仍教模型用日期」，
+    而这种档位跑出来的差异无法归因到披露层。
+    """
+    from app.agent.react import ReActAgent
+    from app.core.config import get_settings
+
+    s = get_settings()
+    off = ToolContext(settings=s, retriever=None, store=None, game="sr",
+                      disclose_revision=False)
+    agent = ReActAgent(settings=s, tools=[])
+    # _prepare 是普通方法（不是 property —— 同名混淆来自它上面紧挨着的
+    # `run` 那个 property）。它产出的 messages 就是生产路径真正发给模型的那份，
+    # 直接问它「消融档的提示词长什么样」，比问一个重建的提示词可靠。
+    ctx, messages, _state = agent._prepare("三月七的基础生命值是多少", None, None, off)
+    system = messages[0]["content"]
+    assert "{security}" in system or "安全约定" in system, (
+        "_prepare 应当走 build_system_prompt 而不是把模板原样塞进来 —— "
+        "后者会让模型收到未替换的占位符。"
+    )
+    assert "页面最后修订日期" not in system, (
+        "ToolContext.disclose_revision=False，但 _prepare 造出来的提示词仍带披露条款 —— "
+        "两处没有读同一个字段。"
+    )
+
+
+def test_strip_anchor_failure_is_loud():
+    """锚点对不上必须抛错，不能静默返回原模板。
+
+    静默失败的后果具体到哪一步：实验 F 的 F1 档会带着**完整**披露层去跑，
+    F1 与 F2 实际相同，最后产出一句「披露层无影响」。
+    数字全部正常、格式全部正常，没有任何迹象提示你消融没生效。
+    """
+    from app.agent.react import _strip_revision_clause
+
+    with pytest.raises(ValueError, match="找不到"):
+        _strip_revision_clause("你是一个助手。\n\n工作方式：\n1. 无披露条款的版本。\n")
 
 
 # --------------------------------------------------------------------------- #

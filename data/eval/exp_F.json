@@ -1,0 +1,571 @@
+[
+  {
+    "label": "F1",
+    "disclose_revision": false,
+    "concurrency": 2,
+    "aggregate": {
+      "n": 8,
+      "n_dated": 6,
+      "n_selfrate": 2,
+      "page_level_date_hit_rate": 0.0,
+      "case_level_all_hit_rate": 0.0,
+      "has_revision_wording_rate": 1.0,
+      "has_staleness_wording_rate": 0.0,
+      "declares_uncertainty_rate": 1.0,
+      "ref_revision_coverage": 0.0,
+      "avg_answer_chars": 564
+    },
+    "rows": [
+      {
+        "case_id": "prov-sr-01",
+        "game": "sr",
+        "kind": "restate",
+        "target_pages": [
+          "三月七•巡猎"
+        ],
+        "gold_dates": {
+          "三月七•巡猎": "2025-11-09"
+        },
+        "date_hits": 0,
+        "date_targets": 1,
+        "date_hit_rate": 0.0,
+        "all_dates_hit": false,
+        "missed_pages": [
+          "三月七•巡猎"
+        ],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": false,
+        "ref_count": 1,
+        "ref_revision_coverage": 0.0,
+        "answer_chars": 209,
+        "prompt_tokens": 4229,
+        "completion_tokens": 178,
+        "steps": 1,
+        "tool_failures": 0,
+        "latency_ms": 4404,
+        "error": null,
+        "answer": "知识库未收录该页面的最后修订日期。\n\n- 我取到的「三月七•巡猎」页面正文里包含实装日期（2024年07月31日）、实装版本（2.4）等游戏内信息，但**没有任何\"最后修订/最后编辑时间\"字段**。\n- 页面出处为 https://wiki.biligame.com/sr/三月七•巡猎 ，如需修订日期建议直接查看该 wiki 页面的编辑历史。\n\n（说明：wiki 的修订时间属于站点元数据，不在本知识库收录范围内。）"
+      },
+      {
+        "case_id": "prov-sr-02",
+        "game": "sr",
+        "kind": "multisource",
+        "target_pages": [
+          "三月七•巡猎",
+          "三月七•存护",
+          "三月七•巡猎/攻略",
+          "三月七•存护/攻略"
+        ],
+        "gold_dates": {
+          "三月七•巡猎": "2025-11-09",
+          "三月七•存护": "2026-07-28",
+          "三月七•巡猎/攻略": "2026-02-13",
+          "三月七•存护/攻略": "2026-02-13"
+        },
+        "date_hits": 0,
+        "date_targets": 4,
+        "date_hit_rate": 0.0,
+        "all_dates_hit": false,
+        "missed_pages": [
+          "三月七•巡猎",
+          "三月七•存护",
+          "三月七•巡猎/攻略",
+          "三月七•存护/攻略"
+        ],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": false,
+        "ref_count": 4,
+        "ref_revision_coverage": 0.0,
+        "answer_chars": 567,
+        "prompt_tokens": 7697,
+        "completion_tokens": 559,
+        "steps": 4,
+        "tool_failures": 0,
+        "latency_ms": 7840,
+        "error": null,
+        "answer": "我查了这四个页面，但需要如实说明结果：\n\n**知识库中没有收录这四个页面的「最后修订日期」信息。**\n\n四个页面我都取到了正文，但返回内容里只有页面标题、字数、出处 URL 和正文本身，**没有任何一处包含修订时间/最后编辑时间字段**。具体如下：\n\n| 页面名 | 是否取到页面 | 是否含修订日期 |\n|---|---|---|\n| 三月七•巡猎 | 是（3210 字） | 无 |\n| 三月七•存护 | 是（4582 字） | 无 |\n| 三月七•巡猎/攻略 | 是（304 字） | 无 |\n| 三月七•存护/攻略 | 是（304 字） | 无 |\n\n补充说明：\n- 页面正文里能看到的日期只有**实装日期**（三月七•巡猎为 2024年07月31日、版本 2.4；三月七•存护为 2023年04月26日、版本 1.0），这是角色上线时间，**不是 wiki 页面的修订时间**，两者不能混为一谈。\n- 两个「/攻略」子页面目前正文基本是空模板（只有「角色定位」「配装推荐」「阵容搭配」等标题框架，无实际内容），同样没有修订信息。\n\n如果你需要真实的修订时间，建议直接访问出处页面（如 `https://wiki.biligame.com/sr/三月七•巡猎`）查看页面历史记录——这部分内容**知识库未收录**，我无法提供。"
+      },
+      {
+        "case_id": "prov-ys-01",
+        "game": "ys",
+        "kind": "restate",
+        "target_pages": [
+          "钟离全方位食用指南"
+        ],
+        "gold_dates": {
+          "钟离全方位食用指南": "2020-12-08"
+        },
+        "date_hits": 0,
+        "date_targets": 1,
+        "date_hit_rate": 0.0,
+        "all_dates_hit": false,
+        "missed_pages": [
+          "钟离全方位食用指南"
+        ],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": false,
+        "ref_count": 1,
+        "ref_revision_coverage": 0.0,
+        "answer_chars": 272,
+        "prompt_tokens": 3770,
+        "completion_tokens": 266,
+        "steps": 2,
+        "tool_failures": 1,
+        "latency_ms": 24831,
+        "error": null,
+        "answer": "知识库中**没有收录该页面的最后修订日期**。\n\n检索到的相关内容只有页面正文里标注的**文章时间：2020/12/03**（作者：金牌讲师六博，来源 bigfun）[钟离全方位食用指南]，这是原文的发布时间，并非 wiki 页面的最后修订日期。\n\n补充说明：\n- 我尝试用 get_page 拉取该页面完整正文以查找修订信息，但工具超时未返回。\n- 若你需要确切的「最后修订日期」，建议直接打开页面出处 https://wiki.biligame.com/ys/钟离全方位食用指南 查看页面底部的修订记录 —— 该信息不在本知识库覆盖范围内。"
+      },
+      {
+        "case_id": "prov-ys-02",
+        "game": "ys",
+        "kind": "multisource",
+        "target_pages": [
+          "钟离",
+          "岩王钟离攻略",
+          "钟离全方位食用指南",
+          "关于钟离的全部分析及建议"
+        ],
+        "gold_dates": {
+          "钟离": "2026-07-15",
+          "岩王钟离攻略": "2021-01-19",
+          "钟离全方位食用指南": "2020-12-08",
+          "关于钟离的全部分析及建议": "2020-12-11"
+        },
+        "date_hits": 0,
+        "date_targets": 4,
+        "date_hit_rate": 0.0,
+        "all_dates_hit": false,
+        "missed_pages": [
+          "钟离",
+          "岩王钟离攻略",
+          "钟离全方位食用指南",
+          "关于钟离的全部分析及建议"
+        ],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": true,
+        "ref_count": 0,
+        "ref_revision_coverage": 0.0,
+        "answer_chars": 439,
+        "prompt_tokens": 1750,
+        "completion_tokens": 466,
+        "steps": 4,
+        "tool_failures": 4,
+        "latency_ms": 63749,
+        "error": null,
+        "answer": "四个页面的查询都超时了，没有拿到任何内容，因此无法给出修订日期。\n\n**结论：信息不足，无法回答。**\n\n缺少的部分：\n- 四个页面（「钟离」「岩王钟离攻略」「钟离全方位食用指南」「关于钟离的全部分析及建议」）的页面正文均未成功获取，`get_page` 四次调用全部超时（15s 未返回）。\n- 因此既没有拿到页面内容，也没有拿到任何「最后修订时间」字段。\n\n补充说明：\n- 我也没有改用 `search_kb` 重试的机会（已达工具调用上限），所以无法确认这些页面在知识库中是否存在、是否同名或为别名。\n- 另外提醒一点：知识库通常收录的是游戏内事实（角色、机制、数值等），**页面修订时间戳这类 wiki 元数据不一定在收录范围内**——即便查询成功，也可能查不到。\n\n建议：如果你需要这些修订日期，可以直接在对应 wiki 的页面历史（Page History / 修订记录）中查看；若你希望我改从知识库查钟离的角色机制、天赋、命座、圣遗物搭配等内容，可以再让我试一次。"
+      },
+      {
+        "case_id": "prov-ys-03",
+        "game": "ys",
+        "kind": "selfrate",
+        "target_pages": [],
+        "gold_dates": {},
+        "date_hits": 0,
+        "date_targets": 0,
+        "date_hit_rate": null,
+        "all_dates_hit": false,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": true,
+        "ref_count": 3,
+        "ref_revision_coverage": 0.0,
+        "answer_chars": 1340,
+        "prompt_tokens": 8946,
+        "completion_tokens": 1188,
+        "steps": 5,
+        "tool_failures": 3,
+        "latency_ms": 24487,
+        "error": null,
+        "answer": "I have enough to answer. Let me note what I actually observed.\n\n## 先纠正一个前提\n\n我检索到的钟离内容**全部来自同一个页面**（`https://wiki.biligame.com/ys/钟离`），只是被切成了不同片段（「天赋」「正文」「角色相关 > 历史记录 > 1.3版本改动」等）。所以严格说，我并没有看到\"好几个修订时间差别很大的页面\"——我看到的是**一个页面的多个区块**，其中只有一个区块明确带版本号。\n\n## 我引用的那一条，以及它是否\"当前版本\"\n\n我实际引用到的、带明确版本标记的只有一条：\n\n- **「钟离 > 角色相关 > 历史记录 > 1.3版本改动」** —— 讲的是 1.3 版本对突破天赋「炊金馔玉」和元素战技「地心」长按效果的调整 [钟离]。\n\n**这条几乎肯定不是当前版本的状态，理由：**\n\n1. **它自己标了\"历史记录\"**。页面结构上它属于「角色相关 > 历史记录」子区块，是变更日志，不是现行数值表。\n2. **它写的是\"原效果 → 调整后的效果\"**，是差分描述。而同一页面的「天赋」区块给出的是**无版本标记的现行数值**，例如「炊金馔玉」直接写\"普通攻击/重击/下落攻击提高生命值上限的1.39%、岩脊与共鸣1.9%、天星33%\" [钟离]——这正是 1.3 改动后的结果，说明「天赋」区块才是现行快照。\n3. **1.3 是很早的版本**。钟离 1.3 那次是著名的加强（护盾抗性降低 20%、长按抗打断等）[钟离]，此后还有多次调整，1.3 的差分文本不可能代表当前版本。\n\n所以：**如果我要引用钟离的现行机制，应该引「天赋」区块（1.39% / 1.9% / 33%、玉璋护盾 150% 吸收、抗性降低 20%），而不是「1.3版本改动」区块。**\n\n## 这个判断有多确定\n\n**中等偏高，但不是高。** 分两层说：\n\n- **\"1.3版本改动 ≠ 当前版本\"：确定度很高（~95%）。** 依据是页面自身的结构标签（\"历史记录\"）和差分写法，这是页面内部证据，不依赖外部知识。\n- **\"「天赋」区块 = 当前版本\"：确定度只有中等（~60%）。** 因为：\n  - 我**没有拿到任何修订时间戳**。检索结果里没有出现\"最后编辑于 X\"之类的字段，`get_page` 取整页还超时了，所以我无法用时间直接比较。\n  - 我的推断是**间接的**：无版本标记 + 数值与 1.3 改动结果一致 → 推测为现行。这是合理推断，不是证据。\n  - 知识库**未收录**钟离在 1.3 之后的后续改动记录，我无法验证「天赋」区块是否已同步到最新版本。\n\n## 结论\n\n- 我引用的那条（1.3版本改动）**大概率不是当前版本**，它是历史差分，确定度高。\n- 但\"哪一条才是当前版本\"我给不出高置信答案——**知识库没有提供页面修订时间**，我只能靠页面结构间接推断「天赋」区块是现行快照，确定度中等。\n- 如果你需要确切的当前版本数值，建议直接看游戏内或官方公告；**知识库未收录**版本时间戳与 1.3 之后的改动历史，我无法据此做更精确的判断。"
+      },
+      {
+        "case_id": "prov-zzz-01",
+        "game": "zzz",
+        "kind": "restate",
+        "target_pages": [
+          "丁尼"
+        ],
+        "gold_dates": {
+          "丁尼": "2024-05-19"
+        },
+        "date_hits": 0,
+        "date_targets": 1,
+        "date_hit_rate": 0.0,
+        "all_dates_hit": false,
+        "missed_pages": [
+          "丁尼"
+        ],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": false,
+        "ref_count": 5,
+        "ref_revision_coverage": 0.0,
+        "answer_chars": 272,
+        "prompt_tokens": 4642,
+        "completion_tokens": 286,
+        "steps": 2,
+        "tool_failures": 1,
+        "latency_ms": 20316,
+        "error": null,
+        "answer": "检索到的「丁尼」页面正文里**没有包含最后修订日期**这一字段（只有名称、稀有度、来源、用途、描述、实装版本等），而 get_page 取完整页面时超时了。\n\n所以：**知识库未收录该页面的最后修订日期**，我无法给出这个日期。\n\n补充说明：\n- 检索片段显示「丁尼」是《绝区零》中的货币，稀有度 B，来源包括实战模拟室-基础材料、录像店开店、信号余波兑换、嗯呢币兑换，实装版本 1.0 [丁尼]。\n- 若你需要修订时间，建议直接查看该 wiki 页面（https://wiki.biligame.com/zzz/丁尼）底部的「最后编辑」信息。"
+      },
+      {
+        "case_id": "prov-zzz-02",
+        "game": "zzz",
+        "kind": "multisource",
+        "target_pages": [
+          "邦布券",
+          "邦布算法模块",
+          "邦布系统控件",
+          "邦布软件补丁"
+        ],
+        "gold_dates": {
+          "邦布券": "2024-12-19",
+          "邦布算法模块": "2024-05-26",
+          "邦布系统控件": "2024-05-26",
+          "邦布软件补丁": "2024-05-26"
+        },
+        "date_hits": 0,
+        "date_targets": 4,
+        "date_hit_rate": 0.0,
+        "all_dates_hit": false,
+        "missed_pages": [
+          "邦布券",
+          "邦布算法模块",
+          "邦布系统控件",
+          "邦布软件补丁"
+        ],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": false,
+        "ref_count": 3,
+        "ref_revision_coverage": 0.0,
+        "answer_chars": 534,
+        "prompt_tokens": 4419,
+        "completion_tokens": 600,
+        "steps": 5,
+        "tool_failures": 2,
+        "latency_ms": 22374,
+        "error": null,
+        "answer": "I need to be straightforward with you: **这四个页面的正文里都没有「最后修订日期」这个字段**，所以我无法给出你要的「页面名 ↔ 修订日期」对应表。\n\n我实际取到的内容如下：\n\n| 页面名 | 是否取到 | 页面内是否含修订日期 |\n|---|---|---|\n| 邦布券 | ❌ 未取到（工具超时，重试被拦截） | — |\n| 邦布算法模块 | ✅ | 无 |\n| 邦布系统控件 | ✅ | 无 |\n| 邦布软件补丁 | ✅ | 无 |\n\n已取到的三个页面，正文只包含这些字段：名称、稀有度、来源、用途、描述、实装版本、材料分类、类型、类别、首次出现。**没有任何「最后修订时间」信息**，知识库未收录该元数据。\n\n另外说明两点：\n- 「邦布券」页面本次查询超时，重试被系统判定为等价查询而拦截，因此该页内容我这边完全没拿到，不能凭猜测补上。\n- 如果你需要的是 wiki 的修订历史，那属于页面底部的「历史」标签页数据，不在本知识库的正文语料范围内。\n\n建议：直接访问对应 wiki 页面（如 `https://wiki.biligame.com/zzz/邦布算法模块`）查看页面底部的「最后编辑于」时间戳，那才是权威来源。"
+      },
+      {
+        "case_id": "prov-zzz-03",
+        "game": "zzz",
+        "kind": "selfrate",
+        "target_pages": [],
+        "gold_dates": {},
+        "date_hits": 0,
+        "date_targets": 0,
+        "date_hit_rate": null,
+        "all_dates_hit": false,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": true,
+        "ref_count": 14,
+        "ref_revision_coverage": 0.0,
+        "answer_chars": 883,
+        "prompt_tokens": 21305,
+        "completion_tokens": 1026,
+        "steps": 6,
+        "tool_failures": 3,
+        "latency_ms": 9611,
+        "error": null,
+        "answer": "检索被熔断了，我直接说明结论。\n\n## 结论：我无法判断哪条\"更可能是当前版本\"，因为知识库里根本没有修订时间\n\n**依据（我实际检索到的内容）：**\n\n1. **没有任何页面带修订时间字段。** 我检索到的邦布页面（寻宝布、纸壳布、恶魔布、加班布、企鹅布、果核布、气压布、圣剑布）正文里只有这些字段：名称、稀有度、**实装版本**、实装日期（部分）、获取途径、邦布TAG、技能、面板数值。没有\"最后修订\"\"更新时间\"\"页面版本\"这类元数据。所以\"页面修订时间差别不小\"这个前提，我在知识库里**找不到支撑证据**。\n\n2. **唯一能当\"新旧\"代理指标的是「实装版本」字段**，而它指的是该邦布在游戏里上线的版本，不是 wiki 页面的编辑时间。按这个字段排：\n   - 1.0：寻宝布、纸壳布、恶魔布、企鹅布、果核布、气压布\n   - 1.7：加班布（活动「花语未名之言」奖励）\n   - 2.2：圣剑布（活动「小邦布勇任防卫军」）\n   - 另外驱动盘「呼啸沙龙」标注实装版本 3.0，其描述里提到\"邦布先知\"，但那是驱动盘不是邦布。\n\n3. **如果硬要选\"最接近当前版本\"的一条**，从实装版本看是 **圣剑布（2.2）**，其次是加班布（1.7）。但这只是\"游戏内上线最晚\"，**不等于**\"wiki 页面修订最新\"——两者是不同概念，我不能拿它冒充修订时间。\n\n**这个判断有多确定：**\n\n- \"知识库未收录邦布页面的修订时间/编辑历史\" —— **高确定**。我做了多轮检索，字段结构一致，且后续检索被熔断，没有出现任何时间戳类信息。\n- \"圣剑布是实装版本最晚的邦布\" —— **中等确定**。这是基于我检索到的 8 个邦布页面得出的，但知识库共 1498 个 zzz 片段，我**没有拿到完整的邦布列表**（\"邦布\"总览页不存在，图鉴类检索也被熔断），所以可能存在我没检索到的、实装版本更晚的邦布。\n\n**建议：** 如果你手上有具体的页面标题或修订时间，告诉我，我可以针对性去取正文核对；否则\"哪条是当前版本\"这个问题，知识库现有内容答不了。"
+      }
+    ],
+    "_meta": {
+      "script": "exp_f.py",
+      "generated_at": "2026-10-14T09:20:12+00:00",
+      "experiment": "F",
+      "game": "sr,ys,zzz",
+      "variant": "disclosure_ablation",
+      "top_k": null,
+      "labels": "F1,F2",
+      "index_chunks": null,
+      "index_pages": null,
+      "git_commit": "caf45b5",
+      "index_by_game": {
+        "sr": {
+          "index_chunks": 0,
+          "index_pages": 0
+        },
+        "ys": {
+          "index_chunks": 0,
+          "index_pages": 0
+        },
+        "zzz": {
+          "index_chunks": 0,
+          "index_pages": 0
+        }
+      }
+    }
+  },
+  {
+    "label": "F2",
+    "disclose_revision": true,
+    "concurrency": 2,
+    "aggregate": {
+      "n": 8,
+      "n_dated": 6,
+      "n_selfrate": 2,
+      "page_level_date_hit_rate": 1.0,
+      "case_level_all_hit_rate": 1.0,
+      "has_revision_wording_rate": 1.0,
+      "has_staleness_wording_rate": 0.5,
+      "declares_uncertainty_rate": 1.0,
+      "ref_revision_coverage": 1.0,
+      "avg_answer_chars": 465
+    },
+    "rows": [
+      {
+        "case_id": "prov-sr-01",
+        "game": "sr",
+        "kind": "restate",
+        "target_pages": [
+          "三月七•巡猎"
+        ],
+        "gold_dates": {
+          "三月七•巡猎": "2025-11-09"
+        },
+        "date_hits": 1,
+        "date_targets": 1,
+        "date_hit_rate": 1.0,
+        "all_dates_hit": true,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": false,
+        "ref_count": 1,
+        "ref_revision_coverage": 1.0,
+        "answer_chars": 41,
+        "prompt_tokens": 4382,
+        "completion_tokens": 84,
+        "steps": 1,
+        "tool_failures": 0,
+        "latency_ms": 3204,
+        "error": null,
+        "answer": "《三月七•巡猎》页面最后修订日期是 **2025-11-09**。[三月七•巡猎]"
+      },
+      {
+        "case_id": "prov-sr-02",
+        "game": "sr",
+        "kind": "multisource",
+        "target_pages": [
+          "三月七•巡猎",
+          "三月七•存护",
+          "三月七•巡猎/攻略",
+          "三月七•存护/攻略"
+        ],
+        "gold_dates": {
+          "三月七•巡猎": "2025-11-09",
+          "三月七•存护": "2026-07-28",
+          "三月七•巡猎/攻略": "2026-02-13",
+          "三月七•存护/攻略": "2026-02-13"
+        },
+        "date_hits": 4,
+        "date_targets": 4,
+        "date_hit_rate": 1.0,
+        "all_dates_hit": true,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": true,
+        "declares_uncertainty": true,
+        "ref_count": 4,
+        "ref_revision_coverage": 1.0,
+        "answer_chars": 325,
+        "prompt_tokens": 7910,
+        "completion_tokens": 414,
+        "steps": 4,
+        "tool_failures": 0,
+        "latency_ms": 7671,
+        "error": null,
+        "answer": "四个页面的最后修订日期如下（均为星穹铁道 wiki）：\n\n| 页面名 | 最后修订日期 |\n|---|---|\n| 三月七•巡猎 | 2025-11-09 |\n| 三月七•存护 | 2026-07-28 |\n| 三月七•巡猎/攻略 | 2026-02-13 |\n| 三月七•存护/攻略 | 2026-02-13 |\n\n补充说明：\n- 两个「/攻略」子页面的修订日期相同，都是 2026-02-13，且正文内容目前基本是空模板（角色定位、配装推荐、阵容搭配等小节均无实际内容）。\n- 「三月七•巡猎」页面的修订日期（2025-11-09）明显早于「三月七•存护」（2026-07-28），若你要引用巡猎形态的具体数值，请注意该页数据可能已不是最新版本。"
+      },
+      {
+        "case_id": "prov-ys-01",
+        "game": "ys",
+        "kind": "restate",
+        "target_pages": [
+          "钟离全方位食用指南"
+        ],
+        "gold_dates": {
+          "钟离全方位食用指南": "2020-12-08"
+        },
+        "date_hits": 1,
+        "date_targets": 1,
+        "date_hit_rate": 1.0,
+        "all_dates_hit": true,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": true,
+        "declares_uncertainty": true,
+        "ref_count": 1,
+        "ref_revision_coverage": 1.0,
+        "answer_chars": 114,
+        "prompt_tokens": 4408,
+        "completion_tokens": 114,
+        "steps": 1,
+        "tool_failures": 0,
+        "latency_ms": 3251,
+        "error": null,
+        "answer": "**2020-12-08**（页面最后修订日期）[钟离全方位食用指南]\n\n补充：该页面内容为 2020 年钟离初版上线时的攻略，距今已久，其中的数值与评价（如护盾量、天赋加成、武器推荐等）很可能已随版本改动而过时，建议仅作参考。"
+      },
+      {
+        "case_id": "prov-ys-02",
+        "game": "ys",
+        "kind": "multisource",
+        "target_pages": [
+          "钟离",
+          "岩王钟离攻略",
+          "钟离全方位食用指南",
+          "关于钟离的全部分析及建议"
+        ],
+        "gold_dates": {
+          "钟离": "2026-07-15",
+          "岩王钟离攻略": "2021-01-19",
+          "钟离全方位食用指南": "2020-12-08",
+          "关于钟离的全部分析及建议": "2020-12-11"
+        },
+        "date_hits": 4,
+        "date_targets": 4,
+        "date_hit_rate": 1.0,
+        "all_dates_hit": true,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": true,
+        "declares_uncertainty": true,
+        "ref_count": 4,
+        "ref_revision_coverage": 1.0,
+        "answer_chars": 417,
+        "prompt_tokens": 9975,
+        "completion_tokens": 476,
+        "steps": 4,
+        "tool_failures": 0,
+        "latency_ms": 7858,
+        "error": null,
+        "answer": "四个页面的最后修订日期如下：\n\n| 页面名 | 最后修订日期 |\n|---|---|\n| 钟离 | 2026-07-15 |\n| 岩王钟离攻略 | 2021-01-19 |\n| 钟离全方位食用指南 | 2020-12-08 |\n| 关于钟离的全部分析及建议 | 2020-12-11 |\n\n补充说明：\n- 「钟离」是角色主页面，修订最新（2026-07-15），内容为角色基础信息、属性、命之座、角色故事等。\n- 另外三个都是玩家攻略类页面，修订时间集中在 2020 年底至 2021 年初，其中「钟离全方位食用指南」与「关于钟离的全部分析及建议」内容高度重合（同作者、同来源 bigfun），仅个别细节（如岩主荒星 CD 写作 6s / 8s）有差异。\n\n⚠️ 提醒：后三个攻略页面的修订日期距今已久（2020-12 ~ 2021-01），其中的数值与配装建议（如护盾量、圣遗物堆法、武器推荐）很可能已随版本改动而过时，请谨慎参考。"
+      },
+      {
+        "case_id": "prov-ys-03",
+        "game": "ys",
+        "kind": "selfrate",
+        "target_pages": [],
+        "gold_dates": {},
+        "date_hits": 0,
+        "date_targets": 0,
+        "date_hit_rate": null,
+        "all_dates_hit": false,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": true,
+        "ref_count": 3,
+        "ref_revision_coverage": 1.0,
+        "answer_chars": 1469,
+        "prompt_tokens": 27247,
+        "completion_tokens": 1238,
+        "steps": 5,
+        "tool_failures": 1,
+        "latency_ms": 14847,
+        "error": null,
+        "answer": "That sub-page isn't directly fetchable, but the search snippets already gave me its content. I have what I need.\n\n## 结论：我会引用「钟离」主页面（修订 2026-07-15），而不是那两篇 2020 年的攻略\n\n### 检索到的两类页面\n\n| 页面 | 修订日期 | 性质 |\n|---|---|---|\n| 钟离（含天赋、1.3版本改动等子页） | 2026-07-15 | 官方 wiki 数据页 |\n| 关于钟离的全部分析及建议 | 2020-12-11 | 玩家攻略（bigfun 转载） |\n| 钟离全方位食用指南 | 2020-12-08 | 玩家攻略 |\n\n### 判断依据\n\n**1. 内容与已知版本改动是否自洽（最硬的证据）**\n\n2020 年那两篇攻略描述的是**1.3 版本之前**的钟离，而主页面里明确记录了 1.3 的改动：\n\n- 攻略说「70级天赋炊金馔玉，天星能额外造成生命值上限 33% 的伤害」——这是**旧版**效果；主页面记录的 1.3 调整后，该天赋改为普攻/重击/下落 1.39%、岩脊共鸣与长按 1.9%、天星 33% 三段加成 [钟离 > 角色相关 > 历史记录 > 1.3版本改动]。\n- 攻略说护盾「对岩元素伤害有 250% 吸收」；1.3 后改为**对所有元素伤害与物理伤害**生效，并追加了「护盾庇护下附近敌人全抗性 -20%」[钟离 > 角色相关 > 历史记录 > 1.3版本改动]。\n- 攻略的结论是「钟离不是人权，建议放弃养他、用迪奥娜」——这个评价在 1.3 加强后已被推翻。\n\n也就是说，2020 年的页面**描述的是一个已经不存在的技能状态**，它不可能代表当前版本。\n\n**2. 数据颗粒度**\n\n主页面天赋页给到 LV1–LV13 的完整数值（如护盾基础吸收量 1,232→3,389、附加吸收量 12.8%→27.2% 最大生命值、护盾持续 20 秒、长按冷却 12 秒），并含削韧参数、产球等细节 [钟离 > 天赋]。攻略页只有「11 至 13 级就先不放了」的二手转述。\n\n**3. 页面性质**\n\n主页面是 wiki 数据页，会随版本持续维护；攻略页是带作者署名和原文链接的**一次性投稿**（作者：金牌讲师六博，2020/12/03），本质上不会被后续版本更新。\n\n### 确定性有多高\n\n- **「2020 年那两篇不代表当前版本」——确定性很高。** 这不是靠日期猜的，而是内容层面直接矛盾：它们描述的技能效果与 1.3 改动记录互斥，两者不可能同时为真。\n- **「2026-07-15 的主页面就是当前版本」——确定性中等偏高，但不是 100%。** 理由：修订日期新只说明**最近被编辑过**，不等于数值一定对应最新游戏版本；知识库里也没有版本号字段可供交叉验证。另外我注意到该页修订日期（2026-07-15）晚于当前时间线，这个日期本身有点异常，我无法解释，只能如实标注。\n\n### 需要提醒你的\n\n- 我引用的护盾、天赋数值来自修订日期 **2026-07-15** 的「钟离」页面，这是知识库中最新的一版；但该日期晚于常识时间线，且知识库未收录版本号，**建议以游戏内实际数值为准**。\n- 知识库**未收录** 2020 年之后钟离的任何后续平衡性改动细节（除 1.3 外），也**未收录** B 站攻略作者的现行观点。"
+      },
+      {
+        "case_id": "prov-zzz-01",
+        "game": "zzz",
+        "kind": "restate",
+        "target_pages": [
+          "丁尼"
+        ],
+        "gold_dates": {
+          "丁尼": "2024-05-19"
+        },
+        "date_hits": 1,
+        "date_targets": 1,
+        "date_hit_rate": 1.0,
+        "all_dates_hit": true,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": false,
+        "ref_count": 1,
+        "ref_revision_coverage": 1.0,
+        "answer_chars": 33,
+        "prompt_tokens": 2233,
+        "completion_tokens": 76,
+        "steps": 1,
+        "tool_failures": 0,
+        "latency_ms": 2917,
+        "error": null,
+        "answer": "「丁尼」页面最后修订日期是 **2024-05-19**。[丁尼]"
+      },
+      {
+        "case_id": "prov-zzz-02",
+        "game": "zzz",
+        "kind": "multisource",
+        "target_pages": [
+          "邦布券",
+          "邦布算法模块",
+          "邦布系统控件",
+          "邦布软件补丁"
+        ],
+        "gold_dates": {
+          "邦布券": "2024-12-19",
+          "邦布算法模块": "2024-05-26",
+          "邦布系统控件": "2024-05-26",
+          "邦布软件补丁": "2024-05-26"
+        },
+        "date_hits": 4,
+        "date_targets": 4,
+        "date_hit_rate": 1.0,
+        "all_dates_hit": true,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": false,
+        "declares_uncertainty": true,
+        "ref_count": 4,
+        "ref_revision_coverage": 1.0,
+        "answer_chars": 314,
+        "prompt_tokens": 2966,
+        "completion_tokens": 412,
+        "steps": 4,
+        "tool_failures": 0,
+        "latency_ms": 7319,
+        "error": null,
+        "answer": "四个页面的最后修订日期如下（均出自绝区零 wiki）：\n\n| 页面名 | 最后修订日期 |\n|---|---|\n| 邦布券 | 2024-12-19 |\n| 邦布算法模块 | 2024-05-26 |\n| 邦布系统控件 | 2024-05-26 |\n| 邦布软件补丁 | 2024-05-26 |\n\n补充说明：\n- 「邦布券」页面修订较新（2024-12-19），其中记录了 V1.0 版本将其名称从「嗯呢券」改为「邦布券」的历史记录。\n- 其余三个页面（邦布算法模块、邦布系统控件、邦布软件补丁）的修订日期均为 2024-05-26，距今较久，若涉及具体数值（如经验值 100/600/3000 点）建议以游戏内当前版本为准。"
+      },
+      {
+        "case_id": "prov-zzz-03",
+        "game": "zzz",
+        "kind": "selfrate",
+        "target_pages": [],
+        "gold_dates": {},
+        "date_hits": 0,
+        "date_targets": 0,
+        "date_hit_rate": null,
+        "all_dates_hit": false,
+        "missed_pages": [],
+        "has_revision_wording": true,
+        "has_staleness_wording": true,
+        "declares_uncertainty": true,
+        "ref_count": 15,
+        "ref_revision_coverage": 1.0,
+        "answer_chars": 1011,
+        "prompt_tokens": 25307,
+        "completion_tokens": 1051,
+        "steps": 6,
+        "tool_failures": 2,
+        "latency_ms": 10477,
+        "error": null,
+        "answer": "I have enough to answer. Let me lay out what I actually found.\n\n## 结论：更可能是当前版本的是「诺姆」页（修订 2026-08-20）\n\n**依据：**\n\n1. **修订日期最新**。我检索到的邦布相关页面里，修订时间跨度是 2024-05-26 ~ 2026-08-20：\n   - 诺姆：**2026-08-20**（最新）\n   - 插头布：2025-09-14\n   - 寻宝布 / 纸壳布 / 纸袋布：2025-08-09\n   - 邦布券：2024-12-19\n   - 邦布算法模块 / 邦布系统控件：2024-05-26（最旧）\n\n2. **内容本身指向新版本**。诺姆页标注「实装版本：3.0、实装日期 2026年07月08日」，是 S 级限定代理人，天赋/技能体系完整（天赋1~6、强化特殊技「嗯呢弹幕」等）。而 2024-05-26 那两条（邦布算法模块、邦布系统控件）都写着「实装版本 1.0、首次出现：二测」，属于开服期养成材料条目。\n\n3. **术语与体系一致**。诺姆页用的是绝区零体系（音擎/驱动盘/邦布、喧响值、失衡值），没有混入星铁或原神术语，说明它属于同一套 zzz 语料，只是更新更晚。\n\n**这个判断有多确定：中等偏高，但不是「确定」。**\n\n- 支持点：修订日期是知识库里唯一可用的时效信号，2026-08-20 明显晚于其他条目，且内容含 3.0 版本新角色，逻辑自洽。\n- 不确定点：\n  - 我**没有找到独立的「邦布」总览页**——`get_page(\"邦布\")` 和后续检索都返回「知识库未收录/熔断」，所以无法确认是否存在一个更权威、更新更晚的邦布系统主页面。\n  - 「修订日期新」只代表**编辑时间**，不等于**内容对应最新游戏版本**；也可能只是有人补了个错别字。\n  - 诺姆页是**角色页**，不是邦布机制页；它讲的是「诺姆这个角色」，只是大量涉及邦布设定。严格说它和「邦布」条目不是同一类页面，直接比较时效性有点勉强。\n\n**一句话提醒**：以上时效判断完全基于页面修订日期，其中 2024-05-26 的「邦布算法模块」「邦布系统控件」两条距今最久，若你要用它们的数值（如 +600 / +3000 邦布经验），请留意可能已过时。知识库未收录任何官方版本更新公告，无法进一步交叉验证。"
+      }
+    ]
+  }
+]

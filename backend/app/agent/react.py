@@ -58,18 +58,91 @@ SYSTEM_PROMPT = """你是一个游戏知识库助手，知识库覆盖这些游�
 {security}"""
 
 
-def build_system_prompt(covered: dict[str, str], terms: dict[str, str]) -> str:
+def build_system_prompt(covered: dict[str, str], terms: dict[str, str],
+                        *, disclose_revision: bool = True) -> str:
     """按当前已收录的游戏生成系统提示词。
 
     之前这里是写死两个游戏的常量字符串，结果加了第三个库之后，
     模型拿着"你是星铁与绝区零的助手"这份提示词，把原神的问题当成越界问题拒答了
     ——检索层能召回，Agent 层自己把门关上了。游戏集合必须从 settings.games 注入。
+
+    `disclose_revision=False` 时整条第 5 点消失（连编号都不占位）。
+    它必须与 `ToolContext.disclose_revision` 同源取值：
+    提示词说有日期、工具不给日期，比两者都没有更糟——
+    模型会去找那个字段，找不到就当成「没有时效信息」，
+    于是披露层被消融掉的那一半反而制造了新的噪声。
     """
+    if not disclose_revision:
+        stripped = _strip_revision_clause(SYSTEM_PROMPT)
+        return stripped.format(
+            covered="、".join(covered.values()) or "（未配置任何游戏）",
+            terms="；".join(terms.values()) or "按各游戏官方叫法",
+            security=INSTRUCTION_NOTICE,
+        )
     return SYSTEM_PROMPT.format(
         covered="、".join(covered.values()) or "（未配置任何游戏）",
         terms="；".join(terms.values()) or "按各游戏官方叫法",
         security=INSTRUCTION_NOTICE,
     )
+
+
+#: 删披露层那一条时用**行首带编号的整段**做锚点，而不是只匹配半句话。
+#: 只匹配「5. 检索结果带有**页面最后修订日期**。」的话，后面那两行续行
+#: 会留在提示词里变成一段没有编号的悬空文字 —— 看起来像正常提示词，
+#: 但语义已经废了，而且没有任何东西会报错。
+_REVISION_CLAUSE_ANCHOR = "5. 检索结果带有**页面最后修订日期**。"
+
+
+def _strip_revision_clause(template: str) -> str:
+    """从系统提示词模板里去掉披露层那一整条，返回**未格式化**的模板。
+
+    为什么单独一个函数：删条款这件事本身需要一个**失败可见**的行为。
+    锚点一旦对不上（比如有人重排了条款编号），静默返回原模板的话，
+    消融档就会带着完整披露层去跑 —— 实验照常出结果，
+    F1 与 F2 两档其实一样，最后得出「披露层无影响」的错误结论。
+    所以这里直接抛，而不是兜底。
+    """
+    lines = template.split("\n")
+    try:
+        start = next(i for i, ln in enumerate(lines) if ln.startswith(_REVISION_CLAUSE_ANCHOR))
+    except StopIteration:
+        raise ValueError(
+            f"SYSTEM_PROMPT 里找不到以 {_REVISION_CLAUSE_ANCHOR!r} 开头的那一行 —— "
+            "改 SYSTEM_PROMPT 时必须同步改这个锚点，"
+            "否则消融档会带着一条指向不存在字段的指令去跑实验，"
+            "而结果看起来完全正常。"
+        ) from None
+    # 往后只吃**缩进续行**，不吃后面的空行。
+    # 把空行一起吃掉会让「工作方式：」那一段和「约束：」贴在一起，
+    # 提示词还能用，但版式和生产的差了一处 —— 而实验 F 的两档提示词
+    # 应当只差那一条条款，版式差异属于没控制住的变量。
+    end = start + 1
+    while end < len(lines) and lines[end].startswith(" "):
+        end += 1
+    rest = lines[:start] + lines[end:]
+    return "\n".join(rest)
+
+
+def production_system_prompt() -> str:
+    """**已格式化**的生产系统提示词（披露层开启）。
+
+    单独提供这个函数，是因为仓库里长期存在一处口径混用：
+    `SYSTEM_PROMPT` 是**未格式化的模板**，而 `scripts/exp_c.py` 的单轮档
+    直接把它当系统消息发了出去 —— 于是 C0 档模型收到的是
+    「知识库覆盖这些游戏：{covered}」，连 `{security}` 注入防护那段都没被替换。
+
+    凡是断言「提示词里有什么/没有什么」的地方，都应该查这个函数的返回值，
+    而不是查模板 —— 模板里那句「检索结果带有页面最后修订日期」是**永远**在的，
+    拿它做断言只能证明模板没被改，证明不了生产提示词里有那句话。
+    """
+    # 必须原样传 `settings.games`（slug → **显示名**）。
+    # 曾经写成 `{g: g for g in settings.games}`，提示词里就出现
+    # 「知识库覆盖这些游戏：sr、zzz、ys」—— 全是 slug，
+    # 而旧版硬编码提示词写的是「崩坏：星穹铁道、绝区零、原神」。
+    # 这类错误不会让任何东西报错，只是把模型认游戏的关键线索换成了缩写。
+    s = get_settings()
+    return build_system_prompt(s.games, s.game_terms)
+
 
 FINALIZE_PROMPT = """已达安全阀上限。请停止调用工具，基于已经拿到的信息给出最终回答；
 如果信息不足以回答，就明确说明缺少哪部分信息。"""
@@ -506,7 +579,11 @@ class ReActAgent:
                 covered="、".join(covered.values()),
             )
         else:
-            system = build_system_prompt(covered, self.s.game_terms)
+            # 披露层两半必须同源：工具侧 `ToolContext.disclose_revision` 决定
+            # search_kb / get_page 输不输出日期，这里决定提示词要不要教模型用日期。
+            # 两处读同一个字段，实验 F 才能用一次赋值完成整层消融。
+            system = build_system_prompt(covered, self.s.game_terms,
+                                         disclose_revision=context.disclose_revision)
         messages: list[dict] = [{"role": "system", "content": system}]
         # 历史有两道限制，职责不同，别混成一道：
         #   load_history(limit=8)  控 DB IO —— 最多取多少行；
