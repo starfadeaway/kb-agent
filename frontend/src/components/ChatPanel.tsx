@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FALLBACK_GAMES } from '../api'
+import { pageName, revisionSpan } from '../exportMd'
 import type { Health, Ref, Turn } from '../types'
 import type { Theme } from '../prefs'
 import { download, turnFileName, turnToMarkdown } from '../exportMd'
@@ -39,8 +40,7 @@ function revisionStats(refs: Ref[]) {
         '**不能**推出某条数值是否仍然正确 —— wiki 的批量维护会让这两件事脱钩。',
     }
   }
-  const sorted = [...dates].sort()
-  const span = sorted.length === 1 ? sorted[0] : `${sorted[0]} ~ ${sorted[sorted.length - 1]}`
+  const span = revisionSpan(dates)
   return {
     known: true,
     span,
@@ -49,10 +49,6 @@ function revisionStats(refs: Ref[]) {
       '本页两年没被动过，通常意味着 wiki 认为它不需要改，而不是内容已过时。' +
       (missing > 0 ? `另有 ${missing} 条来源没有修订时间。` : ''),
   }
-}
-
-function pageName(url: string): string {
-  return url.replace(/^https?:\/\/wiki\.biligame\.com\//, '')
 }
 
 /**

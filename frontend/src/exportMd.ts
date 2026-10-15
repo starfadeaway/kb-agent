@@ -58,6 +58,35 @@ export function stampNow(): string {
 }
 
 /** Markdown 表格里的单元格：竖线与换行会破坏表格结构，必须转义。 */
+const WIKI_PREFIX = /^https?:\/\/wiki\.biligame\.com\//
+
+/**
+ * 从 wiki URL 取页面名（去掉域名前缀）。
+ *
+ * UI 与导出共用这一条规则 —— 此前两个地方各写一遍正则，
+ * 改域名时漏一处就会出现「界面上是页面名、导出里是整条 URL」。
+ */
+export function pageName(url: string): string {
+  return url.replace(WIKI_PREFIX, '')
+}
+
+/**
+ * 一组修订时间戳的展示区间：只有一个就原样，多个取「最早 ~ 最晚」。
+ *
+ * 参数允许 `undefined` —— 后端可能没记修订时间，而过滤就该在这里做一次，
+ * 不然每个调用方都要先 `.filter(Boolean)`（那正是重复的来源）。
+ *
+ * **空数组返回空串，兜底文案不在这里**：聊天面板的空态有自己的提示语，
+ * 导出 Markdown 需要写成「未知」。把文案塞进来会逼其中一边改行为。
+ */
+export function revisionSpan(dates: (string | undefined)[]): string {
+  // 用类型谓词而不是 `.filter(Boolean)` —— 后者在 TS 里不收窄类型，
+  // 下面取 known[0] 时会报 string | undefined。
+  const known = dates.filter((d): d is string => !!d).sort()
+  if (!known.length) return ''
+  return known.length === 1 ? known[0] : `${known[0]} ~ ${known[known.length - 1]}`
+}
+
 function cell(s: string): string {
   return String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ')
 }
@@ -132,12 +161,7 @@ export function turnToMarkdown(
   }
 
   if (turn.refs.length) {
-    const known = turn.refs.map((r) => r.last_revision_ts).filter(Boolean)
-    const span = known.length
-      ? known.length === 1
-        ? known[0]
-        : `${known.slice().sort()[0]} ~ ${known.slice().sort()[known.length - 1]}`
-      : '未知'
+    const span = revisionSpan(turn.refs.map((r) => r.last_revision_ts)) || '未知'
 
     out.push('## 出处')
     out.push('')
@@ -151,7 +175,7 @@ export function turnToMarkdown(
     out.push('| 页面 | 页面修订 | 链接 |')
     out.push('|---|---|---|')
     turn.refs.forEach((r) => {
-      const name = r.url.replace(/^https?:\/\/wiki\.biligame\.com\//, '')
+      const name = pageName(r.url)
       out.push(`| ${cell(name)} | ${r.last_revision_ts || '未知'} | ${r.url} |`)
     })
     out.push('')

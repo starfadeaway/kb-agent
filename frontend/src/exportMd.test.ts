@@ -18,7 +18,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { stampNow, turnFileName, turnToMarkdown } from './exportMd'
+import { pageName, revisionSpan, stampNow, turnFileName, turnToMarkdown } from './exportMd'
 
 /** 与 backend/tests/test_revision_disclosure.py 同一份清单 */
 const FORBIDDEN_FRESHNESS = [
@@ -200,6 +200,28 @@ describe('turnFileName', () => {
     for (const ch of ['\\', ':', '*', '?', '"', '<', '>', '|']) {
       expect(name).not.toContain(ch)
     }
+  })
+})
+
+describe('revisionSpan / pageName', () => {
+  // 这两个此前在 ChatPanel 与 exportMd 里各写一份。收口之后要锁住
+  // 「空态由调用方决定」这条边界 —— 面板要空串、导出要「未知」，
+  // 一旦谁把文案塞进函数体，另一边就被迫改行为。
+  it('空数组返回空串，不替调用方决定兜底文案', () => {
+    expect(revisionSpan([])).toBe('')
+    expect(revisionSpan([undefined, undefined])).toBe('')
+  })
+
+  it('单个原样、多个取最早到最晚（内部会排序）', () => {
+    expect(revisionSpan(['2026-02-13'])).toBe('2026-02-13')
+    expect(revisionSpan(['2026-03-16', '2025-01-01', '2026-02-13'])).toBe(
+      '2025-01-01 ~ 2026-03-16',
+    )
+  })
+
+  it('wiki 域名前缀被剥掉，非 wiki URL 原样保留', () => {
+    expect(pageName('https://wiki.biligame.com/sr/太空封印站')).toBe('太空封印站')
+    expect(pageName('https://example.com/x')).toBe('https://example.com/x')
   })
 })
 

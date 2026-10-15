@@ -47,6 +47,21 @@ def _settings(**over):
     return dataclasses.replace(get_settings(), **over)
 
 
+class _RecordingRetriever:
+    """记录传给 retrieve 的 cfg，好断言「.env 的值真的走到了检索配置」。
+
+    这个 4 行类此前在本文件里被抄了 5 遍 —— 每抄一遍就多一处
+    「改了字段只改一半」的机会，而这类失败表现为断言静默失效而非报错。
+    """
+
+    def __init__(self) -> None:
+        self.seen: dict = {}
+
+    async def retrieve(self, q, cfg):
+        self.seen["cfg"] = cfg
+        return []
+
+
 # ---------- 关键：非默认值下的接线 ----------
 
 @pytest.mark.asyncio
@@ -55,18 +70,12 @@ async def test_candidate_pool_follows_env(monkeypatch):
 
     用非默认值 37（≠20），否则接线断了也测不出来。
     """
-    seen = {}
-
-    class _Ret:
-        async def retrieve(self, q, cfg):
-            seen["cfg"] = cfg
-            return []
-
-    ctx = ToolContext(settings=_settings(retrieve_candidate=37), retriever=_Ret(), store=None)  # type: ignore[arg-type]
+    ret = _RecordingRetriever()
+    ctx = ToolContext(settings=_settings(retrieve_candidate=37), retriever=ret, store=None)  # type: ignore[arg-type]
 
     await _search({"query": "太空封印站"}, ctx)
 
-    cfg = seen["cfg"]
+    cfg = ret.seen["cfg"]
     assert cfg.bm25_top == 37, f"bm25_top 没跟 .env 走：{cfg.bm25_top}"
     assert cfg.vector_top == 37, f"vector_top 没跟 .env 走：{cfg.vector_top}"
     assert cfg.rerank_candidates == 37, f"rerank_candidates 没跟 .env 走：{cfg.rerank_candidates}"
@@ -74,32 +83,20 @@ async def test_candidate_pool_follows_env(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_rrf_k_follows_env(monkeypatch):
-    seen = {}
-
-    class _Ret:
-        async def retrieve(self, q, cfg):
-            seen["cfg"] = cfg
-            return []
-
-    ctx = ToolContext(settings=_settings(rrf_k=7), retriever=_Ret(), store=None)  # type: ignore[arg-type]
+    ret = _RecordingRetriever()
+    ctx = ToolContext(settings=_settings(rrf_k=7), retriever=ret, store=None)  # type: ignore[arg-type]
     await _search({"query": "太空封印站"}, ctx)
-    assert seen["cfg"].rrf_k == 7, f"rrf_k 没跟 .env 走：{seen['cfg'].rrf_k}"
+    assert ret.seen["cfg"].rrf_k == 7, f"rrf_k 没跟 .env 走：{ret.seen['cfg'].rrf_k}"
 
 
 @pytest.mark.asyncio
 async def test_default_top_k_follows_env():
     """不给 top_k 时要用 .env 的值，不是写死的 5。"""
-    seen = {}
-
-    class _Ret:
-        async def retrieve(self, q, cfg):
-            seen["cfg"] = cfg
-            return []
-
-    ctx = ToolContext(settings=_settings(retrieve_top_k=4), retriever=_Ret(), store=None)  # type: ignore[arg-type]
+    ret = _RecordingRetriever()
+    ctx = ToolContext(settings=_settings(retrieve_top_k=4), retriever=ret, store=None)  # type: ignore[arg-type]
     await _search({"query": "太空封印站"}, ctx)
-    assert seen["cfg"].final_top_k == 4, (
-        f"默认 top_k 没跟 .env 走：{seen['cfg'].final_top_k}（写死的 5）"
+    assert ret.seen["cfg"].final_top_k == 4, (
+        f"默认 top_k 没跟 .env 走：{ret.seen['cfg'].final_top_k}（写死的 5）"
     )
 
 
@@ -108,31 +105,19 @@ async def test_default_top_k_follows_env():
 @pytest.mark.asyncio
 async def test_explicit_top_k_still_overrides_env():
     """模型显式传 top_k 时必须压过 .env —— 否则调参调不动。"""
-    seen = {}
-
-    class _Ret:
-        async def retrieve(self, q, cfg):
-            seen["cfg"] = cfg
-            return []
-
-    ctx = ToolContext(settings=_settings(retrieve_top_k=4), retriever=_Ret(), store=None)  # type: ignore[arg-type]
+    ret = _RecordingRetriever()
+    ctx = ToolContext(settings=_settings(retrieve_top_k=4), retriever=ret, store=None)  # type: ignore[arg-type]
     await _search({"query": "x", "top_k": 2}, ctx)
-    assert seen["cfg"].final_top_k == 2
+    assert ret.seen["cfg"].final_top_k == 2
 
 
 @pytest.mark.asyncio
 async def test_top_k_still_capped_at_10():
     """回归保护：上限保护不能被 from_settings 顺手丢掉。"""
-    seen = {}
-
-    class _Ret:
-        async def retrieve(self, q, cfg):
-            seen["cfg"] = cfg
-            return []
-
-    ctx = ToolContext(settings=_settings(retrieve_top_k=4), retriever=_Ret(), store=None)  # type: ignore[arg-type]
+    ret = _RecordingRetriever()
+    ctx = ToolContext(settings=_settings(retrieve_top_k=4), retriever=ret, store=None)  # type: ignore[arg-type]
     await _search({"query": "x", "top_k": 99}, ctx)
-    assert seen["cfg"].final_top_k == 10
+    assert ret.seen["cfg"].final_top_k == 10
 
 
 @pytest.mark.asyncio
