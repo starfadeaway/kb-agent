@@ -452,6 +452,26 @@ def test_strip_anchor_failure_is_loud():
 # --------------------------------------------------------------------------- #
 # 6. 端到端：真检索必须真的带日期（不是空转）
 # --------------------------------------------------------------------------- #
+def _has_real_index(root) -> bool:
+    """data/lance 或 data/vectors 下是否**真的有**索引内容。
+
+    刻意不看目录是否存在 —— store 的构造函数会无条件 mkdir 出空目录，
+    用 `exists()` 当判据等于让它检查自己刚造出来的空壳。
+    这里要求底下至少有一个非空条目（Lance 的 `*.lance` 表目录 /
+    NumPy 后端的 `*.npz` + `metadatas.json`）。
+    """
+    for sub in ("lance", "vectors"):
+        d = root / sub
+        if not d.is_dir():
+            continue
+        for child in d.iterdir():
+            if child.is_file() and child.stat().st_size > 0:
+                return True
+            if child.is_dir() and any(child.iterdir()):
+                return True
+    return False
+
+
 @pytest.mark.slow
 def test_real_index_has_revision_metadata():
     """真实索引里必须有 `last_revision_ts`，否则前面所有断言都在测假数据。
@@ -469,8 +489,21 @@ def test_real_index_has_revision_metadata():
 
     s = gs()
     root = Path(s.data_root_abs)
-    if not (root / "vectors").exists() and not (root / "lance").exists():
-        pytest.skip("本机没有索引")
+    # 这里**不能**只判断 `data/lance` / `data/vectors` 目录在不在。
+    #
+    # `LanceVectorStore.__init__` 和 `VectorStore.__init__` 都会
+    # `self.root.mkdir(parents=True, exist_ok=True)` —— 也就是说，
+    # 任何测试只要构造过一次 store（test_agent_loop /
+    # test_injection_guard / test_meta_script_provenance /
+    # test_multi_game_routing 都会），空目录就已经被造出来了。
+    #
+    # 结果是这条守卫会看见**自己刚建的空壳**，判定「有索引」→ 不跳过 →
+    # 读到 0 个 chunk → 在任何没有真实语料的机器上恒红（干净 clone 与 CI）。
+    # 本机有真索引所以一直绿着，从没暴露。
+    #
+    # 判据必须是「里面有没有东西」。
+    if not _has_real_index(root):
+        pytest.skip(f"本机没有索引（{root} 下没有任何 collection）")
 
     store = get_vector_store(s)
     col = store.get_collection("sr", s.embed_model_main, "base")
