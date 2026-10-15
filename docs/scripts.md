@@ -1,6 +1,6 @@
 # 脚本索引
 
-`backend/scripts/` 下共 51 个脚本。这一页说明**每一个是干什么的、哪些会破坏数据**。
+`backend/scripts/` 下共 54 个脚本。这一页说明**每一个是干什么的、哪些会破坏数据**。
 
 保留一次性探针不是为了"常用"，而是它们记录的是**踩坑过程**——
 `probe_lancedb.py` 证明了 ChromaDB 的失败点在「换进程读不回」，
@@ -46,8 +46,8 @@
 |---|---|
 | `run_eval.py` | 检索侧评测，支持 `--game all` |
 | `exp_common.py` | **不是可执行脚本**，是实验脚本的公共底座：评测子集、结果聚合、表格打印。抽它的理由不是省代码，是让 A/B/C/D/E 的**统计口径只有一份** |
-| `exp_b.py` / `exp_c.py` / `exp_d.py` / `exp_e.py` | 消融实验 B/C/D/E |
-| `merge_exp_e.py` | 合并 E 的分档产物 |
+| `exp_b.py` / `exp_c.py` / `exp_d.py` / `exp_e.py` / `exp_f.py` | 消融实验 B/C/D/E/F。`exp_f.py` 测披露层消融，题集与判据都独立（`app/eval/provenance_cases.py` / `provenance_score.py`），**不进 `cases.py`** —— 进了会改历史实验的分母 |
+| `merge_exp_c.py` / `merge_exp_e.py` | 把分档产物**逐库**合并成 `exp_C_{sr,ys,zzz}.json` / `exp_E_{sr,ys,zzz}.json`，并补跑逐库配对检验。分开写是因为 C/E 的分档产物结构不同：C 是合并时重算显著性，E 是分档文件里根本没有 t/p/d（`exp_e.py` 只在两档同文件时才算） |
 | `analyze_model_compare.py` | 模型对比，**显式输出 winner / verdict** |
 | `analyze_significance.py` | 配对检验与效应量 |
 | `seed_eval_cases.py` | 生成/扩充评测集 |
@@ -77,6 +77,7 @@
 | `probe_version_filter.py` | 版本过滤：检索层（两个 store 的 `$gte` 条件是否真的生效） |
 | `probe_version_story.py` | **把「通用 RAG 在会过期的语料上会失效」量化**：实测 sr 库 518 页横跨 2023-07 → 2026-10，其中 155 页（**30%**）是两年前的内容；用户问当前版本，检索却可能把两年前的条目排进来 |
 | `probe_minimax.py` / `probe_minimax_endpoints.py` | MiniMax 端点可用性与延迟 |
+| `probe_revision_clustering.py` | **三库修订日期的聚类实测**：Top12 日期占 40%~60%，证明 wiki 是按版本节点批量维护 —— 这条直接否掉了「页面久未编辑 = 内容已过时」，是陈旧告警被放弃的依据（`docs/version_staleness.md` 第五节） |
 | `probe_io.py` | 读写 IO 开销 |
 | `bench_latency.py` / `bench_concurrency.py` / `profile_latency.py` | 延迟、并发、火焰图 |
 
