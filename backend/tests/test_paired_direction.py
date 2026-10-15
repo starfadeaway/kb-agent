@@ -35,15 +35,15 @@ def test_paired_test_positive_means_a_better():
     assert res["significant"] is True
 
 
-def _call_args_of(fn_name: str, filename: str) -> list[list[str]]:
-    """取出脚本里所有 paired_test(...) 调用的实参文本（按文件）。
+def _paired_calls(filename: str) -> list[ast.Call]:
+    """脚本里所有 paired_test(...) 调用点。
 
     要同时匹配 `paired_test(...)` 和 `M.paired_test(...)` ——
     run_eval 是 `import app.eval.metrics as M` 后用 `M.paired_test`，
     只认 `ast.Name` 会一个调用都找不到，守卫就会对任何代码都失败。
     """
     tree = ast.parse((SCRIPTS / filename).read_text(encoding="utf-8"))
-    out: list[list[str]] = []
+    out: list[ast.Call] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -53,70 +53,98 @@ def _call_args_of(fn_name: str, filename: str) -> list[list[str]]:
             name = f.id
         elif isinstance(f, ast.Attribute):  # M.paired_test(...)
             name = f.attr
-        if name == fn_name:
-            out.append([ast.unparse(a) for a in node.args])
+        if name == "paired_test":
+            out.append(node)
     return out
 
 
-def _norm(src: str) -> str:
-    """统一引号：`ast.unparse` 默认输出单引号，直接和手写的双引号串比会误判。"""
-    return src.replace("'", '"')
+def _names_in(node: ast.AST) -> set[str]:
+    """实参子树里出现过的标识符与属性名。
+
+    **为什么要穿透子树，而不是比对实参的字面文本**：分库那处为了保证
+    「按库筛 + kept_rows」这两步真的发生过，把它们直接写进了实参
+    （`kept_rows([x for x in cur_g["rows"] ...])`）。按字面匹配变量名
+    会抓不到，而守卫真正要守的是「来源是当前档」，不是「变量叫什么」。
+    """
+    names: set[str] = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name):
+            names.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            names.add(n.attr)
+    return names
 
 
 @pytest.mark.parametrize(
     "filename,accepted_first_args",
     [
-        # run_eval：相邻两级，第一个实参必须是当前档（改进档）。
-        # 多库改造后有两个调用点 —— 合并跑（cur["rows"]）与分库跑（crows，
-        # 即 cur["rows"] 里筛出本库的那些行）。两者都必须传改进档，
-        # 所以这里列的是**允许集合**，多一个调用点就多一个必须命中的模式。
-        ("run_eval.py", ('cur["rows"]', "crows")),
+        # run_eval：相邻两级，第一个实参必须是当前档（改进档），
+        # 既包括合并跑的 `cur`，也包括分库跑筛自 `cur_g` 的那些行。
+        # 判据是「第一个实参的来源标识符里出现了这些名字之一」，
+        # 所以外面套一层 kept_rows(...) 不影响判定。
+        ("run_eval.py", ("cur", "cur_g")),
         # exp_common：首尾对比，第一个实参必须是末档（改进档）
         ("exp_common.py", ("last_rows",)),
     ],
 )
 def test_call_sites_pass_improved_first(filename: str, accepted_first_args: tuple[str, ...]):
     """调用点必须把「改进档」放在第一个参数位。"""
-    calls = _call_args_of("paired_test", filename)
+    calls = _paired_calls(filename)
     assert calls, f"{filename} 里找不到 paired_test 调用"
-    for args in calls:
-        first = _norm(args[0])
-        assert any(a in first for a in accepted_first_args), (
-            f"{filename} 的 paired_test 第一个实参是 {first!r}，"
-            f"应传改进档（{accepted_first_args} 之一），否则 Δ 与 Cohen d 的符号会与直觉相反"
+    for call in calls:
+        assert call.args, f"{filename} 的 paired_test 调用没有实参"
+        names = _names_in(call.args[0])
+        assert names & set(accepted_first_args), (
+            f"{filename} 的 paired_test 第一个实参是 {ast.unparse(call.args[0])!r}"
+            f"（来源标识符 {sorted(names)}），"
+            f"应传改进档（{accepted_first_args} 之一），"
+            f"否则 Δ 与 Cohen d 的符号会与直觉相反"
         )
 
 
 def test_per_game_paired_test_filters_current_label_first():
-    """分库配对检验的入参必须是「当前档的本库行」在前、「上一档的本库行」在后。
+    """分库配对检验必须「当前档的本库行」在前、「上一档的本库行」在后。
 
-    单看 `paired_test(crows, prows)` 那一行看不出 crows/prows 是谁 ——
-    它们来自上面两行推导。所以这里把推导也一起锁住：
-    crows 必须来自 cur_g（当前/改进档），prows 必须来自 prev_g（上一档/基线）。
-    两行搞反的话符号不会报错，只会静默变成「改进=变差」。
+    早先这里锁的是 `crows` / `prows` 两个**局部变量**的推导式。现在
+    「按库筛 + kept_rows」两步直接写在实参里（理由见 run_eval 那处的注释：
+    写成变量，接线守卫就没法证明过滤真的发生过），所以判据改成
+    穿透实参子树看**来源** —— 锁的是语义，不是变量的名字。
+
+    搞反的后果：符号不会报错，只会静默变成「改进 = 变差」。
     """
-    tree = ast.parse((SCRIPTS / "run_eval.py").read_text(encoding="utf-8"))
-    assigns: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Assign) and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id in ("crows", "prows")):
-            assigns[node.targets[0].id] = ast.unparse(node.value)
-    assert set(assigns) == {"crows", "prows"}, f"run_eval 里找不到 crows/prows 的推导：{assigns}"
-    assert "cur_g" in _norm(assigns["crows"]), (
-        f"crows 必须筛自 cur_g（当前/改进档），实际是 {assigns['crows']!r}"
-    )
-    assert "prev_g" in _norm(assigns["prows"]), (
-        f"prows 必须筛自 prev_g（上一档/基线），实际是 {assigns['prows']!r}"
-    )
+    calls = _paired_calls("run_eval.py")
+    per_game = []
+    for call in calls:
+        if len(call.args) < 2:
+            continue
+        first, second = _names_in(call.args[0]), _names_in(call.args[1])
+        # 只挑出分库那一处：它的两个实参都不来自合并跑的 prev/cur
+        if {"cur_g", "prev_g"} & (first | second):
+            per_game.append(ast.unparse(call))
+
+    assert per_game, "run_eval 里找不到分库配对检验的调用点"
+
+    for src in per_game:
+        assert "cur_g" in src and "prev_g" in src, (
+            f"分库配对检验没同时用到 cur_g / prev_g：{src}"
+        )
+        # 第一个实参：必须筛自 cur_g，且不能碰 prev_g
+        head, _, tail = src.partition(",")
+        assert "cur_g" in head and "prev_g" not in head, (
+            f"第一个实参应筛自 cur_g（当前/改进档），实际是 {head!r}"
+        )
+        assert "prev_g" in tail and "cur_g" not in tail, (
+            f"第二个实参应筛自 prev_g（上一档/基线），实际是 {tail!r}"
+        )
 
 
 def test_exp_common_first_arg_is_last_rows():
     """exp_common 传参顺序不能被改回去。"""
-    calls = _call_args_of("paired_test", "exp_common.py")
-    first_args = [a[0] for a in calls]
-    assert any("last_rows" in a for a in first_args), (
-        f"exp_common 的 paired_test 首个实参是 {first_args}，应传末档（last_rows）"
+    calls = _paired_calls("exp_common.py")
+    assert calls, "exp_common 里找不到 paired_test 调用"
+    first_names = [_names_in(c.args[0]) for c in calls if c.args]
+    assert any("last_rows" in names for names in first_names), (
+        f"exp_common 的 paired_test 首个实参来源是 {first_names}，应传末档（last_rows）"
     )
 
 
@@ -126,6 +154,46 @@ def test_paired_test_is_not_imported_directly_in_scripts():
         src = (SCRIPTS / filename).read_text(encoding="utf-8")
         # 允许出现定义与调用；只要求调用点数量可控（上面已逐个断言方向）
         assert src.count("paired_test(") <= 3, f"{filename} 出现多处 paired_test 调用，需逐个确认方向"
+
+
+def test_p值不能被round成零():
+    """`round(3.1e-15, 4)` = 0.0，下游会把 0.0 读成「极显著、远超阈值」。
+
+    实测踩过（2026-10）：zzz 的 C0→C2 精确 p 是 **2.78e-08**，
+    产物里却是 `0.0`，于是被写成「三库 p 均 <1e-10」—— 差 278 倍。
+
+    这里构造一组差值为 0..9 的配对样本：mean_diff=4.5、sd_diff≈3.03、
+    t≈4.70、精确 p≈2.6e-06。`round(p, 4)` 会把它抹成 0.0。
+    """
+    a = _rows({f"c{i}": float(i) for i in range(10)})
+    b = _rows({f"c{i}": 0.0 for i in range(10)})
+    res = paired_test(a, b, "mrr")
+
+    assert res["p"] > 0.0, "p 被 round 成 0.0 ——「算得出但很小」被说成了「恰好为零」"
+    assert res["p"] < 1e-4, f"构造应落在 1e-4 以下，实际 {res['p']}"
+    # 显示侧也不能退化成 0.0000：`f"{2.6e-6:.4f}"` 正是 0.0000
+    assert "e-0" in res["p_display"], f"p_display 丢了信息：{res['p_display']!r}"
+    assert res["significant"] is True
+
+
+def test_效应量的主口径是配对口径():
+    """配对数据必须用 `sd_diff` 当分母，组间合并口径会把 d 系统性放大。
+
+    本项目实测放大 1.4~1.6 倍（sr 2.163→1.327、zzz 2.778→1.964），
+    而 README 一直引用的是被放大的那列。两个口径都返回，
+    **`cohens_d` 必须是配对口径**，否则这个洞会重新长出来。
+    """
+    a = _rows({f"c{i}": float(i) for i in range(10)})
+    b = _rows({f"c{i}": 0.0 for i in range(10)})
+    res = paired_test(a, b, "mrr")
+
+    assert res["cohens_d"] == pytest.approx(res["mean_diff"] / res["sd_diff"], abs=1e-3), (
+        "cohens_d 不是配对口径（mean_diff / sd_diff）"
+    )
+    # 配对 t 检验里 d_z = t / sqrt(n)，同一个量的另一种算法，用来自洽校验
+    assert abs(res["cohens_d"]) == pytest.approx(abs(res["t"]) / (res["n"] ** 0.5), abs=1e-2)
+    assert "cohens_d_pooled" in res, "旧口径必须保留，否则历史产物无法对账"
+    assert res["cohens_d_pooled"] != res["cohens_d"], "两个口径不该相等 —— 相等说明改动没生效"
 
 
 def test_module_docstring_declares_direction():

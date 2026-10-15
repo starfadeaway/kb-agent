@@ -79,6 +79,13 @@ async def run_case(case, *, label: str, judge: Judge, llm, schemas, ctx,
         except Exception:  # noqa: BLE001
             contexts = ""
 
+        # 这两个字段只有走了 ReAct 循环的档位（C1/C2）才有意义：
+        # C0 是单轮问答，既没有 SearchGuard 也没有 stop_reason。
+        # 用 {} / None 而不是 0 是刻意的 ——「没测到」与「测到是 0」必须能区分，
+        # 与 `AgentState.guard_stats()` 返回空 dict 是同一个理由。
+        guard: dict = {}
+        stop_reason: str | None = None
+
         try:
             if single_shot:
                 # 这里必须用**已格式化的生产提示词**，不能直接发 SYSTEM_PROMPT。
@@ -105,6 +112,7 @@ async def run_case(case, *, label: str, judge: Judge, llm, schemas, ctx,
                 st = await agent.run(case.question, ctx=ctx)
                 answer, steps, failures, refs = st.answer, len(st.steps), st.tool_failures, st.refs
                 usage = {"prompt_tokens": st.prompt_tokens, "completion_tokens": st.completion_tokens}
+                guard, stop_reason = st.guard_stats(), st.stop_reason
             err = None
         except Exception as exc:  # noqa: BLE001
             answer, usage, steps, failures, refs = "", {}, 0, 0, []
@@ -126,6 +134,9 @@ async def run_case(case, *, label: str, judge: Judge, llm, schemas, ctx,
         "steps": steps, "tool_failures": failures,
         "has_refs": bool(refs), "latency_ms": dt,
         "error": err, "answer": answer[:500],
+        # 熔断与终止原因必须进产物，否则「熔断在真实问题分布上从没被观测过」
+        # 这句话永远成立 —— 跑了却不记，等于没跑（failure_analysis 第六节）。
+        "stop_reason": stop_reason, "guard": guard,
     }
 
 
@@ -185,7 +196,7 @@ async def main() -> None:
     ap.add_argument("--game", default="sr",
                     help="目标库：sr / ys / zzz，可逗号分隔或 all")
     ap.add_argument("--concurrency", type=int, default=2,
-                    help="同档内并发跑几条题。1=串行。默认 2（plan.md 原设计）。"
+                    help="同档内并发跑几条题。1=串行。默认 2（立项设计）。"
                          "注意：并发只影响墙钟，不影响质量指标；但 latency_ms 会因排队变长，"
                          "**不能和串行跑的延迟数字直接比**")
     ap.add_argument("--out", default=None, help="结果文件名；不给则按样本量自动命名")

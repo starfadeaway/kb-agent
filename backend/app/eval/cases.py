@@ -63,7 +63,7 @@ class EvalCase:
 # 8 条检索题里只有 1 条纯语义题，这正好是混合检索唯一能显示优势的场景。
 # 样本不够时 A2（融合）的负结果无法区分"融合真的没用"和"题出得不好"。
 # 扩展后的分布：
-#   single_hop 14 / semantic 6 / multi_hop 4 / numerical 3 / unanswerable 3 / routing 2
+#   single_hop 14 / semantic 6 / multi_hop 5 / numerical 3 / unanswerable 3 / routing 1
 #
 # 注意这 32 条 ≠ 实验实际跑的题集：`exp_common.SUBSET_IDS` 只挑了其中 15 条
 # （实验 C/E 的默认子集），`run_eval.py` 的检索侧才跑全量有 gold_pages 的题。

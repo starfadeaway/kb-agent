@@ -23,10 +23,27 @@
 
 ### L1 页面级 —— 硬拦截，剥掉引用
 
-正文引用的页面名，是否出现在**本轮实际检索到的页面集合**里。
+判定分两道闸门，**顺序不能反**：
 
-零误报：本轮检索到的页面就是全部合法引用对象，不在里面的页面名
-用户点开必然是死链。所以不在里面就是错的，直接剥掉并计数。
+1. **形状闸门**（`_looks_like_page_title`）：这段方括号内容看起来像不像
+   一个页面名。不像的（`[12]`、`[2.7]`、`[Lv80]`）**不参与剥除**，
+   只记进 `skipped`；落在代码跨度（围栏块 / 行内反引号）里的方括号，
+   连候选都不是。
+2. **集合闸门**：形状像页面名，但它不在**本轮实际检索到的页面集合**里
+   → 用户点开必然是死链 → 剥掉并计数。
+
+**第一道闸门是补上来的，此前只有第二道。** 那时 `[12]`、`arr[10]`、
+`[Lv80]` 这些「恰好不在检索集合里」的文本会被当成编造引用**从答案正文里
+删掉** —— 校验器在删正确内容。加上形状闸门之后，第二道闸门才有资格谈
+「不冤枉好答案」：**只有过了形状闸门的文本，才是「在声称一个出处」的文本**。
+
+残余误报仍然存在，如实记下：形状像页面名、但其实是正文里别的方括号用法
+（例如 `[详见上文]`）依旧会被剥。这一类无法只靠形状区分，属于已知代价。
+
+**形状启发式的地基**：三个库共 1405 个页面标题里，不含中文的只有 2 个
+（`Archer` / `Saber`）。所以「归一化后不含 CJK 就不当页面名」是安全的；
+代价是这两个页面的**编造**引用会漏剥 —— 但它们仍会出现在 `skipped` 里，
+可复核、可评测，不是静默消失。
 
 ### L2 数值级 —— 只记录，不改文本
 
@@ -70,6 +87,16 @@ _NOISE_RE = re.compile(r"[\s·•・\-—_「」『』《》（）()\[\]【】:�
 # 短于这个长度的方括号内容一律不当引用（`[1]`、`[x]`）。
 MIN_CITATION_LEN = 2
 
+# 中文（含扩展 A / 兼容区）。页面名必须含至少一个，见 `_looks_like_page_title`。
+_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+# 纯数字 / 版本号 / 日期。在**归一化之后**判断 —— 归一化已经把
+# `-` `/` `.` 之外的装饰符抹掉了，所以 `[2025-04-13]` 到这一步是 `20250413`。
+_NUMERIC_ONLY_RE = re.compile(r"^[\d.]+$")
+# 围栏代码块的开闭标记。两个标记要配对，所以按出现的那一个来闭合。
+_FENCE_MARKERS = ("```", "~~~")
+# 行内代码：一对单反引号，不跨行。围栏内部的由 `_code_spans` 先排掉。
+_INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+
 # search_kb 的结果块首行：`[3] 分数 0.9984 | 太空封印站 > 正文`
 _HIT_HEADER_RE = re.compile(r"^\[(\d+)\]\s+分数\s+([\d.]+)\s\|\s(.+?)\s>\s(.*)$")
 # get_page 的首行：`《卡芙卡/攻略》页面修订 2026-02-18（312ms，共 2044 字）`
@@ -88,20 +115,104 @@ def normalize_title(s: str) -> str:
     return _NOISE_RE.sub("", s or "").strip()
 
 
+def _code_spans(text: str) -> list[tuple[int, int]]:
+    """围栏代码块（``` / ~~~）的区间，**含未闭合的那种**（一直到文末）。
+
+    为什么必须认未闭合：模型输出撞上 max_tokens 被截断时，围栏只有开头
+    没有结尾，此时它后面的全部内容在渲染上都是代码 —— 不认，就会把
+    `arr[10]` 这种代码下标当成编造的页面引用从答案里删掉。
+    """
+    spans: list[tuple[int, int]] = []
+    start: int | None = None
+    marker = ""
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        stripped = line.lstrip()
+        if start is None:
+            for m in _FENCE_MARKERS:
+                if stripped.startswith(m):
+                    start, marker = offset, m
+                    break
+        elif stripped.startswith(marker):
+            spans.append((start, offset + len(line)))
+            start = None
+        offset += len(line)
+    if start is not None:
+        spans.append((start, len(text)))
+    return spans
+
+
+def _code_spans_all(text: str) -> list[tuple[int, int]]:
+    """围栏块 + 行内代码的区间合并。
+
+    行内代码只在围栏**之外**找：围栏里已经全是代码，再找一遍没有意义，
+    而且围栏自己的 ``` 会被 `_INLINE_CODE_RE` 误配成一对空的行内代码。
+    """
+    fences = _code_spans(text)
+    spans = list(fences)
+    for m in _INLINE_CODE_RE.finditer(text):
+        if any(a <= m.start() < b for a, b in fences):
+            continue
+        spans.append(m.span())
+    return spans
+
+
+def looks_like_page_title(raw: str) -> bool:
+    """这个方括号内容看起来像不像一个**页面名**。
+
+    这是 L1 剥除的前置闸门，理由见模块 docstring：
+    「不在本轮检索集合里」与「在声称一个出处」是两件事。没有这道闸门，
+    `[12]`、`arr[10]`、`[Lv80]` 这类文本会因为「恰好不在集合里」
+    而被当成编造引用从正文里删掉 —— 校验器在删正确内容。
+
+    保守方向是刻意的：宁可不判（记进 `skipped`），也不要误剥。
+    """
+    norm = normalize_title(raw)
+    if len(norm) < MIN_CITATION_LEN or not any(ch.isalnum() for ch in norm):
+        return False
+    # 纯数字 / 版本号 / 日期：编号与脚注，不是页面
+    if _NUMERIC_ONLY_RE.match(norm):
+        return False
+    # 不含中文：实测 1405 个页面标题里只有 Archer / Saber 两个不含 CJK，
+    # 而纯 ASCII 的方括号在真实输出里是代码下标、型号、等级。
+    # 判成「不处理」而不是「编造」—— 代价是这两个页面的编造引用会漏剥。
+    return bool(_CJK_RE.search(norm))
+
+
+def _candidates(answer: str) -> tuple[list[tuple[str, int, int]], list[str]]:
+    """把一段正文拆成 (可校验的引用, 被形状闸门跳过的方括号内容)。
+
+    代码跨度里的方括号**两个都不进** —— 它既不是引用标记，也不是可疑引用。
+    """
+    text = answer or ""
+    code = _code_spans_all(text)
+    cites: list[tuple[str, int, int]] = []
+    skipped: list[str] = []
+    for m in _CITE_RE.finditer(text):
+        if any(a <= m.start() < b for a, b in code):
+            continue
+        raw = m.group(1).strip()
+        # 太短、或连一个字母数字都没有：压根不是引用标记，既不剥也不记
+        if len(raw) < MIN_CITATION_LEN or not any(ch.isalnum() for ch in raw):
+            continue
+        # 像引用标记、但形状不像页面名：不剥，只留痕供复核
+        if not looks_like_page_title(raw):
+            skipped.append(raw)
+            continue
+        cites.append((raw, m.start(), m.end()))
+    return cites, skipped
+
+
 def parse_citations(answer: str) -> list[tuple[str, int, int]]:
     """抽出正文里的引用标记，返回 [(原文, 起, 止)]，按出现顺序、不去重。
 
     保留起止位置是因为 L1 要**就地剥掉**编造的引用 —— 只拿到名字的话
     就没法从原文里精确删除，整篇重写又容易顺手改坏别的内容。
+
+    只返回**过了形状闸门**的候选；被跳过的那些由 `audit_answer` 走
+    `_candidates` 取出来记进 `CitationAudit.skipped`。
     """
-    out: list[tuple[str, int, int]] = []
-    for m in _CITE_RE.finditer(answer or ""):
-        raw = m.group(1).strip()
-        # 全是数字或标点的方括号不是页面引用（编号、脚注、装饰）
-        if len(raw) < MIN_CITATION_LEN or not any(ch.isalnum() for ch in raw):
-            continue
-        out.append((raw, m.start(), m.end()))
-    return out
+    return _candidates(answer)[0]
 
 
 def is_supported(citation: str, titles: Iterable[str]) -> bool:
@@ -230,6 +341,14 @@ class CitationAudit:
 
     #: 正文里抽到的全部引用（原文形态，含重复）
     cited: list[str] = field(default_factory=list)
+    #: 形状不像页面名、因而**未参与 L1 判定**的方括号内容（去重、保持顺序）
+    #
+    #: 与 `fabricated` 是两回事，绝不能合并：`fabricated` 是「判定了，是编造」，
+    #: `skipped` 是「没判」。把 skipped 并进 fabricated 就等于回到
+    #: 那个把 `[12]`、`arr[10]` 从答案里删掉的版本。
+    #: 留痕的意义是可复核、可评测 —— `[Lv80]` 到底是等级还是漏剥的页面名，
+    #: 人看一眼就知道，代码不必猜。
+    skipped: list[str] = field(default_factory=list)
     #: 本轮没检索到、已从正文剥掉的页面名（去重、保持出现顺序）
     fabricated: list[str] = field(default_factory=list)
     #: L2 信号：数值所在句子引用的页面正文里查不到这个数
@@ -252,6 +371,7 @@ class CitationAudit:
     def to_dict(self) -> dict:
         return {
             "cited": self.cited,
+            "skipped": self.skipped,
             "fabricated": self.fabricated,
             "unsupported_numbers": self.unsupported_numbers,
             "retrieved_titles": self.retrieved_titles,
@@ -287,9 +407,12 @@ def audit_answer(answer: str, retrieved: Mapping[str, str]) -> tuple[str, Citati
 
     对 L2（数值无出处）：**只记录**，不动正文（见模块 docstring 的取舍说明）。
     """
-    audit = CitationAudit(retrieved_titles=sorted(retrieved.keys()))
     answer = answer or ""
-    cites = parse_citations(answer)
+    cites, skipped = _candidates(answer)
+    audit = CitationAudit(
+        retrieved_titles=sorted(retrieved.keys()),
+        skipped=_dedup(skipped),
+    )
     if not cites:
         # 没有引用就没有可校验的东西，但 checked 仍要如实反映
         # 「本轮有没有取到过页面」—— 空引用与「无从校验」是两件事。
@@ -326,9 +449,14 @@ def audit_answer(answer: str, retrieved: Mapping[str, str]) -> tuple[str, Citati
     for s, e in sorted(drop_spans, reverse=True):
         answer = answer[:s] + answer[e:]
     # 去重但保持出现顺序：同一个编造页面被引用三次只报一次
-    seen: set[str] = set()
-    audit.fabricated = [x for x in audit.fabricated if not (x in seen or seen.add(x))]
+    audit.fabricated = _dedup(audit.fabricated)
     return answer, audit
+
+
+def _dedup(items: list[str]) -> list[str]:
+    """去重但保持出现顺序 —— 同一个名字被引用三次只该报一次。"""
+    seen: set[str] = set()
+    return [x for x in items if not (x in seen or seen.add(x))]
 
 
 def _match_page(citation: str, retrieved: Mapping[str, str]) -> str | None:

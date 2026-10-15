@@ -231,8 +231,16 @@ def fmt_p(p: float) -> str:
     早就处理对了（`ptxt = "<1e-10" if underflow else ...`），
     而 exp_c / exp_e / analyze_significance 三处漏了 —— 口径分叉。
     统一收口到这里。
+
+    **2026-10-15 二次修正**：判据从 `p == 0.0` 改成「小于 1e-4 走科学计数法」。
+    两个原因：(1) `metrics.paired_test` 不再把 p `round(…, 4)` 了 —— 那一步会
+    把 3.1e-15 变成真正的 0.0，正是这里要防的事，却由上游先做掉了；
+    (2) 即使上游保留原值，`f"{2.78e-08:.4f}"` 仍会打出 `0.0000`，
+    因为这个函数**只是打印**，精度由格式串决定。改成 `2.78e-08` 才不丢信息。
     """
-    return "<1e-10" if p == 0.0 else f"{p:.4f}"
+    if p != p:  # NaN
+        return "无法计算"
+    return f"{p:.2e}" if p < 1e-4 else f"{p:.4f}"
 
 
 def category_means(results: Sequence[dict], *, metric: str = "judge_score",

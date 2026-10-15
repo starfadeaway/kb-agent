@@ -14,23 +14,29 @@ from app.agent.citation_audit import (
     audit_answer,
     harvest_retrieved_pages,
     is_supported,
+    looks_like_page_title,
     normalize_title,
     parse_citations,
 )
 
 # 一段**格式与 tools.py 完全一致**的 search_kb 输出。
-# 复制自真实格式而不是随手编的 —— 格式一变，这里必须跟着红。
+#
+# 「完全一致」曾经是句空话：夹具漏了命中头尾部的 ` | 页面修订 {rev}`
+# （tools.py:258 在有修订号时一定会拼上），而当时没有任何测试把解析器
+# 和真实工具输出对起来 —— 格式一旦漂移，harvest 会静默返回空 dict、
+# checked 变成 False、校验器整体停摆，而这套测试**依然全绿**。
+# 所以这里逐字照抄 tools.py:256-261 的拼接结果，含修订后缀。
 SEARCH_KB_OUTPUT = """status=ok hits=3 top_score=0.9984
-[1] 分数 0.9984 | 太空封印站 > 正文
+[1] 分数 0.9984 | 太空封印站 > 正文 | 页面修订 2025-04-13
 太空封印站（正文）
 名称：太空封印站；类别：位面饰品；两件套效果：使装备者的攻击力提高12%。
 当装备者的速度大于等于120时，攻击力额外提高12%。
 出处：https://wiki.biligame.com/sr/太空封印站 | 修订 2025-04-13
-[2] 分数 0.9291 | 卡芙卡/攻略 > 配装推荐 > 深入详解 > 遗器
+[2] 分数 0.9291 | 卡芙卡/攻略 > 配装推荐 > 深入详解 > 遗器 | 页面修订 2026-02-18
 卡芙卡/攻略（配装推荐 > 深入详解 > 遗器）
 位面饰品：沉欢醉饮的海隅；2件套；副C卡芙卡的最优选。提供12%攻击力和24%持续伤害增伤。
 出处：https://wiki.biligame.com/sr/卡芙卡/攻略 | 修订 2026-02-18
-[3] 分数 0.8756 | 那刻夏/攻略 > 配装推荐 > 简易推荐
+[3] 分数 0.8756 | 那刻夏/攻略 > 配装推荐 > 简易推荐 | 页面修订 2025-12-10
 那刻夏/攻略（配装推荐 > 简易推荐）
 隧洞遗器1：晨昏交界的翔鹰；4件套。
 出处：https://wiki.biligame.com/sr/那刻夏/攻略 | 修订 2025-12-10"""
@@ -92,7 +98,56 @@ def test_markdown链接不算编造引用():
 
 
 def test_纯数字与过短的方括号不算引用():
+    """编号、版本号、日期都不是页面引用。
+
+    这条此前只覆盖长度 1 的 `[1]` / `[x]`，于是 `[12]`、`[2.7]` 因为
+    「长度够、且含字母数字」一路过关，最后被 L1 当成编造引用从答案里
+    **删掉**。断言加强到长度 ≥2 的纯数字形态，把这个洞锁死。
+    """
     assert parse_citations("见表[1]与[x]") == []
+    assert parse_citations("免责声明[12]，生效版本[2.7]") == []
+    assert parse_citations("修订于[2025-04-13]") == []
+
+
+def test_形状不像页面名的方括号不算引用():
+    """纯 ASCII 的型号 / 等级不是页面名。
+
+    代价是明确的：三个库 1405 个页面标题里只有 `Archer` / `Saber`
+    不含中文，这两个页面的**编造**引用会漏剥。用这点漏剥换掉
+    「`[Lv80]` 被当编造引用删掉」是划算的，而且被跳过的会进
+    `CitationAudit.skipped`，可复核。
+    """
+    assert parse_citations("等级[Lv80]，面板[HP]") == []
+    assert looks_like_page_title("太空封印站") is True
+    assert looks_like_page_title("卡芙卡/攻略") is True
+    assert looks_like_page_title("12") is False
+    assert looks_like_page_title("Lv80") is False
+    assert looks_like_page_title("2025-04-13") is False
+
+
+def test_围栏代码块里的方括号不算引用():
+    """代码下标 `arr[10]` 不是「凭记忆编造的出处」。"""
+    ans = '示例如下：\n```python\nx = arr[10] + d["k"]\n```\n完毕。'
+    assert parse_citations(ans) == []
+
+
+def test_未闭合围栏也整段当代码():
+    """模型输出撞 max_tokens 被截断时，围栏只有开头没有结尾。
+
+    此时它后面全是代码 —— 不认未闭合围栏，就会在一条本来就残缺的
+    回答上再删掉一段代码下标，把「截断」升级成「内容损坏」。
+    """
+    assert parse_citations('```python\nx = arr[10]\n') == []
+
+
+def test_行内代码里的方括号不算引用():
+    assert parse_citations("写成 `arr[10]` 即可。") == []
+
+
+def test_代码块前后的真引用仍然正常抽取():
+    """闸门只挡代码，不能把真引用一起挡掉。"""
+    ans = "见[太空封印站]。\n```\nx = a[1]\n```\n另见[卡芙卡/攻略]。"
+    assert [c[0] for c in parse_citations(ans)] == ["太空封印站", "卡芙卡/攻略"]
 
 
 # --------------------------------------------------------------------------- #
@@ -137,6 +192,29 @@ def test_剥掉未检索到的引用():
     assert "[不老者的仙舟]" not in out, "编造引用必须被剥掉"
     assert audit.fabricated == ["不老者的仙舟"]
     assert audit.ok is False
+
+
+def test_形状不像页面名的方括号一个都不删():
+    """本模块最该守住的一条：校验器不许删正确内容。
+
+    修复前 `[12]`、`[2.7]`、`[Lv80]` 会被判成编造引用从正文里删掉，
+    于是「C 类已被拦截」的代价变成「正文被削」。它们现在进 `skipped`：
+    不判、不删、但留痕。
+    """
+    ans = "免责声明[12]，生效版本[2.7]，等级[Lv80]。参考[太空封印站]。"
+    out, audit = audit_answer(ans, harvest_retrieved_pages(SEARCH_KB_OUTPUT))
+    assert out == ans, "形状不像页面名的方括号一个都不能删"
+    assert audit.fabricated == []
+    assert audit.skipped == ["12", "2.7", "Lv80"]
+    assert audit.ok is True, "跳过不是发现问题，不该把这一轮标成有问题"
+
+
+def test_代码块不会被校验器改写():
+    """代码被改写是数据损坏，不是防幻觉。"""
+    ans = '```python\nx = arr[10] + d["k"]\n```'
+    out, audit = audit_answer(ans, harvest_retrieved_pages(SEARCH_KB_OUTPUT))
+    assert out == ans
+    assert audit.skipped == [], "代码不是「被跳过的引用」，不该进 skipped"
 
 
 def test_剥掉后句子读起来仍然通顺():
@@ -243,12 +321,25 @@ def test_导出的字段能直接落库():
     _, audit = audit_answer("[不老者的仙舟]", harvest_retrieved_pages(SEARCH_KB_OUTPUT))
     d = audit.to_dict()
     assert set(d) == {
-        "cited", "fabricated", "unsupported_numbers",
+        "cited", "skipped", "fabricated", "unsupported_numbers",
         "retrieved_titles", "checked", "ok",
     }
     assert d["fabricated"] == ["不老者的仙舟"]
+    assert d["skipped"] == []
     assert d["checked"] is True
     assert isinstance(d, dict)
+
+
+def test_skipped与fabricated必须可区分():
+    """「判定了，是编造」与「没判」是两种结论，绝不能合并。
+
+    合并就等于退回那个把 `[12]`、`arr[10]` 从答案里删掉的版本。
+    """
+    ans = "生效版本[2.7]，另见[不老者的仙舟]。"
+    _, audit = audit_answer(ans, harvest_retrieved_pages(SEARCH_KB_OUTPUT))
+    assert audit.skipped == ["2.7"]
+    assert audit.fabricated == ["不老者的仙舟"]
+    assert not set(audit.skipped) & set(audit.fabricated)
 
 
 def test_默认构造的审计对象表示未校验():
@@ -286,6 +377,28 @@ def test_双向验证_把判定短路成恒真则编造引用不再被剥():
         mod.is_supported = original
     assert "[不老者的仙舟]" in broken_out, "校验器坏了就不该剥 —— 否则守卫本身是假绿"
     assert broken.fabricated == []
+
+
+def test_双向验证_摘掉形状闸门则正文会被删():
+    """证明「`[12]` 不被删」确实来自形状闸门，而不是它恰好没被匹配到。
+
+    把闸门短路成「长度够就算页面名」（等价于修复前的行为），
+    同一条答案立刻被削。没有这一条，闸门被谁顺手删掉都不会有人发现。
+    """
+    import app.agent.citation_audit as mod
+
+    ans = "免责声明[12]，等级[Lv80]。"
+    assert audit_answer(ans, harvest_retrieved_pages(SEARCH_KB_OUTPUT))[0] == ans
+
+    original = mod.looks_like_page_title
+    try:
+        mod.looks_like_page_title = lambda raw: len(raw) >= mod.MIN_CITATION_LEN
+        broken_out, broken = audit_answer(ans, harvest_retrieved_pages(SEARCH_KB_OUTPUT))
+    finally:
+        mod.looks_like_page_title = original
+
+    assert broken_out == "免责声明，等级。", "闸门失效了正文却没被删 —— 说明挡住它的不是闸门"
+    assert sorted(broken.fabricated) == ["12", "Lv80"]
 
 
 def test_双向验证_替换顺序错了会把正文削坏():

@@ -233,8 +233,10 @@ def paired_test(a_rows: list[dict], b_rows: list[dict], metric: str = "mrr") -> 
     用 Welch-Satterthwaite 自由度 + 正态近似（n≥20 时 t 分布已经很接近正态）。
     n 小时这个近似不可靠，结果里会标注。
 
-    返回里同时给效应量 Cohen's d —— 统计显著不等于实际有意义，
-    d 太小的话结论也不该写进简历。
+    返回里同时给效应量 —— 统计显著不等于实际有意义，d 太小的话结论也不该写。
+    **`cohens_d` 是配对口径（`mean_diff / sd_diff`），它才是配对数据该用的那个**；
+    `cohens_d_pooled` 是旧口径（组间合并标准差），保留只为和历史产物对账。
+    两个都返回是为了让口径切换这件事在数据里可见，而不是悄悄换掉。
     """
     common = sorted(set(r.get("case_id", "") for r in a_rows) & set(r.get("case_id", "") for r in b_rows))
     common = [c for c in common if c]
@@ -250,12 +252,18 @@ def paired_test(a_rows: list[dict], b_rows: list[dict], metric: str = "mrr") -> 
     sd = (sum((d - mean_d) ** 2 for d in diffs) / (n - 1)) ** 0.5
     if sd == 0:
         # 差值全为 0：两个配置在这批题上完全等价
-        return {"n": n, "mean_diff": 0.0, "t": 0.0, "p": 1.0, "cohens_d": 0.0,
-                "significant": False, "note": "所有配对差值均为 0，两配置在这批题上完全等价"}
+        return {"n": n, "mean_diff": 0.0, "sd_diff": 0.0, "t": 0.0,
+                "p": 1.0, "p_display": "1.0000",
+                "cohens_d": 0.0, "cohens_d_pooled": 0.0,
+                "significant": False,
+                "note": "所有配对差值均为 0，两配置在这批题上完全等价"}
 
     se = sd / (n**0.5)
     t_stat = mean_d / se
-    # Welch-Satterthwaite 近似自由度
+    # 配对 t 检验的自由度就是 n-1。
+    # 这里此前写成「Welch-Satterthwaite 近似自由度」—— 那是**两独立样本**、
+    # 不假设等方差时用的；同一批题的配对差不存在这个问题。注释误导了很久，
+    # 实现一直是对的（n-1），所以只改注释。
     df = n - 1
 
     try:
@@ -272,7 +280,30 @@ def paired_test(a_rows: list[dict], b_rows: list[dict], metric: str = "mrr") -> 
     sd_b = (sum((float(bmap[c][metric]) - sum(bmap[c][metric] for c in common) / n) ** 2
                  for c in common) / (n - 1)) ** 0.5
     pooled = ((sd_a**2 + sd_b**2) / 2) ** 0.5
-    d = mean_d / pooled if pooled else 0.0
+
+    # 效应量给两个口径，**主口径是配对口径 `mean_diff / sd_diff`**。
+    # 配对数据用组间合并标准差当分母会把 d 系统性放大（本项目实测 1.4~1.6 倍）：
+    # `sd_diff` 里已经把「题与题之间的难度方差」消掉了 —— 那正是做配对检验的目的，
+    # 再用组间方差当分母等于把消掉的方差加回去，d 自然虚高。
+    # `cohens_d_pooled` 保留旧口径，只为让历史产物还能对上账。
+    d_paired = mean_d / sd if sd else 0.0
+    d_pooled = mean_d / pooled if pooled else 0.0
+
+    # **p 绝不能 round。** `round(3.1e-15, 4)` = 0.0，下游会把 0.0 读成
+    # 「极显著、远超阈值」。本项目真踩过：zzz 的精确 p 是 2.78e-08，
+    # 产物里却是 0.0，于是被写成「三库 p 均 <1e-10」—— 差 278 倍。
+    # `p` 保持原值供程序判断，`p_display` 给人看。
+    #
+    # 显示阈值定在 1e-4 而不是 1e-10：因为 `f"{p:.4f}"` 在 p < 5e-5 时
+    # 本来就打不出非零值。阈值定得太松（曾经是 1e-10），2.78e-08 会显示成
+    # `0.0000` —— 等于换个地方又把「算得出但很小」说成了「恰好为零」。
+    # 小于 1e-4 一律走科学计数法，不丢信息。
+    if p != p:  # NaN：正态近似没算出来
+        p_display = "无法计算"
+    elif p < 1e-4:
+        p_display = f"{p:.2e}"
+    else:
+        p_display = f"{p:.4f}"
 
     return {
         "n": n,
@@ -284,8 +315,10 @@ def paired_test(a_rows: list[dict], b_rows: list[dict], metric: str = "mrr") -> 
         "std_err": round(se, 4),
         "t": round(t_stat, 3),
         "df": df,
-        "p": round(p, 4),
-        "cohens_d": round(d, 3),
+        "p": p,
+        "p_display": p_display,
+        "cohens_d": round(d_paired, 3),
+        "cohens_d_pooled": round(d_pooled, 3),
         "significant": bool(p < 0.05),
         "approx": approx,
         "note": ("n<20，t 分布与正态偏离较大，p 值仅供参考"

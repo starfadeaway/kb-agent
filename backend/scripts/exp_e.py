@@ -223,11 +223,15 @@ async def run_case(case, *, label: str, model_name: str, judge: Judge, tools,
     async with sem:
         t0 = time.perf_counter()
         err = None
+        # 同上：跑了 ReAct 却不记熔断与终止原因，等于没跑（见 exp_c 的说明）。
+        guard: dict = {}
+        stop_reason: str | None = None
         try:
             st = await agent.run(case.question, ctx=ctx)
             answer = st.answer
             steps, failures, refs = len(st.steps), st.tool_failures, st.refs
             usage = {"prompt_tokens": st.prompt_tokens, "completion_tokens": st.completion_tokens}
+            guard, stop_reason = st.guard_stats(), st.stop_reason
         except Exception as exc:  # noqa: BLE001
             answer, usage, steps, failures, refs = "", {}, 0, 0, []
             err = f"{type(exc).__name__}: {str(exc)[:160]}"
@@ -250,6 +254,8 @@ async def run_case(case, *, label: str, model_name: str, judge: Judge, tools,
         "completion_tokens": usage.get("completion_tokens", 0),
         "steps": steps, "tool_failures": failures, "has_refs": bool(refs),
         "latency_ms": dt, "error": err, "answer": answer[:500],
+        # 熔断与终止原因进产物：否则「熔断在真实问题分布上从没被观测过」永远成立。
+        "stop_reason": stop_reason, "guard": guard,
     }
 
 

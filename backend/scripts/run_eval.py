@@ -85,6 +85,21 @@ def summarize(rows: list[dict], top_k: int) -> dict:
     return agg
 
 
+def kept_rows(rows: list[dict]) -> list[dict]:
+    """配对检验用的行 —— 必须和均值用**同一个谓词**、落在**同一批**样本上。
+
+    这是本项目六条不可妥协规则里的第 6 条（见 `ARCHITECTURE.md`）。
+    早先这里把原始 `rows` 直接交给 `paired_test`，而失败行的 `mrr` 被硬写成
+    `0.0`（见下面检索异常那条分支），于是某一档只要多挂一条链路故障，
+    Δ 就被凭空拉低 —— 看上去像「这个配置更差」，实际是「它没跑起来」。
+
+    同一个坑 `exp_common.py` 已经踩过一次并在那里修好了
+    （当时的症状是均值按 n=14 算、配对检验按 n=15 算），这份实现当时漏改。
+    两边现在都走 `is_kept`。
+    """
+    return [r for r in rows if is_kept(r)]
+
+
 @dataclass
 class CaseOutcome:
     case_id: str
@@ -284,20 +299,34 @@ async def main() -> None:
         results.append(r)
         a = r["aggregate"]
         logger.info(
-            "%s: page_hit=%.3f recall@%d=%.3f mrr=%.3f ndcg=%.3f 平均延迟=%dms",
+            "%s: page_hit=%.3f recall@%d=%.3f mrr=%.3f ndcg=%.3f 平均延迟=%dms"
+            " n=%d n_ok=%d errors=%d",
             label, a["page_hit_rate"], args.top_k, a.get(f"recall@{args.top_k}", 0),
-            a["mrr"], a["ndcg"], a["avg_latency_ms"],
+            a["mrr"], a["ndcg"], a["avg_latency_ms"], a["n"], a["n_ok"], a["errors"],
         )
 
     def line(label: str, a: dict) -> str:
-        return (
+        """一行指标。**必须带上 n_ok / errors**。
+
+        只打 `n` 的话，一次全档检索失败会打印成
+        「A2: page_hit=0.000 recall@5=0.000 mrr=0.000 ndcg=0.000 n=29」——
+        看起来像「这个配置检索能力为零」，实际是「它压根没跑起来」。
+        `summarize` 早就把 n_ok / errors 算出来了，不打出来等于白算。
+        """
+        row = (
             f"{label:<6}{a['page_hit_rate']:>10.3f}"
             f"{a.get(f'recall@{args.top_k}', 0.0):>14.3f}"
-            f"{a['mrr']:>8.3f}{a['ndcg']:>8.3f}{a['avg_latency_ms']:>9}{a['n']:>4}"
+            f"{a['mrr']:>8.3f}{a['ndcg']:>8.3f}{a['avg_latency_ms']:>9}"
+            f"{a['n']:>4}{a['n_ok']:>6}{a['errors']:>7}"
         )
+        # 全档失败时把话说死：这一行的指标是 0，但它不是能力数据。
+        # 光靠 n_ok=0 这一列，读者仍可能一眼扫过去把它当成「分数很低」。
+        if a["n_ok"] == 0:
+            row += "   ← 全档失败，指标无意义（不是能力数据）"
+        return row
 
     header = (f"{'配置':<6}{'page_hit':>10}{f'recall@{args.top_k}':>14}"
-              f"{'mrr':>8}{'ndcg':>8}{'延迟ms':>9}{'n':>4}")
+              f"{'mrr':>8}{'ndcg':>8}{'延迟ms':>9}{'n':>4}{'n_ok':>6}{'错误':>7}")
 
     print("\n=== 实验 A：检索策略阶梯消融（单变量）===")
     if len(games) > 1:
@@ -338,7 +367,9 @@ async def main() -> None:
         for i in range(1, len(results)):
             prev, cur = results[i - 1], results[i]
             # 传 (当前, 上一档)：Δ 与 d 都是「后减前」，正数 = 这次改进是正收益。
-            t = M.paired_test(cur["rows"], prev["rows"], "mrr")
+            # 两侧都先过 kept_rows：均值在 summarize 里已经滤掉失败行，
+            # 配对检验必须落在同一批样本上，否则两个数字不是同一份数据算出来的。
+            t = M.paired_test(kept_rows(cur["rows"]), kept_rows(prev["rows"]), "mrr")
             sig_rows.append({"comparison": f"{prev['label']}→{cur['label']}", **t})
             if t.get("n", 0) >= 3:
                 print(f"{prev['label'] + '→' + cur['label']:<16}{t['mean_diff']:>9.4f}"
@@ -359,12 +390,15 @@ async def main() -> None:
                 print(f"{'对比':<16}{'Δmrr(后-前)':>13}{'t':>8}{'p':>8}{'Cohen d':>9}{'显著':>7}")
                 for i in range(1, len(results)):
                     prev_g, cur_g = results[i - 1], results[i]
-                    # 命名带 _g 是为了和上面合并跑的 prev/cur 区分开：
-                    # 两个循环里的 prev/cur 含义一样，但筛出的行不同，
-                    # 混用名字会让人以为传错了档。
-                    prows = [x for x in prev_g["rows"] if x.get("game") == g]
-                    crows = [x for x in cur_g["rows"] if x.get("game") == g]
-                    t = M.paired_test(crows, prows, "mrr")
+                    # 按库筛 + kept_rows 都写成实参里的调用，不先落到局部变量。
+                    # 不是风格偏好：`test_run_eval_sample_parity.py` 的接线守卫
+                    # 用 AST 检查**实参本身**是不是 kept_rows 调用 ——
+                    # 先赋给变量它就没法证明这两步真的发生过，而这种漏法不报错。
+                    t = M.paired_test(
+                        kept_rows([x for x in cur_g["rows"] if x.get("game") == g]),
+                        kept_rows([x for x in prev_g["rows"] if x.get("game") == g]),
+                        "mrr",
+                    )
                     by_game_sig[g].append(
                         {"comparison": f"{prev_g['label']}→{cur_g['label']}", **t}
                     )
