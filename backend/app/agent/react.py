@@ -27,6 +27,11 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 
+from app.agent.citation_audit import (
+    CitationAudit,
+    audit_answer,
+    harvest_retrieved_pages,
+)
 from app.agent.tools import (
     _INFRA_FAILURE_PREFIXES,  # noqa: F401 单一来源，避免两处前缀不同步
     ToolContext,
@@ -340,6 +345,18 @@ class AgentState:
     #: 只留摘要不进答案、不进引用 —— 检测结果既不是知识库内容也不是用户诉求，
     #: 把它当答案的一部分复述出去，等于二次执行攻击。
     injections: list[tuple[str, object]] = field(default_factory=list)
+
+    #: 本轮真正取到正文的页面 → 该页正文（search_kb 命中块 + get_page）。
+    #: 与 `refs` 是**两件不同的事**，别混：
+    #:   refs         = 引用**列表**，每项一个 URL，用于前端展示与忠实度对齐；
+    #:   retrieved    = 本轮**有证据的页面全集**，用于校验正文里的 `[页面名]`。
+    #: refs 只记 URL 不记正文，retrieved 只记正文不记 URL —— 各自刚好够用。
+    retrieved_pages: dict[str, str] = field(default_factory=dict)
+    #: 生成后引用校验的结果（C 类）。None = 本轮没跑过校验（例如越界拒答分支）。
+    #: 刻意留 None 而不是给个空的 CitationAudit：前者能区分
+    #: 「校验过且没问题」和「压根没校验」，后者不能 ——
+    #: 而这正是评测里最容易把两者混起来、进而把盲区当成达标的地方。
+    citation_audit: CitationAudit | None = None
 
     def note_injection(self, tool_name: str, result) -> None:
         """记账只记真命中。
@@ -703,6 +720,56 @@ class ReActAgent:
             # tool 消息就不会出现在 state.messages 里，引用会静默变成空列表，
             # 而且不报任何错。
             self._collect_refs(state)
+            # 收尾这一轮同样要校验：熔断/超时后模型是在「信息不足」的状态下
+            # 写答案的，这种时候它更容易顺着上下文补一个没检索过的页面名出来。
+            # `_finalize` 只被非流式路径调用，用户此刻还没看到整段答案，改写安全。
+            self._audit_citations(state)
+
+    def _audit_citations(self, state: AgentState, *, rewrite: bool = True) -> None:
+        """生成后引用校验（C 类失败的结构性缺口）。
+
+        必须在 `_collect_refs` **之后**调用：判据是 `state.retrieved_pages`，
+        而它是 `_collect_refs` 顺手收的。反过来的话 retrieved 是空的，
+        校验器会把**每一个**引用都判成编造并剥掉 —— 一次正确回答被削成空话，
+        而且不报任何错。
+
+        顺序不能省的原因和这一层为什么值得存在是同一件事：
+        校验的判据必须来自工具层落地过的证据，不能来自模型的自我陈述。
+
+        ## rewrite=False：流式路径专用
+
+        SSE 路径下 token 已经逐片推给用户了，这时候再改 `state.answer` 会制造
+        一个**比不校验更糟**的问题：用户屏幕上写着 `[不老者的仙舟]`，
+        而落库、导出 Markdown、评测拿到的答案是没有它的同一段文字。
+        「所见」与「所存」不一致，比留着一条编造引用更难排查。
+
+        所以流式路径只**记录**不重写，把结果放进 done 事件交给前端提示。
+        非流式路径（`/api/chat`）整段返回、用户还没看到，改写是安全的。
+        这个差异是刻意的：宁可流式与非流式的答案不完全一致，
+        也不让流式路径出现「显示的」和「存下的」两份文本。
+        """
+        if state.uncovered_game:
+            # 越界拒答分支压根没调工具、正文也不带引用，校验它没有意义，
+            # 硬跑只会得到「所有引用都是编造」的假阳性。
+            return
+        answer, audit = audit_answer(state.answer, state.retrieved_pages)
+        if rewrite:
+            state.answer = answer
+        state.citation_audit = audit
+        if audit.fabricated:
+            logger.warning(
+                "生成后引用校验%s %d 处无检索证据的引用：%s",
+                "剥下" if rewrite else "发现（流式不改写）",
+                len(audit.fabricated),
+                "、".join(audit.fabricated),
+            )
+        if audit.unsupported_numbers:
+            # 只记不改：见 citation_audit 模块 docstring —— 推导值会被误判。
+            logger.info(
+                "引用校验记录 %d 处数值未见出处支撑（仅记录，未改文本）：%s",
+                len(audit.unsupported_numbers),
+                audit.unsupported_numbers[:5],
+            )
 
     def _collect_refs(self, state: AgentState) -> None:
         """从工具结果里抽引用，供前端展示与忠实度评测。
@@ -725,6 +792,10 @@ class ReActAgent:
             if msg.get("role") != "tool":
                 continue
             content = msg.get("content", "")
+            # 顺带收「本轮真正取到正文的页面 → 其正文」。
+            # 这是 C 类校验（L1/L2）的唯一判据来源：正文里的 `[页面名]`
+            # 只能对照**工具层落地过的页面**来判真假，不能对照模型自己的说法。
+            state.retrieved_pages.update(harvest_retrieved_pages(content))
             for line in content.splitlines():
                 if not line.startswith("出处："):
                     continue
@@ -895,6 +966,7 @@ class ReActAgent:
                 state.messages = messages
                 state.elapsed_ms = int((time.perf_counter() - t0) * 1000)
                 self._collect_refs(state)
+                self._audit_citations(state)
                 self.last_state = state
                 return state
 
@@ -1023,6 +1095,10 @@ class ReActAgent:
             yield {"event": "error", "data": {"message": f"{type(exc).__name__}: {exc}"}}
         finally:
             self._collect_refs(state)
+            # rewrite=False：流式路径的 token 已经推给用户了，
+            # 这时改 state.answer 会让「屏幕上写的」和「落库/导出的」变成两段文字。
+            # 只记录，把结果放进 done 事件由前端提示。理由见 _audit_citations 的 docstring。
+            self._audit_citations(state, rewrite=False)
             state.elapsed_ms = int((time.perf_counter() - t0) * 1000)
             # 流式接口拿不到返回值，落库全靠这一行把状态交出去 ——
             # 调用方（main.py 的 SSE 分支）读 self.last_state 写 messages + steps。
@@ -1049,6 +1125,10 @@ class ReActAgent:
                     "prompt_tokens": state.prompt_tokens,
                     "completion_tokens": state.completion_tokens,
                     "refs": state.refs,
+                    # 流式路径只记录不改写（见 _audit_citations 的 rewrite 参数），
+                    # 所以这个字段是前端唯一的提示来源：fabricated 非空就说明
+                    # 屏幕上那段文字里有检索不到出处的引用，需要提示用户。
+                    "citation_audit": state.citation_audit.to_dict() if state.citation_audit else None,
                     "trace": [
                         {
                             "step": s.step,

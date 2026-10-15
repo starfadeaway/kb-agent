@@ -17,7 +17,8 @@
 | 代价 | 挂知识库 = prompt token **×20.2**、延迟 3.5 倍（串行实测口径）；C2 比 C1 多花 **23%** token，judge 只涨 0.14 且 p=0.16 未达显著 | [`docs/cost_latency_quality.md`](docs/cost_latency_quality.md) |
 | 并发（真实问题压测） | 并发 4 吞吐 **×3.40**（4.10 req/s），1/4/8 三档 top-5 结果**逐条一致** | [`docs/concurrency.md`](docs/concurrency.md) |
 | 流式 | 首个 SSE 事件 **860ms** vs 非流式全量 3410ms，总耗时仅差 264ms。⚠ **不是「第一个字」**：上游无 token 级流式，是拿完整答案后切片推送；且为单次测量 | [`data/eval/probe_stream_latency.json`](data/eval) |
-| 失败模式 | 4 类，含「答案全对但引用了不存在的页面」 | [`docs/failure_analysis.md`](docs/failure_analysis.md) |
+| 失败模式 | 4 类，含「答案全对但引用了不存在的页面」。**已实现生成后引用校验**：L1 剥掉无检索证据的页面引用、L2 记录无出处的数值（不改文本）；语义级（L3）未做 | [`docs/failure_analysis.md`](docs/failure_analysis.md) |
+| 故障注入 | 23 条端到端注入测试（工具异常/超时/基础设施失败/空结果/低分/重复查询/模型失败/流式），熔断路径经双向验证 | `backend/tests/test_fault_injection.py` |
 
 > 📄 **「我做了一个 RAG 知识库，区别在哪、还差什么、面试怎么讲」**
 > 见 [`docs/comparison_with_rag.md`](docs/comparison_with_rag.md) ——
@@ -500,7 +501,7 @@ cd kb-agent\backend
 | 评测 | 评测集 **56 条三库全覆盖**（星铁 32 / 绝区零 12 / 原神 12）；实验 A/B/C/D/E 均已出真实数据 |
 | 检索实验覆盖 | **A / B / D 均已扩到三库**（sr 29 / ys 9 / zzz 10 = 48 条有 gold 的题），汇总按库分节、逐库配对检验，不混口径 |
 | 已知偏差 | `eval_cases` 表仍是 32 条，评测集已扩到 56 条，重跑一次评测即可同步 |
-| 工程 | pytest **675 项**全绿 + smoke 自检 41 项；ruff 全仓清；前端 vitest **56 项**；GitHub Actions 跑 pytest + ruff + 前端测试 + 前端构建 + 密钥卫生 |
+| 工程 | pytest **747 项**全绿（含故障注入 23 条 + 引用校验 34 条 + 接线守卫 15 条）；smoke 自检 41 项；ruff 全仓清；前端 vitest **56 项**；GitHub Actions 跑 pytest + ruff + 前端测试 + 前端构建 + 密钥卫生 |
 
 一条命令自检：
 

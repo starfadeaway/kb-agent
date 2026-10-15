@@ -437,6 +437,10 @@ async def chat(req: ChatRequest) -> dict:
         "guard": state.guard_stats(),
         "injection": state.injection_summary(),
         "refs": state.refs,
+        # 生成后引用校验（C 类）。None 表示本轮没跑过校验（例如越界拒答分支），
+        # 与「校验过且通过」的 {"ok": true} 是两件事 —— 前端据此决定
+        # 要不要显示「已移除 N 处无出处引用」的提示，评测据此统计校验覆盖率。
+        "citation_audit": state.citation_audit.to_dict() if state.citation_audit else None,
         "trace": [
             {"step": s.step, "tool": s.tool_name, "args": s.args, "ok": s.ok, "ms": s.latency_ms}
             for s in state.steps
