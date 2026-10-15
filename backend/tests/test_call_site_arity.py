@@ -58,6 +58,36 @@ def _positional_arg_count(node: ast.Call) -> int:
     return len(node.args)
 
 
+def _first_call(src: str) -> ast.Call:
+    """从一段源码里取出第一个 Call 节点，供下方的计数逻辑单测使用。"""
+    tree = ast.parse(src)
+    return next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        ("f('a', 'b')", 2),
+        ("f('a', covered={})", 2),  # 关键字实参也算数，否则这个合法调用会被误判
+        ("f(question='a', covered={})", 2),
+        ("f('a')", 1),  # 少传 —— 必须能被判出来
+        ("f('a', 'b', 'c')", 3),  # 多传 —— smoke.py 坏的就是这一类
+        ("f(*args)", -1),  # 展开调用静态不可判定，必须返回 -1 而不是瞎猜
+    ],
+)
+def test_实参计数把关键字实参也算进去(src: str, expected: int) -> None:
+    """计数逻辑本身的单测。
+
+    这里独立于仓库扫描，直接喂源码片段 —— 因为「关键字实参没被算进去」
+    这类错误在真实调用点全是位置参数写法的话，永远测不出来。
+    """
+    node = _first_call(src)
+    n_pos = _positional_arg_count(node)
+    n_kw = len(node.keywords)
+    total = -1 if n_pos == -1 else n_pos + n_kw
+    assert total == expected
+
+
 def _call_sites(func_name: str) -> list[tuple[Path, int, int, int]]:
     """找出所有调用 `func_name` 的位置。
 
@@ -133,9 +163,11 @@ def test_所有调用点的位置参数个数与定义一致(func_name: str, exp
     for path, lineno, n_pos, n_kw in _call_sites(func_name):
         if n_pos == -1:  # *args 展开，静态不可判定，跳过（而不是假装它对）
             continue
-        if n_pos != expected:
+        # 位置 + 关键字合计才是真正的实参个数。
+        # 只数位置参数会把 `route_game("x", covered={})` 误判成"只传了 1 个"。
+        if n_pos + n_kw != expected:
             rel = path.relative_to(ROOT)
-            bad.append(f"{rel}:{lineno} 传了 {n_pos} 个位置参数（应 {expected}）")
+            bad.append(f"{rel}:{lineno} 传了 {n_pos + n_kw} 个实参（应 {expected}）")
     assert not bad, (
         "以下调用点的位置参数个数与函数定义不符 —— "
         "很可能是函数重构后调用点没跟上（smoke.py 的 route_game 就是这么坏的）：\n  "

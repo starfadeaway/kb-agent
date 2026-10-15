@@ -500,7 +500,7 @@ cd kb-agent\backend
 | 评测 | 评测集 **56 条三库全覆盖**（星铁 32 / 绝区零 12 / 原神 12）；实验 A/B/C/D/E 均已出真实数据 |
 | 检索实验覆盖 | **A / B / D 均已扩到三库**（sr 29 / ys 9 / zzz 10 = 48 条有 gold 的题），汇总按库分节、逐库配对检验，不混口径 |
 | 已知偏差 | `eval_cases` 表仍是 32 条，评测集已扩到 56 条，重跑一次评测即可同步 |
-| 工程 | pytest **669 项**全绿 + smoke 自检 41 项；ruff 全仓清；前端 vitest **56 项**；GitHub Actions 跑 pytest + ruff + 前端测试 + 前端构建 + 密钥卫生 |
+| 工程 | pytest **675 项**全绿 + smoke 自检 41 项；ruff 全仓清；前端 vitest **56 项**；GitHub Actions 跑 pytest + ruff + 前端测试 + 前端构建 + 密钥卫生 |
 
 一条命令自检：
 
