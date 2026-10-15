@@ -5,6 +5,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { DeliverablePanel } from './components/DeliverablePanel'
 import { Sidebar, type TabId } from './components/Sidebar'
 import { RetrievePanel } from './components/RetrievePanel'
+import { SettingsPanel } from './components/SettingsPanel'
 import { applyTheme, loadBg, readStoredTheme, saveTheme, type BgSettings, type Theme } from './prefs'
 
 export default function App() {
@@ -156,6 +157,16 @@ export default function App() {
           </button>
         </div>
 
+        {showSettings && (
+          <SettingsPanel
+            theme={theme}
+            bg={bg}
+            onTheme={setThemeExplicit}
+            onBg={setBg}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
+
         {tab === 'chat' ? (
           <ChatPanel
             turns={turns}
@@ -165,11 +176,8 @@ export default function App() {
             onBackend={setBackend}
             theme={theme}
             onToggleTheme={toggleTheme}
-            setTheme={setThemeExplicit}
             settingsOpen={showSettings}
             onOpenSettings={() => setShowSettings((v) => !v)}
-            bg={bg}
-            onBg={setBg}
             onSend={send}
             onStop={stop}
             onReset={reset}

@@ -4,6 +4,8 @@
 > 混合检索（BM25 ∥ 向量 → RRF → Cross-Encoder 重排），5 组单变量消融实验，
 > 每个数字都能追溯到产生它的脚本与 git commit。
 
+![问答界面](docs/screenshot-chat.png)
+
 | 维度 | 结果 | 出处 |
 |---|---|---|
 | 检索策略消融（**三库逐库**，A0→A3，top_k=3，n=29/9/10） | recall@3：**sr 0.793→0.897** / ys 0.889→**1.000** / zzz 1.000→**1.000**。⚠️ **重排增益只在 sr 成立** —— ys/zzz 在 A1（纯向量）就已打满，A2/A3 没有可提升空间，三库**不可合并成一个均值**。sr 补抓 368 页角色页后指标整体下移，退化项全部来自攻略页挤占 | [`data/eval/exp_A_all_k3.json`](data/eval) · [`EVALUATION.md`](EVALUATION.md) |
@@ -226,6 +228,14 @@ _TABLE = {
   并给直接压在背景上的文字加了独立承载面 —— 遮罩的职责是保证对比度，不是展示图片。
 - **响应式**：1180px 收窄侧栏；860px 以下侧栏变抽屉（默认收起，点 ☰ 或遮罩关闭）；
   设置面板在移动端改为**底部弹出**，避开虚拟键盘。已实测 390×844。
+
+| 浅色主题 | 外观设置（主题 + 自定义背景） | 移动端 390×844 |
+|---|---|---|
+| ![浅色主题](docs/screenshot-light.png) | ![外观设置](docs/screenshot-bg.png) | ![移动端](docs/screenshot-mobile.png) |
+
+检索调试台（不开 Agent，直接对比 A0 仅 BM25 / A1 仅向量 / A2 融合 / A3 加重排）：
+
+![检索调试](docs/screenshot-retrieve.png)
 
 ---
 
@@ -466,47 +476,6 @@ cd kb-agent\backend
 
 ---
 
-## 踩坑记录（都是实测踩出来的，不是抄来的）
-
-1. **chromadb 在本机不可用**：版本/轮子问题如上，索引导致换进程读不回来。
-   最终改成自实现 NumPy 精确索引。这个坑的完整报错与目录对照留在
-   「为什么放弃了 ChromaDB」一节。
-
-2. **EdgeOne 的 567 不是"站点不存在"**。它是被限流的挑战页状态码，而且它有时把挑战页标成
-   `application/json`，只看 Content-Type 会漏判。踩过一次"站点没有这个 slug"的错结论，
-   正确 slug 是中文缩写（`sr` / `zzz` / `ys`）。
-
-   对策优先级：**批量取页（一次 10 页）> 拉长间隔 > 退避重试**。实测 30 页 / 18.7s / 0 次拦截。
-
-3. **模板不能删，只能展平**。星铁 wiki 的光锥页几乎全部内容都在 `{{光锥图鉴}}`（54 个具名参数）里。
-   最初"删掉所有模板"的清洗逻辑把 969 字的 wikitext 洗成 20 字——页面抓到了，等于什么都没入库。
-   修成展平成 `字段：值` 后，同一批 40 页从 **9 chunk → 78 chunk**。
-
-4. **bge-m3 的向量范数不为 1**。不双侧归一化就换 embedding 模型，对比里会混进"范数分布"这个隐藏变量。
-
-5. **PowerShell 写 UTF-8 会带 BOM**，导致 checkpoint JSON 解析失败后被静默清空，
-   表现为"续传从头开始"。读的时候用 `utf-8-sig`。
-
-6. **刻晴是原神角色**，不在星铁 wiki。选测试页面时踩了这个。
-
-7. **wiki 的分类命名空间是中文「分类:」而不是 `Category:`**。
-   只写死一种前缀，`list_category_pages` 会静默返回空列表 —— 看起来像"这个分类没内容"，
-   实际是路径错了。另外 MediaWiki 会把错误放在 `query.errors` 里而 HTTP 仍是 200，
-   只看状态码同样会漏判。
-
-8. **工具 schema 少一层 `{"type": ...}` 包装**，DeepSeek 直接 400 `Invalid schema for function`。
-   同理，assistant 消息回传 `tool_calls` 是必须的，否则下一轮报
-   `Messages with role 'tool' must be a response to a preceding message with 'tool_calls'`。
-
-9. **`call_tool` 的 ok 不能等于"没抛异常"**。工具按约定把失败转成可读文案返回，
-   若 ok 一律为 True，Agent 轨迹里的 `tool_failures` 就永远是 0，失败率指标直接作废。
-   现在按文案前缀判定。
-
-10. **知识库里没有的内容，Agent 会连续空转 7 步**。行为正确（没编造），成本错误。
-    实测 30317 prompt tokens / 12.7s 才承认查不到 —— 已记入 `EVALUATION.md` 待修。
-
----
-
 ## 当前状态
 
 | 项 | 状态 |
@@ -522,7 +491,7 @@ cd kb-agent\backend
 | 安全 | 间接 Prompt 注入：11 条规则分两级，10843 chunk 真实语料误报 **0**、攻击样本召回 **13/13**；工具结果一律包进不受信任数据区（`docs/injection_guard.md`） |
 | 可用性 | Chat 降级链：只对 429/5xx/超时降级，400/401 不重试；降级在响应 `fallback` 字段与 `/api/health` 留痕（`docs/fallback_chain.md`） |
 | 数据时效 | 版本更新：实测 wiki `recentchanges` 可穿过 WAF；近 7 天变更页 ∩ 已收录 = **162/706 页（23.0%）**，检测只花 **15 次请求**（全量重抓要 71 次）。⚠️ 全站口径 1157 页会得出"增量无意义"的**相反结论**。内容指纹已落库（1401 页 + 10843 chunk 100% 覆盖），归一化把格式误判从 **100% 压到 0**（`docs/delta_sync.md`） |
-| Agent | 手搓 ReAct，4 工具 + 4 道安全阀 + 熔断；不可答问题从 7 步/30317 token 降到 4 步/6514 token |
+| Agent | 手搓 ReAct，工具注册表 4 个（`search_kb` / `get_page` / `calculator` / `list_games`），**生产默认只挂 `search_kb`**（`AGENT_TOOLS`，侧栏显示的就是实际生效的那份） + 4 道安全阀 + 熔断；不可答问题从 7 步/30317 token 降到 4 步/6514 token |
 | 多库路由 | 三态（库内/越界/未提及）；越界走无工具单轮，实测 0 步 / 1.1s，库内 3–5 步 / 5–8s |
 | MCP | 4 个工具以标准 MCP（SDK 2.3.0）暴露给外部 host，stdio 传输；**适配层与内置实现输出逐字符一致由守卫实跑保证**（16 项，真 `mcp.Client` 连真 server）。MCP 是**独立 server 入口**，本项目 Agent 始终走进程内直调，**两者之间没有运行时开关**（曾经有过 `TOOL_TRANSPORT`，核实发现无任何代码分支读它，已删），见 [docs/mcp.md](docs/mcp.md) |
 | 后端 | FastAPI，`/api/health` `/api/retrieve` `/api/chat` `/api/chat/stream` `/api/runs` `/api/ingest` `/api/stats` |
@@ -531,7 +500,7 @@ cd kb-agent\backend
 | 评测 | 评测集 **56 条三库全覆盖**（星铁 32 / 绝区零 12 / 原神 12）；实验 A/B/C/D/E 均已出真实数据 |
 | 检索实验覆盖 | **A / B / D 均已扩到三库**（sr 29 / ys 9 / zzz 10 = 48 条有 gold 的题），汇总按库分节、逐库配对检验，不混口径 |
 | 已知偏差 | `eval_cases` 表仍是 32 条，评测集已扩到 56 条，重跑一次评测即可同步 |
-| 工程 | pytest **665 项**全绿 + smoke 自检 41 项；ruff 全清；前端 vitest 9 项；GitHub Actions 跑 pytest + ruff + 前端测试 + 前端构建 + 密钥卫生 |
+| 工程 | pytest **669 项**全绿 + smoke 自检 41 项；ruff 全仓清；前端 vitest **56 项**；GitHub Actions 跑 pytest + ruff + 前端测试 + 前端构建 + 密钥卫生 |
 
 一条命令自检：
 

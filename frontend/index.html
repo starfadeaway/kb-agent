@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0e1116" />
+    <!--
+      theme-color 的初值。深色主题的 --bg 是 #080d14（见 styles.css），
+      这里必须与之保持一致 —— 它是 React 挂载前唯一一帧的地址栏配色。
+      ⚠️ 换配色时这三处（这里、内联脚本、styles.css）都要动，
+      tests/prefs.test.ts 有一条断言专门钉住它们不相等。
+    -->
+    <meta name="theme-color" content="#080d14" />
     <title>kb-agent · 游戏内容知识库问答</title>
     <script>
       // 在样式和 React 之前定好主题，否则会先按默认深色渲染再跳到浅色（白闪）。
@@ -20,7 +26,20 @@
                 : 'dark'
           document.documentElement.setAttribute('data-theme', theme)
           var meta = document.querySelector('meta[name="theme-color"]')
-          if (meta) meta.setAttribute('content', theme === 'dark' ? '#0e1116' : '#f6f7f9')
+          if (meta) {
+            // 从已加载的样式表里读当前主题的 --bg，而不是在这里写死颜色。
+            // 写死过一次并且真的漂了：CSS 换成深靛配色后这里的 meta 还停在
+            // 旧配色的 #0e1116，功能全对、测试全绿，只有地址栏露馅。
+            var bg = ''
+            try {
+              bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+            } catch (e) {
+              /* 样式表还没就绪 */
+            }
+            // 读不到就保持 meta 原值：content="" 会让浏览器退回默认色，
+            // 比用一个略旧的固定色更糟。
+            if (bg) meta.setAttribute('content', bg)
+          }
         } catch (e) {
           /* 隐私模式下 localStorage 不可用，保持默认深色 */
         }

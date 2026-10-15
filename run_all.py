@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import signal
 import subprocess
 import sys
 import time
@@ -59,8 +58,8 @@ def main() -> None:
         procs.append(("client", spawn("client", [npm_cmd(), "run", "dev"], ROOT / "frontend")))
 
     print("\n" + "=" * 56)
-    print("  后端 API : http://127.0.0.1:%d/api/health" % args.port)
-    print("  接口文档 : http://127.0.0.1:%d/docs" % args.port)
+    print(f"  后端 API : http://127.0.0.1:{args.port}/api/health")
+    print(f"  接口文档 : http://127.0.0.1:{args.port}/docs")
     print("  前端界面 : http://localhost:5173")
     print("  Ctrl+C 同时停止两者")
     print("=" * 56 + "\n")

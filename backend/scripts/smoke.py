@@ -72,13 +72,22 @@ async def main() -> int:
     inj, ok3 = await call_tool("calculator", {"expression": "__import__('os')"}, ctx, timeout=10)
     failures += not check("注入防护", (not ok3) and "非法字符" in inj, inj[:40])
 
-    # 5. Agent（消耗 token，默认开启）
-    if not args.skip_agent:
-        from app.agent.react import ReActAgent, route_game
+    # 5. 游戏路由（纯函数，不花 token，所以放在 --skip-agent 分支**外面**）
+    #
+    # 这里原先写在 `if not args.skip_agent:` 里面，还用了旧签名
+    # `route_game(question, session_game, default, known)` 传了 4 个参数；
+    # 重构后签名已是 `route_game(question, covered)` 两个参数。
+    # 结果是：只要带 --skip-agent 就撞不到，默认跑（README 第 254 行教的正是默认跑）
+    # 必然 TypeError —— README 给新人的第一条自检命令是坏的。
+    from app.agent.react import route_game
 
-        failures += not check(
-            "游戏路由", route_game("绝区零的音擎怎么配", "sr", "sr", "zzz") == "zzz"
-        )
+    routed = route_game("绝区零的音擎怎么配", s.games)
+    failures += not check("游戏路由", routed == "zzz", f"-> {routed!r} (covered={sorted(s.games)})")
+
+    # 6. Agent（消耗 token，默认开启）
+    if not args.skip_agent:
+        from app.agent.react import ReActAgent
+
         agent = ReActAgent(settings=s, llm=llm)
         st = await agent.run("位面饰品太空封印站的两件套效果是什么？", ctx=ctx)
         good = st.stop_reason == "answer" and "12" in st.answer
@@ -88,7 +97,7 @@ async def main() -> int:
         )
         print(f"    答案节选：{st.answer[:90].replace(chr(10), ' ')}")
 
-    # 6. 清洗/分块（离线，直接读缓存）
+    # 7. 清洗/分块（离线，直接读缓存）
     from app.ingest.template_parser import clean_wikitext
 
     raw_dir = Path(__file__).resolve().parents[2] / "data" / "raw" / args.game

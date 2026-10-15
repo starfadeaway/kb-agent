@@ -41,8 +41,13 @@ jobs:
 
       # pytest 套件刻意不打网络：断言的是纯函数（路由、过滤器、schema、
       # 配置契约、AST 白名单），任何一项要调 API 才能跑就说明设计跑偏了。
+      #
+      # 范围是 `.` 不是 `backend`：根目录的 run_all.py / run_client.py / run_server.py
+      # 是 README 里让人直接跑的第一入口，却在旧范围外躺着 4 个 F401/UP031 没人报警
+      # （实测 `ruff check .` 红、`ruff check backend` 绿）。测试文件夹具，
+      # 跑得通的入口脚本也得过同一把尺子。
       - name: ruff
-        run: ruff check backend
+        run: ruff check .
 
       - name: pytest
         run: python -m pytest -p no:cacheprovider

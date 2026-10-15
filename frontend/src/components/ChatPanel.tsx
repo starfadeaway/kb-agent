@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Health, Ref, Turn } from '../types'
-import type { BgSettings, Theme } from '../prefs'
+import type { Theme } from '../prefs'
 import { download, turnFileName, turnToMarkdown } from '../exportMd'
 import { ToolTimeline } from './ToolTimeline'
-import { SettingsPanel } from './SettingsPanel'
 
 /**
  * 引用修订时间汇总。
@@ -120,13 +119,8 @@ interface Props {
   onBackend: (b: string) => void
   theme: Theme
   onToggleTheme: () => void
-  /** 设置面板里点的是明确的主题，与 toggle 语义不同 */
-  setTheme: (t: Theme) => void
   onOpenSettings: () => void
   settingsOpen: boolean
-  /** 背景设置由 App 持有（背景图层在那里渲染），必须传进来而不是各存一份 */
-  bg: BgSettings
-  onBg: (b: BgSettings) => void
   onSend: (question: string, game: string, backend: string) => void
   onStop: () => void
   onReset: () => void
@@ -140,11 +134,8 @@ export function ChatPanel({
   onBackend,
   theme,
   onToggleTheme,
-  setTheme,
   onOpenSettings,
   settingsOpen,
-  bg,
-  onBg,
   onSend,
   onStop,
   onReset,
@@ -239,15 +230,11 @@ export function ChatPanel({
         </div>
       </header>
 
-      {settingsOpen && (
-        <SettingsPanel
-          theme={theme}
-          bg={bg}
-          onTheme={setTheme}
-          onBg={onBg}
-          onClose={onOpenSettings}
-        />
-      )}
+      {/* 外观设置面板由 App 层统一渲染（见 App.tsx）。
+          原来它挂在 ChatPanel 里，而 `settingsOpen` 只传给了 ChatPanel ——
+          于是在「检索调试」页点 ⚙ / 侧栏 ⚙ 只会翻一个没人读的 state，
+          三个页签里有两个是死按钮。主题与背景本就是全局状态，
+          面板跟着页签走没有道理。 */}
 
       <div className="messages" ref={scrollRef}>
         {turns.length === 0 && (

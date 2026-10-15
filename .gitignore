@@ -35,6 +35,12 @@ data/raw/
 # 实验跑完后它就是垃圾，不该入库（正式产物 exp_E*.json 照常入库）。
 data/eval/*.partial.json
 
+# 注意：`data/eval/` 的**正式产物是入库的**（当前 72 个文件），
+# 它们是实验可复现的证据，对应 README / EVALUATION.md 里每一个 p 值。
+# 本文件早先末尾留过一句「实验产物……体积大不入库」的注释，却**没有跟任何规则**，
+# 且与上面「eval 结果要保留」直接矛盾 —— 读的人只会以为 data/eval 整个不该入库。
+# 那句注释已经删掉：真要挡某些大产物，应该像 data/raw 那样写出具体规则与理由。
+
 # 自检/验收脚本的临时产物
 _tmp_*.py
 
@@ -54,5 +60,3 @@ frontend/tsconfig.tsbuildinfo
 # 临时截图（调试用，不进仓库）
 screenshot-github-login.png
 _git_*.png
-
-# 实验产物：可由 backend/scripts/exp_*.py 重新生成，含答案正文，体积大不入库

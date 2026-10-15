@@ -56,8 +56,20 @@ export function readStoredTheme(): Theme {
 
 export function applyTheme(theme: Theme): void {
   document.documentElement.setAttribute('data-theme', theme)
+  // theme-color（浏览器地址栏 / 移动端 Safari 的配色）**从 CSS 变量读**，
+  // 不在这里写死颜色值。
+  //
+  // 写死过一次并且真的漂了：改成深靛配色后 CSS 的 --bg 已经是 #080d14，
+  // 而这里的 meta 还停在旧配色的 #0e1116 —— 功能全对、测试全绿，
+  // 只有浏览器地址栏露馅。改配色时它不会被任何构建步骤或 tsc 抓到。
+  //
+  // 从 CSS 读之后，CSS 是唯一的真相源：以后换配色只会影响 styles.css 一处。
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0e1116' : '#f6f7f9')
+  if (!meta) return
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+  // 读不到（极老的浏览器 / CSS 未加载）就保持 meta 原值，不要写成空串 ——
+  // content="" 会让浏览器退回默认色，比用一个略旧的固定色更糟。
+  if (bg) meta.setAttribute('content', bg)
 }
 
 export function saveTheme(theme: Theme): void {
@@ -72,14 +84,31 @@ export interface BgSettings {
 }
 
 export function loadBg(): BgSettings {
+  const raw = safeGet(BG_OPACITY_KEY)
+  // 空串要**单独**判成「没设过」，不能直接丢给 Number()：
+  // `Number('')` 是 0 而不是 NaN，所以走 isFinite 分支会被当成
+  // 「用户选了完全透明」—— 而空串其实只可能是没设过（或被清空）。
+  // 结果是第一次进设置面板就看到遮罩是 0，背景图直接糊住正文。
+  const parsed = raw === null || raw.trim() === '' ? NaN : Number(raw)
   return {
     image: safeGet(BG_KEY) ?? '',
     // 默认 0.55 而不是看起来更"通透"的 0.35：
     // 实测 0.35 时，一行浅色文字压在亮色渐变背景上几乎不可读。
     // 遮罩的职责是**保证文字对比度**，不是展示图片 —— 图片透过一层
     // 依然看得见就已经达到目的了。
-    opacity: Number(safeGet(BG_OPACITY_KEY) ?? '0.55') || 0.55,
+    //
+    // ⚠️ 这里必须用 Number.isFinite 而不是 `Number(x) || 0.55`：
+    // 后者把 **0 当成"没有值"** —— 用户在设置里明确把遮罩拉到 0
+    // （"我想清楚看到背景图"），刷新后会被悄悄拉回 0.55，
+    // 而界面上没有任何地方解释为什么。0 是一个合法且有意义的取值。
+    // Number.isFinite 同时挡住了 NaN（存了 'abc'）和 Infinity/负数等脏值。
+    opacity: Number.isFinite(parsed) ? clampOpacity(parsed) : 0.55,
   }
+}
+
+/** 遮罩浓度夹到 0–1。存进 localStorage 的值不该越界，但脏数据会。 */
+function clampOpacity(v: number): number {
+  return Math.min(1, Math.max(0, v))
 }
 
 export function saveBg(settings: BgSettings): boolean {
