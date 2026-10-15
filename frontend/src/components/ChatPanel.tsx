@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { FALLBACK_GAMES } from '../api'
 import type { Health, Ref, Turn } from '../types'
 import type { Theme } from '../prefs'
 import { download, turnFileName, turnToMarkdown } from '../exportMd'
@@ -147,7 +148,7 @@ export function ChatPanel({
 
   // 游戏列表完全由后端下发 —— 前端不再写死「只有星铁和绝区零」，
   // 加第四个库时这里一行都不用改。
-  const games = useMemo(() => Object.entries(health?.games ?? { sr: '崩坏：星穹铁道' }), [health])
+  const games = useMemo(() => Object.entries(health?.games ?? FALLBACK_GAMES), [health])
   const uncovered = health?.known_uncovered ?? {}
 
   // 库刚加载完时，如果当前选的 game 已经不存在了，纠正到第一个

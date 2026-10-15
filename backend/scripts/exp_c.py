@@ -45,6 +45,7 @@ from app.llm.client import get_llm  # noqa: E402
 from app.retrieval.hybrid import RetrievalConfig  # noqa: E402
 from exp_common import (  # noqa: E402
     aggregate_rows,
+    case_row,
     fmt_p,
     load_cases,
     paired_scores,
@@ -124,20 +125,16 @@ async def run_case(case, *, label: str, judge: Judge, llm, schemas, ctx,
             answer=answer, contexts=contexts if label != "C0" else "",
         )
     d = js.as_dict()
-    return {
-        "case_id": case.case_id, "category": case.category,
-        "correctness": d["correctness"], "faithfulness": d["faithfulness"],
-        "completeness": d["completeness"], "judge_score": d["judge_score"],
-        "judge_reason": d["reason"],
-        "prompt_tokens": usage.get("prompt_tokens", 0),
-        "completion_tokens": usage.get("completion_tokens", 0),
-        "steps": steps, "tool_failures": failures,
-        "has_refs": bool(refs), "latency_ms": dt,
-        "error": err, "answer": answer[:500],
+    # 行的形状由 `exp_common.case_row` 统一负责 —— 键名是跨脚本契约，
+    # 两个实验各写一份的话，漏键不会报错，只会让均值悄悄失真。
+    return case_row(
+        case, d,
+        usage=usage, steps=steps, failures=failures, refs=refs,
+        latency_ms=dt, err=err, answer=answer,
         # 熔断与终止原因必须进产物，否则「熔断在真实问题分布上从没被观测过」
         # 这句话永远成立 —— 跑了却不记，等于没跑（failure_analysis 第六节）。
-        "stop_reason": stop_reason, "guard": guard,
-    }
+        stop_reason=stop_reason, guard=guard,
+    )
 
 
 async def run_one(label: str, case_list, judge: Judge, *, concurrency: int = 2) -> dict:

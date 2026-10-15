@@ -126,6 +126,41 @@ def is_kept(row: dict) -> bool:
     return not row.get("error") and not judge_failed(row)
 
 
+def case_row(case, judged: dict, *, usage: dict, steps: int, failures: int,
+             refs, latency_ms: int, err: str | None, answer: str,
+             stop_reason: str | None, guard: dict) -> dict:
+    """两个生成侧实验共用的 per-case 行。
+
+    **这里的键名是跨脚本契约**：`aggregate_rows` 读 `judge_score` / `has_refs`、
+    `is_kept` 读 `error` / `judge_reason`、`print_summary` 读 `latency_ms`。
+    exp_c 与 exp_e 此前各写了一份 15 个键的字典字面量 —— 任何一边漏一个键
+    都不会报错，只会让那一档的均值悄悄少一项。2026-10-15 加 `guard` /
+    `stop_reason` 时不得不改两处，就是这个契约该收口的信号。
+
+    `guard` 用空 dict 而不是四个 0：越界拒答与异常路径压根没建 SearchGuard，
+    「没测到」与「测到是 0」必须在数据里能区分（同 `AgentState.guard_stats`）。
+    """
+    return {
+        "case_id": case.case_id,
+        "category": case.category,
+        "correctness": judged["correctness"],
+        "faithfulness": judged["faithfulness"],
+        "completeness": judged["completeness"],
+        "judge_score": judged["judge_score"],
+        "judge_reason": judged["reason"],
+        "prompt_tokens": usage.get("prompt_tokens", 0),
+        "completion_tokens": usage.get("completion_tokens", 0),
+        "steps": steps,
+        "tool_failures": failures,
+        "has_refs": bool(refs),
+        "latency_ms": latency_ms,
+        "error": err,
+        "answer": answer[:500],
+        "stop_reason": stop_reason,
+        "guard": guard,
+    }
+
+
 def aggregate_rows(rows: Sequence[dict], *, exclude=None) -> dict:
     """把per-case 结果聚合成一行指标。
 

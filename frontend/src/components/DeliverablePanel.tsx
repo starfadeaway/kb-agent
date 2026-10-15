@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { postDeliverable } from '../api'
+import { FALLBACK_GAMES, postDeliverable } from '../api'
 import { download, fileStem } from '../exportMd'
 import type {
   DeliverableConflict,
@@ -184,7 +184,7 @@ export function DeliverablePanel({ health }: Props) {
     }
   }
 
-  const games = Object.entries(health?.games ?? { sr: '星穹铁道' })
+  const games = Object.entries(health?.games ?? FALLBACK_GAMES)
   const counts = res?.status_counts ?? {}
   const limits = (res?.json.meta?.known_limits as string) || ''
 

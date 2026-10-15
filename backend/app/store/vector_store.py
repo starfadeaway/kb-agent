@@ -18,37 +18,19 @@ N=2500、D=1024 的 float32 矩阵做一次批量点积不到 1ms，比任何近
 from __future__ import annotations
 
 import json
-import re
 import threading
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from app.core.config import Settings, get_settings
+from app.store.types import RetrievedChunk, build_where_clause, model_slug
 
-
-def model_slug(model: str) -> str:
-    """BAAI/bge-m3 -> baai-bge-m3，embo-01 -> embo-01。"""
-    return re.sub(r"[^a-z0-9]+", "-", model.lower()).strip("-")
-
-
-@dataclass
-class RetrievedChunk:
-    chunk_id: str
-    text: str
-    score: float
-    metadata: dict[str, Any]
-
-    @property
-    def page_title(self) -> str:
-        return str(self.metadata.get("page_title", ""))
-
-    @property
-    def source_url(self) -> str:
-        return str(self.metadata.get("source_url", ""))
+# `RetrievedChunk` / `model_slug` / 条件拼装与 Lance 后端**共用一份** ——
+# 此前两边各写一份逐字相同的副本，已收口到 `store/types.py`。
+# 这里 re-export 是为了不破坏既有 import 路径（`hybrid.py` 从本模块取它）。
 
 
 def _match_where(meta: dict, where: dict | None) -> bool:
@@ -359,26 +341,16 @@ class VectorStore:
         page_titles: Iterable[str] | None = None,
         min_revision_ts: str | None = None,
     ) -> dict | None:
-        """过滤条件。min_revision_ts 是版本时效性过滤的入口。
+        """过滤条件。`min_revision_ts` 是版本时效性过滤的入口。
 
-        返回值可直接喂给 `Collection.get` / `query`，两个后端的形状一致。
-        返回 None 表示"无过滤"而不是"空条件" —— 调用方要原样透传，
-        在外面再包一层 `{"$and": [None]}` 会让 `_match_where` 走进另一条分支。
-        单条件时返回该条件本身、多条件才包 `$and`：
-        这样单条件路径不必经过 `$and` 递归，少一层出错可能。
-        字段名（`game` / `page_title` / `last_revision_ts`）是**与两后端写入口的约定**，
-        改名必须同时改 `Collection.upsert` 实际写入的 metadata，否则过滤恒为空。
+        实现与 Lance 后端共用（`store/types.py` 的 `build_where_clause`）——
+        两边逐字相同的 10 行曾需要两个 parity 测试盯着不让它漂。
+        留成方法而不是让调用方直接调函数：它是 `VectorStore` 接口的一部分，
+        `test_store_parity.py` 按方法名比对两个后端的接口面。
         """
-        conds: list[dict] = []
-        if game:
-            conds.append({"game": game})
-        if page_titles:
-            conds.append({"page_title": {"$in": list(page_titles)}})
-        if min_revision_ts:
-            conds.append({"last_revision_ts": {"$gte": min_revision_ts}})
-        if not conds:
-            return None
-        return conds[0] if len(conds) == 1 else {"$and": conds}
+        return build_where_clause(
+            game=game, page_titles=page_titles, min_revision_ts=min_revision_ts
+        )
 
     def query(
         self,

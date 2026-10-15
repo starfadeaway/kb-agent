@@ -90,3 +90,12 @@ export async function* streamChat(
     }
   }
 }
+
+/**
+ * `/api/health` 还没回来（或后端没下发 games）时的兜底游戏列表。
+ *
+ * 单独提出来是因为它此前在三个组件里各写了一份，**其中一份已经漂了**
+ * （`DeliverablePanel` 少了「崩坏：」前缀）—— 表现为同一款游戏在两个面板里
+ * 显示两个名字。后端一旦下发就用后端的，这里只兜首帧。
+ */
+export const FALLBACK_GAMES: Record<string, string> = { sr: '崩坏：星穹铁道' }

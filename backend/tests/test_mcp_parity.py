@@ -35,18 +35,9 @@ from app.agent.mcp_server import (
     MCP_TOOLS,
     build_server,
 )
+from fakes import FakeCtx as _FakeCtx
 
 SERVER_NAME = "kb-agent"
-
-
-class _FakeCtx(T.ToolContext):
-    """不碰数据库/网络的 ToolContext。"""
-
-    def __init__(self):  # noqa: D107 - 刻意绕过父类的检索器构造
-        self.settings = None
-        self.retriever = None
-        self.store = None
-        self.game = "sr"
 
 
 # --------------------------------------------------------------------------- #

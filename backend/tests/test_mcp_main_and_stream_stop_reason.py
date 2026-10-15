@@ -38,6 +38,7 @@ import pytest
 from app.agent import mcp_server, react
 from app.agent import tools as T
 from app.core.config import get_settings
+from fakes import FakeCtx as _FakeCtx
 
 # --------------------------------------------------------------------------- #
 # A 组：`mcp_server.main` 不崩
@@ -155,16 +156,6 @@ class _FakeLLM:
                 for i, tc in enumerate(tool_calls)
             ],
         }
-
-
-class _FakeCtx(T.ToolContext):
-    """不碰数据库/网络的 ToolContext（与 test_mcp_parity 同法）。"""
-
-    def __init__(self):  # noqa: D107 - 刻意绕过父类的检索器构造
-        self.settings = None
-        self.retriever = None
-        self.store = None
-        self.game = "sr"
 
 
 def stream_events(react_mod, s) -> list[dict]:

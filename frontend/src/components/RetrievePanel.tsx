@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { retrieve } from '../api'
+import { FALLBACK_GAMES, retrieve } from '../api'
 import type { Health, RetrieveHit } from '../types'
 
 interface Result {
@@ -32,7 +32,7 @@ export function RetrievePanel({ health, onOpenSettings }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   // 游戏列表同样由后端下发，不在前端写死
-  const games = useMemo(() => Object.entries(health?.games ?? { sr: '崩坏：星穹铁道' }), [health])
+  const games = useMemo(() => Object.entries(health?.games ?? FALLBACK_GAMES), [health])
   useEffect(() => {
     if (games.length && !games.some(([slug]) => slug === game)) setGame(games[0][0])
   }, [games, game])

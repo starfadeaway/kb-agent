@@ -30,6 +30,7 @@ sys.path.insert(0, str(BACKEND))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.eval.metrics import paired_test  # noqa: E402
+from exp_common import fmt_p  # noqa: E402
 
 EVAL_DIR = ROOT / "data" / "eval"
 
@@ -142,8 +143,13 @@ def main() -> None:
             t = paired_test(a, b, key)
             mbv, mov = _mean(a, key), _mean(b, key)
             p = t["p"]
+            # 下溢标记仍要进产物（消费方靠它判断「算不出更小的数」），
+            # 但**显示统一走 `exp_common.fmt_p`**。这里此前自己写了一套
+            # `p == 0.0` 判据 —— 而 `paired_test` 不再 round 之后，
+            # p=2.78e-08 会走到 `f"{p:.4f}"` 打成 `0.0000`，
+            # 等于换个地方又把「算得出但很小」说成了「恰好为零」。
             underflow = p == 0.0
-            ptxt = "<1e-10" if underflow else f"{p:.4f}"
+            ptxt = fmt_p(p)
             hi = key not in LOWER_IS_BETTER
             win = _winner(t["mean_diff"], hi)
             if win == "tie":

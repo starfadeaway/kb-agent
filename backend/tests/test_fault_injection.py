@@ -35,68 +35,16 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import json
 
 import pytest
 from app.agent import react as react_mod
 from app.agent.react import ReActAgent
 from app.core.config import get_settings
+from fakes import FakeLLM
 
 # --------------------------------------------------------------------------- #
 # 测试替身
 # --------------------------------------------------------------------------- #
-
-
-class FakeLLM:
-    """按脚本逐次返回；脚本用完后再调就 AssertionError。
-
-    「用完就报错」是故意的：它把「循环没有在预期的地方终止」变成硬失败，
-    而不是让循环悄悄多跑几步、测试看着还是绿的。
-    """
-
-    def __init__(self, script: list[dict]):
-        self.script = list(script)
-        self.calls = 0
-
-    async def chat(self, messages, **kw):
-        self.calls += 1
-        if self.calls > len(self.script):
-            raise AssertionError(
-                f"FakeLLM 脚本只有 {len(self.script)} 步，却被调用 {self.calls} 次 —— "
-                f"循环没有在预期的地方终止"
-            )
-        step = self.script[self.calls - 1]
-        if "error" in step:
-            raise RuntimeError(step["error"])
-        usage = step.get("usage", {"prompt_tokens": 100, "completion_tokens": 20})
-        if "tool" in step:
-            name, args = step["tool"]
-            return {
-                "content": "",
-                "tool_calls": [{"id": f"call_{self.calls}", "name": name, "args": args}],
-                "usage": usage,
-            }
-        return {"content": step.get("answer", ""), "tool_calls": [], "usage": usage}
-
-    def assistant_tool_message(self, content: str, tool_calls: list[dict]) -> dict:
-        return {
-            "role": "assistant",
-            "content": content or "",
-            "tool_calls": [
-                {
-                    "id": tc.get("id", f"call_{i}"),
-                    "type": "function",
-                    "function": {
-                        "name": tc["name"],
-                        "arguments": json.dumps(tc["args"], ensure_ascii=False),
-                    },
-                }
-                for i, tc in enumerate(tool_calls)
-            ],
-        }
-
-    async def aclose(self):  # pragma: no cover
-        return None
 
 
 class ToolInjector:

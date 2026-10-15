@@ -43,12 +43,12 @@ ANN 路径并重跑一遍评测，而不是先留一个不生效的旋钮。
 from __future__ import annotations
 
 import json
-import re
 import shutil
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from app.store.types import RetrievedChunk, build_where_clause, model_slug
 
 
 def _sql_escape(v: str) -> str:
@@ -95,22 +95,6 @@ def where_to_sql(where: dict | None) -> str | None:
         else:
             clauses.append(f"{key} = '{_sql_escape(cond)}'")
     return " AND ".join(c for c in clauses if c) or None
-
-
-@dataclass
-class RetrievedChunk:
-    chunk_id: str
-    text: str
-    score: float
-    metadata: dict[str, Any]
-
-    @property
-    def page_title(self) -> str:
-        return str(self.metadata.get("page_title", ""))
-
-    @property
-    def source_url(self) -> str:
-        return str(self.metadata.get("source_url", ""))
 
 
 class LanceCollection:
@@ -343,7 +327,9 @@ class LanceVectorStore:
 
     @staticmethod
     def _slug(model: str) -> str:
-        return re.sub(r"[^a-z0-9]+", "-", model.lower()).strip("-")
+        # 与 NumPy 后端共用同一个正则（`store/types.py`）—— 两处各写一遍时，
+        # collection 名一旦漂移，表现是「找不到库」而不是报错。
+        return model_slug(model)
 
     def collection_name(self, game: str, model: str | None = None, variant: str = "base") -> str:
         model = model or self.s.embed_model_main
@@ -393,16 +379,10 @@ class LanceVectorStore:
 
     def build_where(self, *, game: str | None = None, page_titles: Iterable[str] | None = None,
                     min_revision_ts: str | None = None) -> dict | None:
-        conds: list[dict] = []
-        if game:
-            conds.append({"game": game})
-        if page_titles:
-            conds.append({"page_title": {"$in": list(page_titles)}})
-        if min_revision_ts:
-            conds.append({"last_revision_ts": {"$gte": min_revision_ts}})
-        if not conds:
-            return None
-        return conds[0] if len(conds) == 1 else {"$and": conds}
+        """与 NumPy 后端共用实现（`store/types.py` 的 `build_where_clause`）。"""
+        return build_where_clause(
+            game=game, page_titles=page_titles, min_revision_ts=min_revision_ts
+        )
 
     def query(self, *, query_embedding, game: str, model: str | None = None, variant: str = "base",
               top_k: int = 5, where: dict | None = None) -> list[RetrievedChunk]:

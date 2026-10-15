@@ -41,13 +41,14 @@ from app.agent.react import ReActAgent  # noqa: E402
 from app.agent.tools import ToolContext, get_schemas  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.eval.judge import Judge, contexts_from_hits  # noqa: E402
-from app.llm.client import get_llm  # noqa: E402
+from app.llm.client import get_llm, strip_think  # noqa: E402
 from app.retrieval.hybrid import RetrievalConfig  # noqa: E402
 from exp_common import (  # noqa: E402
     SUBSET_IDS as _SUBSET_IDS,
 )
 from exp_common import (
     aggregate_rows,
+    case_row,
     fmt_p,
     is_kept,
     load_cases,
@@ -83,14 +84,9 @@ def is_counted(row) -> bool:
     """
     return is_kept(row) and (row.get("prompt_tokens") or 0) > 0
 
-_THINK = re.compile(r"<think>.*?</think>", re.S)
 _JSON_CALL = re.compile(r"\{[\s\S]*\}")
 
 from openai import AsyncOpenAI  # noqa: E402
-
-
-def strip_think(text: str) -> str:
-    return _THINK.sub("", text or "").strip()
 
 
 def repair_tool_calls(content: str) -> list[dict]:
@@ -240,23 +236,16 @@ async def run_case(case, *, label: str, model_name: str, judge: Judge, tools,
         js = await judge.score(question=case.question, gold=case.gold_answer,
                                answer=answer, contexts=contexts)
     d = js.as_dict()
-    # 报错的 case 不能和"答得差"混为一谈 —— judge 对空回答给 0 分，
-    # 但那是链路失败不是能力差，不加标记的话均值会被悄悄拉低，
-    # 看起来像"这个模型更差"，实际是它根本没跑起来。
-    if err:
-        d["errored"] = True
-    return {
-        "case_id": case.case_id, "category": case.category,
-        "correctness": d["correctness"], "faithfulness": d["faithfulness"],
-        "completeness": d["completeness"], "judge_score": d["judge_score"],
-        "judge_reason": d["reason"],
-        "prompt_tokens": usage.get("prompt_tokens", 0),
-        "completion_tokens": usage.get("completion_tokens", 0),
-        "steps": steps, "tool_failures": failures, "has_refs": bool(refs),
-        "latency_ms": dt, "error": err, "answer": answer[:500],
+    # 行的形状由 `exp_common.case_row` 统一负责（键名是跨脚本契约）。
+    # 这里此前还挂过一个 `d["errored"] = True`，但它从来没被写进产物行，
+    # 是无效代码，随收口一起删掉了；报错的 case 由 `error` 字段标记。
+    return case_row(
+        case, d,
+        usage=usage, steps=steps, failures=failures, refs=refs,
+        latency_ms=dt, err=err, answer=answer,
         # 熔断与终止原因进产物：否则「熔断在真实问题分布上从没被观测过」永远成立。
-        "stop_reason": stop_reason, "guard": guard,
-    }
+        stop_reason=stop_reason, guard=guard,
+    )
 
 
 async def run_one(label: str, case_list, judge: Judge, *, concurrency: int = 2) -> dict:
