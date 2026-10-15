@@ -85,8 +85,10 @@ MCP 是**独立的 server 入口**（`backend/scripts/mcp_stdio_entry.py`），
 > 它经不起一次追问，而当时的守卫 `test_mcp_is_not_default_transport`
 > 只断言了那个**配置值**不是 `mcp`，没有断言任何运行时行为 —— 对一个
 > 根本没人读的配置值做这种断言，等于什么都没测。
-> 现在换成 `test_no_runtime_transport_switch`，断言的是「字段不存在」
-> 且「app/ 与 scripts/ 里任何地方都不出现它」。
+> 现在换成 `test_no_runtime_transport_switch`，断言的是「字段不存在」，
+> 且「`app/` 与 `scripts/` 里不出现小写 `tool_transport`」。
+> （大写 `TOOL_TRANSPORT` 仍出现在 `mcp_server.py` / `tools.py` 的注释里 ——
+> 那是在说明**为什么删掉这个开关**，不是开关本身。守卫扫的是小写标识符。）
 
 上面那条一致性守卫的含义也要说准：它是**在测试里分别直调两条路径**
 （真 `mcp.Client` 连真 server vs 直接调函数）断言逐字符一致，

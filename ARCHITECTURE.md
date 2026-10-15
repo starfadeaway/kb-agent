@@ -63,8 +63,9 @@
 ### 3.1 入口：Agent 决定调 `search_kb`
 
 ```
-ReActAgent._run_once()                    agent/react.py:303
-  └─ await call_tool("search_kb", args)   agent/tools.py:105
+ReActAgent._run_once()                    agent/react.py:912
+  └─ await call_tool("search_kb", args)   agent/tools.py:481（分发入口）
+                                          agent/tools.py:189（search_kb 本体）
 ```
 
 Agent 不是每次都直接检索 —— 它先问 DeepSeek「要不要查知识库」，
@@ -73,35 +74,43 @@ Agent 不是每次都直接检索 —— 它先问 DeepSeek「要不要查知识
 ### 3.2 RAG 本体：检索链（`retrieval/hybrid.py`）
 
 ```
-HybridRetriever.retrieve(query, cfg)      retrieval/hybrid.py:200
+HybridRetriever.retrieve(query, cfg)      retrieval/hybrid.py:335（async）
    │
    ├─① BM25 稀疏召回
-   │    tokenize(query)                     :118  jieba 切词 + 中文 2-gram
-   │    BM25Index.search()                  :106  进程内 BM25Okapi
+   │    tokenize(query)                     :178  jieba 切词 + 中文 2-gram
+   │    BM25Index.search()                  :157  进程内 BM25Okapi
    │    → top20  chunk_id
    │
    ├─② 向量稠密召回
-   │    llm.embed([query])                  llm/client.py:196   ← 远程 147ms
+   │    llm.embed([query])                  llm/client.py:535   ← 远程 147ms
    │    store.query(query_embedding)        store/lance_store.py ← 本地 8ms
    │    → top20  chunk
    │
-   ├─③ RRF 融合                             :233
+   ├─③ RRF 融合                             :395
    │    score = Σ 1/(60 + rank)             只用排名，不用分数
    │    → 约 31 条
    │
-   └─④ Cross-Encoder 重排                  :280
-        llm.rerank(query, 候选文档)         llm/client.py:174  ← 远程 449ms
+   └─④ Cross-Encoder 重排                  :464
+        llm.rerank(query, 候选文档)         llm/client.py:611  ← 远程 449ms
         → top5
 ```
+
+> 行号会漂：这份地图此前写的是一整组旧行号（`retrieve` 记成 200、
+> `_run_once` 记成 303 …），逐条都对不上。**改文件时不要顺手改这些数字**，
+> 它们只是导读；真值用 `grep -n "def 函数名"` 现取。
 
 **四步各自解决什么，每一步都有实测数据支撑**（详见 `EVALUATION.md` 实验 A）：
 
 | 步骤 | 解决什么问题 | 去掉它会怎样（实测） |
 |---|---|---|
-| ① BM25 | 低频专名（「位面饰品」「行迹」）词面匹配 | 纯向量恒定 0.828 且不随 top_k 增长 |
+| ① BM25 | 低频专名（「位面饰品」「行迹」）词面匹配 | 纯向量 sr 恒定 0.828 且不随 top_k 增长 |
 | ② 向量 | 问题里没有道具名的纯语义题 | 语义类题全部召不回 |
-| ③ RRF 融合 | 两路排名合并 | MRR 掉 2.3pt |
-| ④ 重排 | 候选已对但排序不够靠前 | recall@3 从 0.966 掉到 0.897 |
+| ③ RRF 融合 | 两路排名合并 | 三库合计 MRR 0.865→0.854（−1.0pt） |
+| ④ 重排 | 候选已对但排序不够靠前 | sr recall@3 0.897→0.828 |
+
+> 这张表的数字取当前产物（`data/eval/exp_A_all_k3.json`）。此前写的是
+> 2306 chunk 旧语料口径（③ 掉 2.3pt、④ 从 0.966 掉到 0.897），
+> 与 README / EVALUATION 的当前值对不上。
 
 **为什么用排名融合而不是分数加权**：BM25 分数和余弦相似度不同量纲，
 直接加权相加会被其中一路的分数分布带偏。RRF 只看名次，无量纲问题。
@@ -109,7 +118,7 @@ HybridRetriever.retrieve(query, cfg)      retrieval/hybrid.py:200
 ### 3.3 Augmented：把检索结果喂回给模型
 
 ```
-search_kb 的返回值                        agent/tools.py:105-142
+search_kb 的返回值                        agent/tools.py:189 起
   第 1 行：[search_kb] status=ok hits=3 top_score=0.912 top_page=… 675ms 来源=bm25+vector+rerank
   第 2 行起：[1] 分数 0.9312 | 太空封印站 > 两件套效果
              <文本片段，最多 500 字>
@@ -128,7 +137,7 @@ Agent 靠它判断「这次检索到底找到没有」，从而决定要不要�
 ### 3.4 Generation：Chat LLM 组织答案
 
 ```
-llm.chat(messages, tools=get_schemas())  llm/client.py:92   ← DeepSeek
+llm.chat(messages, tools=get_schemas())  llm/client.py:407   ← DeepSeek
 ```
 
 模型在**已有的对话历史**上继续：系统提示 + 历史 + 用户问题 + 这一轮所有 tool 消息。
@@ -271,10 +280,17 @@ query ──┬─→ BM25 (jieba + 中文2-gram) ─→ top20 ─┐
 
 | 步骤 | 存在理由 | 实测数据 |
 |---|---|---|
-| BM25 | 低频专名（「位面饰品」「行迹」）词面匹配更稳 | A0 = 0.897（k=3） |
+| BM25 | 低频专名（「位面饰品」「行迹」）词面匹配更稳 | A0 = 0.793（k=3，当前语料） |
 | 向量 | 纯语义题需要 | 但单独用只有 0.828 且不随 k 增长 |
-| RRF 融合 | 两路排名合并（用排名不用分数，因为量纲不同） | MRR +2.3pt |
-| Rerank | 精排少量候选 | recall@3 0.897 → 0.966 |
+| RRF 融合 | 两路排名合并（用排名不用分数，因为量纲不同） | ⚠️ 当前语料下 **ΔMRR −0.0104、p=0.5664**（测不出增益，见下） |
+| Rerank | 精排少量候选 | recall@3 0.828 → 0.897 |
+
+> ⚠️ 上表的 BM25 / Rerank 两行此前写的是 2306 chunk 旧语料值
+> （A0 = 0.897、recall@3 0.897→0.966），已按当前语料改正。
+> **RRF 那一行更要注意**：旧值是「MRR +2.3pt」。2026-10-15 重跑确认
+> （`data/eval/exp_A_rerun_sr_k3.json`）**ΔMRR = 0.0000、p = 1.0000**，
+> sr / ys 两库完全等价、zzz 略负 —— **融合相对纯向量没有可测增益**。
+> 别照抄「+2.3pt」。
 
 ### 用排名融合而不是分数加权
 
@@ -353,22 +369,31 @@ SiliconFlow 对 embedding 请求有**单次请求总 token 数**的限制，
 
 ### 选型结论：为什么默认仍是 `bge-m3`（**依据是配套，不是质量**）
 
-`scripts/analyze_model_compare.py` 在**同一批 29 条 case** 上做了跨模型配对检验
-（唯一变量 = embedding 模型，纯离线重算，不烧 API）：
+`scripts/analyze_model_compare.py` 在**同一批 29 条 case**（`sr`）上做了跨模型配对检验
+（唯一变量 = embedding 模型，纯离线重算，不烧 API）。
+下表取**当前语料**（3932 chunk）的三库逐库产物 `data/eval/model_compare_sr.json`：
 
 | 档位 | MRR Δ(bge−Qwen) | p | Cohen's d | 延迟 Δ | p |
 |---|---|---|---|---|---|
-| A0（阴性对照） | +0.0000 | 1.0000 | 0.000 | −0.76ms | 0.3419 |
-| A1 纯向量 | +0.0517 | 0.3673 | 0.133 | **+37.7ms** | **<1e-10** |
-| A2 融合 | +0.0115 | 0.8215 | 0.034 | **+26.3ms** | **0.0163** |
+| A0（阴性对照） | +0.0000 | 1.0000 | 0.000 | −7.1ms | 0.2281 |
+| A1 纯向量 | +0.0575 | 0.1834 | 0.142 | +10.8ms | 0.0946 |
+| A2 融合 | −0.0115 | 0.6743 | −0.030 | **+28.1ms** | **<1e-10** |
+
+> ⚠️ **这张表换过口径，引用时必须带语料版本。** 2306 chunk 旧语料下，
+> A1 的延迟差曾是显著的（+37.7ms，p<1e-10），A2 的 MRR Δ 曾是 **+**0.0115。
+> 补抓角色页（→3932 chunk）之后两者都变了。两套数字并列在
+> `EVALUATION.md` 实验 D 章节；本节此前抄的是**旧表却没标注**，
+> 于是同一件事在 ARCHITECTURE 与 README 里读起来方向相反。
 
 结论有两个方向：
 
-1. **检索质量无法区分** —— A2 的效应量 d=0.034，配对检验连方向都测不出来。
-   **不能说「bge 更强」**（这条结论曾用「Qwen 组内 A1→A2」的检验来支撑，
-   检验对象就错了，详见 `EVALUATION.md` 实验 D 章节）。
-2. **Qwen3-Embedding-0.6B 显著更快**（A1 快 23%、A2 快 12%），
-   这是该实验**唯一达到统计显著**的差异。
+1. **检索质量无法区分** —— A2 的效应量 d=−0.030，配对检验连方向都测不出来
+   （p=0.6743）。**不能说「bge 更强」**（这条结论曾用「Qwen 组内 A1→A2」的
+   检验来支撑，检验对象就错了，详见 `EVALUATION.md` 实验 D 章节）。
+2. **Qwen3-Embedding-0.6B 只在融合档（A2）显著更快**（+28.1ms，p<1e-10），
+   效应量只有 d=0.052 —— **统计显著 ≠ 实际重要**。
+   **A1 的延迟差已经不再显著**（p=0.0946），所以不能说「全面更快」；
+   旧语料下那句「A1 快 23%、这是唯一显著差异」正是从上一版口径来的。
 
 A0 五个检索指标 Δ 全为 0.0000（纯 BM25 不依赖 embedding），
 证明语料/分块/BM25/评测集确实完全一致。
@@ -376,13 +401,13 @@ A0 五个检索指标 Δ 全为 0.0000（纯 BM25 不依赖 embedding），
 > **所以默认留在 bge-m3 的真实理由是**：reranker `bge-reranker-v2-m3` 本就是
 > bge 系，配套适配；且 embedding 不动可让实验 E 对比 Chat 模型时少一个变量。
 > **不是**「质量更好」—— 端到端里 embedding 只占几十毫秒，
-> 换模型省下的 30–40ms 在 A3 完整链路（858ms）里是噪声级。
+> 换模型省下的 30ms 量级在 A3 完整链路（三库合计 867ms）里是噪声级。
 
 ---
 
 ## 六、Agent 层 —— 手搓 ReAct
 
-**调用点**：`backend/app/agent/react.py`（约 380 行）、`agent/tools.py`
+**调用点**：`backend/app/agent/react.py`（约 1140 行）、`agent/tools.py`
 
 ### 四个工具
 
@@ -441,11 +466,16 @@ Agent、API 路由、前端**都不用动**。这是这一层唯一的价值主�
 如果写成 `if backend == "minimax": ... else: ...`，每加一个基座就是一次全链路返工。
 
 > **默认基座为什么是 DeepSeek**（实验 E 的结论）：
-> 质量差异**未达统计显著**（judge 分 p=0.1667，correctness p=0.0728），
-> 延迟却差 **4.08 倍且显著**（p=0.0011）；此外 MiniMax 出现过一次
+> 质量差异**三库均未达统计显著**（Δ=−0.70 / −0.16 / −0.38，
+> p=0.0697 / 0.6738 / 0.2831）；成本差异三库一致 —— MiniMax 的
+> prompt token ×1.55~2.85、延迟 ×2.56~3.65。此外 MiniMax 出现过一次
 > `steps=0` 压根不调工具、直接把系统提示词复述成回答的失效。
 > 所以选 DeepSeek 的依据是**延迟与稳定性，不是质量** ——
 > 说「DeepSeek 更强」是超出数据支持的。详见 `EVALUATION.md` 实验 E。
+>
+> ⚠️ 本文件此前写的是**单库旧值**（judge p=0.1667、correctness p=0.0728、
+> 延迟 4.08 倍 p=0.0011）。那是单库 15 条时期的结果，实验 E 已扩到三库逐库
+> （`data/eval/exp_E_{sr,ys,zzz}.json`），上面才是当前值。
 
 ### 协议差异在客户端吸收，上层无感
 
@@ -484,24 +514,42 @@ DeepSeek 的上下文缓存在 `usage.prompt_cache_hit_tokens` 里直接可见�
 
 | 轮 | prompt tokens | cache hit | 命中率 | 墙钟 |
 |---|---|---|---|---|
-| 1 | 914 | 0 | 0.0% | 1355ms |
-| 2 | 977 | 768 | 78.6% | 808ms |
-| 3 | 1040 | 896 | 86.2% | 674ms |
+| 1 | 914 | 768 | 84.0% | 1108ms |
+| 2 | 977 | 768 | 78.6% | 1053ms |
+| 3 | 1040 | 896 | 86.2% | 825ms |
 
-命中率 80%+，墙钟降约 50%。前提是**消息前缀稳定** —— 这一点在本项目天然满足：
+（`data/eval/probe_kv_cache.json`，完整 5 轮在产物里。）
+
+命中率稳定在 78%–88%，前提是**消息前缀稳定** —— 这一点在本项目天然满足：
 Agent 每轮只追加 tool 消息，从不修改历史。
 
+> ⚠️ **两个口径上的坑，引用这张表时别踩**：
+>
+> 1. 探针的 system 前缀是一段**固定字符串**（`filler * 60`）。只要它在此前
+>    任何一次调用里出现过，第 1 轮就会被命中 —— 这份产物第 1 轮已有 768
+>    token 命中。所以「第 1 轮必定 0 命中」这个说法不成立。
+> 2. **墙钟没有量级上的收益**：5 轮在 651–1191ms 之间波动，看不出稳定下降。
+>    本文件此前写的是「墙钟降约 50%」（配 1355 / 808 / 674ms 三个数），
+>    这三个数在当前产物里找不到出处，已按产物改写。
+
 **但它省的是费用，不是延迟。** 实测同一模型下首 token 延迟稳定在 100–350ms，
-总耗时主要由生成 token 数决定，与上下文长度关系不大。
+总耗时主要由生成 token 数决定，与上下文长度关系不大 —— 这一条结论不受上面
+两个口径问题影响，反而被「命中率很高、墙钟却没降」进一步印证。
 
 ### 延迟优化的真正杠杆：流式
 
 | 方式 | 耗时 | 用户体验 |
 |---|---|---|
-| 非流式 `/api/chat` | 4716ms | 全程干等 |
-| 流式 `/api/chat/stream` | 首字 **721ms**，全部 3927ms | 721ms 就有反馈 |
+| 非流式 `/api/chat` | 3410ms | 全程干等 |
+| 流式 `/api/chat/stream` | 首包 **860ms**，全部 3147ms | 860ms 就有反馈 |
 
-**感知延迟 −85%，总耗时几乎不变。**
+**感知延迟 −75%，总耗时几乎不变。**
+
+> ⚠️ **措辞**：这里**不是「第一个字」**。上游没有 token 级流式，860ms 是
+> **首个 SSE 数据包**到达的时间。本文件此前写作「首字 721ms，全部 3927ms，
+> 感知延迟 −85%」，三个数都不在产物里 —— 当前源是
+> `data/eval/probe_stream_latency.json`（`chat_non_stream_ms` 3410.3 /
+> `ttft_ms` 860 / `total_ms` 3147），README 也已就这条措辞做过更正。
 
 所以优化优先级是：流式 > 跳过重排 > 预热 > 缓存 > KV cache（无需动作）。
 详见 `EVALUATION.md` 的延迟章节。
@@ -543,6 +591,14 @@ Agent 每轮只追加 tool 消息，从不修改历史。
 
 四项指标逐位相同，延迟降 14.8%。排名变化发生在 gold 页面之外的边缘位置。
 传 `rerank_candidates=0` 可随时还原成对照组。
+
+> ⚠️ **这张表是旧语料口径，而且没有出处记录。** 它来自
+> `exp_A3_full_k3.json` / `exp_A3_cut20_k3.json`，两个文件都**不带 `_meta`**，
+> 追溯不到语料版本；0.966 是 2306 chunk 时期的值。
+> 当前语料（3932 chunk）下 sr 的 A3 是 **0.897**，但**没有重跑过裁剪对照** ——
+> 所以「四项逐位相同」这个结论目前只建立在旧语料上。
+> 要在当前语料上验证裁剪无损，需要重跑一次
+> `python scripts/run_eval.py --rerank-candidates 0` 与 `--rerank-candidates 20`。
 
 > **这 14.8% 是冷缓存口径**：`run_eval.py` 在每个 label 前 `llm.clear_caches()`，
 > 所以 703 / 599ms 测的是"缓存全空时的一次真实远程重排"。

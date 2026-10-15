@@ -104,7 +104,7 @@ export function RetrievePanel({ health, onOpenSettings }: Props) {
         </label>
         <label
           className="switch"
-          title="重排（Cross-Encoder）：把候选逐条和问题一起送进模型重新打分。recall@3 从 0.897 拉到 0.966，但检索延迟从 41ms 涨到 764ms —— 效果与代价最大的取舍。详见 docs/rerank.md"
+          title="重排（Cross-Encoder）：把候选逐条和问题一起送进模型重新打分。recall@3 从 0.828 拉到 0.897，但平均检索延迟从 272ms 涨到 784ms（单条探针口径下是 37ms → 763ms）—— 效果与代价最大的取舍。详见 docs/rerank.md"
         >
           <input type="checkbox" checked={useRerank} onChange={(e) => setUseRerank(e.target.checked)} />
           重排

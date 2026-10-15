@@ -90,9 +90,9 @@
 ## 在我们的代码里，它在哪一行
 
 ```
-HybridRetriever._rerank()                    backend/app/retrieval/hybrid.py:280
+HybridRetriever._rerank()                    backend/app/retrieval/hybrid.py:464
   ├─ 取出融合结果的前 rerank_candidates 条（默认 20）
-  ├─ llm.rerank(query, 候选文本列表)          backend/app/llm/client.py:174
+  ├─ llm.rerank(query, 候选文本列表)          backend/app/llm/client.py:611
   │     └─ POST https://api.siliconflow.cn/v1/rerank
   │           model = BAAI/bge-reranker-v2-m3
   └─ 按重排分数重新排序，取 top_k
@@ -116,18 +116,24 @@ POST https://api.siliconflow.cn/v1/rerank
 
 ## 它的实测效果与代价
 
-数据来自 `EVALUATION.md` 实验 A（n=29 条评测题，top_k=3）：
+数据来自 `EVALUATION.md` 实验 A（sr，n=29 条评测题，top_k=3，
+当前语料：`data/eval/exp_A_all_k3.json`）：
 
 | 配置 | recall@3 | MRR | NDCG | 延迟 |
 |---|---|---|---|---|
-| A2 融合（**不开**重排） | 0.897 | 0.874 | 0.879 | 221ms |
-| A3 融合 + 重排 | **0.966** | **0.966** | **0.966** | **567ms** |
-| 差值 | **+6.9pt** | **+9.2pt** | **+8.7pt** | **+346ms（2.6 倍）** |
+| A2 融合（**不开**重排） | 0.828 | 0.810 | 0.815 | 272ms |
+| A3 融合 + 重排 | **0.897** | **0.897** | **0.897** | **784ms** |
+| 差值 | **+6.9pt** | **+8.6pt** | **+8.2pt** | **+512ms（2.9 倍）** |
 
-**收益**：是整个检索链里提升最大的一步，把 top-3 命中率从 0.897 拉到 0.966。
+**收益**：是整个检索链里提升最大的一步，把 top-3 命中率从 0.828 拉到 0.897。
 
-**代价**：检索延迟从 221ms 涨到 567ms。实测它占了检索耗时的 **94%**
-（关掉重排后检索只要 41ms，开着要 764ms）。
+**代价**：检索延迟从 272ms 涨到 784ms，重排占检索耗时的 **65%**。
+
+> ⚠️ **口径必须带上**：上表是 **29 条评测题的平均延迟**。
+> 单条 query 的探针（`probe_stream_latency.py`）下 A2 / A3 是 **37ms / 763ms**，
+> 重排占 95%。
+> **两个数都对，差的是「平均」还是「单条」** —— 本文件此前把旧语料的
+> 221ms / 567ms、以及单条口径的 41ms / 764ms / 94% 混在一起当成了当前值。
 
 ### 所以它该开还是该关？
 
@@ -135,11 +141,11 @@ POST https://api.siliconflow.cn/v1/rerank
 
 | 场景 | 建议 | 理由 |
 |---|---|---|
-| 面试演示、效果优先 | **开** | 0.966 vs 0.897，差距一眼能看出来 |
-| 高并发线上服务 | 关 | 41ms vs 764ms，差 18 倍 |
+| 面试演示、效果优先 | **开** | 0.897 vs 0.828，差距一眼能看出来 |
+| 高并发线上服务 | 关 | 272ms vs 784ms，差 2.9 倍（单条口径下是 37 vs 763ms） |
 | 只取 top-1 给模型 | **开** | 错的 top-1 会导致整段回答都错 |
 | 只取 top-10 给人看列表 | 关 | 反正 10 条都在，重排影响不大 |
-| 兜底降级（API 挂掉） | 关 | 实测过降级路径，0.897 仍可用 |
+| 兜底降级（API 挂掉） | 关 | 实测过降级路径，0.828 仍可用 |
 
 **这也是前端检索面板存在的意义** —— 三个开关（BM25 / 向量 / 重排）能当场
 把这个权衡演出来，而不是让你背一张表格。
@@ -150,7 +156,7 @@ POST https://api.siliconflow.cn/v1/rerank
 
 **误解 1：「重排是可选的优化，不开也能用」**
 
-数字上确实能用（0.897）。但注意 A2 的失败模式是**把对的答案排在第 2 位**，
+数字上确实能用（0.828）。但注意 A2 的失败模式是**把对的答案排在第 2 位**，
 而模型只拿 top-1 时会答错。**排名靠后比召不回更容易造成「自信的错误答案」。**
 
 **误解 2：「重排就是把分数重新算一遍」**
@@ -162,9 +168,9 @@ BM25 分数是无界正数，余弦相似度在 [-1,1]，Cross-Encoder 的相关
 **误解 3：「换个 embedding 模型也能替代重排」**
 
 实验 D 实测：换成 `Qwen/Qwen3-Embedding-0.6B` 后，
-纯向量 MRR 从 0.828 变成 0.776。
+纯向量 MRR 从 0.810 变成 0.753。
 但**同一批 29 条上的跨模型配对检验显示这个差异未达显著**
-（A1 Δ=+0.0517、p=0.3673、Cohen's d=0.133），
+（A1 Δ=+0.0575、p=0.1834、Cohen's d=0.142），
 **不能据此说「更差了」** —— 能说的只是「两者在本语料上区分不出来」。
 
 不过这不影响本条误解的结论：**换 embedding 并没有省掉重排要解决的问题。**
@@ -231,9 +237,9 @@ BM25 分数是无界正数，余弦相似度在 [-1,1]，Cross-Encoder 的相关
 
 | 文件 | 作用 |
 |---|---|
-| `backend/app/retrieval/hybrid.py:280` | `_rerank()` 裁剪 + 调用 + 重排 |
-| `backend/app/llm/client.py:174` | `rerank()` HTTP 调用 + LRU 缓存 |
+| `backend/app/retrieval/hybrid.py:464` | `_rerank()` 裁剪 + 调用 + 重排 |
+| `backend/app/llm/client.py:611` | `rerank()` HTTP 调用 + LRU 缓存 |
 | `backend/app/core/config.py` | `rerank_model` 配置项 |
 | `backend/scripts/run_eval.py` | A2/A3 对照实验 |
-| `backend/scripts/probe_stream_latency.py` | 实测 A2 41ms vs A3 764ms |
+| `backend/scripts/probe_stream_latency.py` | 单条实测 A2 37ms vs A3 763ms |
 | `frontend/src/components/RetrievePanel.tsx` | 前端「重排」开关 |

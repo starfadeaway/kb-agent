@@ -35,7 +35,7 @@ export function Sidebar({
    * 只统计**生产索引**：embed_model = 当前生产模型 且 variant = base。
    *
    * 实验 B/D 会在同一游戏下建出 b1/b2/b3 和 qwen 等变体库，把它们一并加进来
-   * 会让"星铁 9,986 片段"这种数字出现 —— 实际生产 base 库只有 2293，虚高 4.4 倍。
+   * 会让"星铁 9,986 片段"这种数字出现 —— 实际生产 base 库只有 3932。
    * 这种数字会被拿去写简历，必须是真实的。
    */
   const isProduction = (c: (typeof collections)[number]) =>
