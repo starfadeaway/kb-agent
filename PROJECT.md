@@ -1,4 +1,4 @@
-# kb-agent · 游戏内容知识库问答 Agent
+# lorekeeper · 游戏内容知识库问答 Agent
 
 > 三库 **1400 页 / 10,843 chunk** 的游戏 wiki 垂直知识库问答系统。
 > 手写 ReAct Agent + 混合检索（BM25 ∥ 向量 → RRF → Cross-Encoder 重排），

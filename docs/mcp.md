@@ -1,13 +1,13 @@
 # MCP 接入说明
 
-本文档说明 kb-agent 的 MCP（Model Context Protocol）支持：它解决什么问题、
+本文档说明 lorekeeper 的 MCP（Model Context Protocol）支持：它解决什么问题、
 怎么启动、两条路径如何保证一致、以及踩过的坑。
 
 ## 一句话定位
 
 **MCP 是给外部 MCP host 用的出口，不是给本项目 Agent 用的入口。**
 
-`kb-agent` 自己的 Agent 调自己的工具时走进程内直调（`builtin`），
+`lorekeeper` 自己的 Agent 调自己的工具时走进程内直调（`builtin`），
 不绕 MCP —— 绕一圈只增加延迟和故障面。
 MCP 的价值是让 **Claude Code / Cursor 等外部 host** 能直接用这个知识库。
 
@@ -35,10 +35,10 @@ MCP 的价值是让 **Claude Code / Cursor 等外部 host** 能直接用这个�
 ```json
 {
   "mcpServers": {
-    "kb-agent": {
+    "lorekeeper": {
       "command": "python",
       "args": ["-m", "app.agent.mcp_server", "sr"],
-      "cwd": "/path/to/kb-agent/backend"
+      "cwd": "/path/to/lorekeeper/backend"
     }
   }
 }

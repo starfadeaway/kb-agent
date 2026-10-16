@@ -37,7 +37,7 @@ from app.agent.mcp_server import (
 )
 from fakes import FakeCtx as _FakeCtx
 
-SERVER_NAME = "kb-agent"
+SERVER_NAME = "lorekeeper"
 
 
 # --------------------------------------------------------------------------- #

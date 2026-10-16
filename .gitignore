@@ -60,3 +60,10 @@ frontend/tsconfig.tsbuildinfo
 # 临时截图（调试用，不进仓库）
 screenshot-github-login.png
 _git_*.png
+
+# 临时脚本与提交信息文件（.run/ 下只保留 IDE 运行配置 .xml）
+.run/cmsg*.txt
+.run/tshim/
+.run/rt*/
+.run/*.py
+

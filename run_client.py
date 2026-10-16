@@ -34,7 +34,7 @@ def find_npm() -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="启动 kb-agent 前端")
+    ap = argparse.ArgumentParser(description="启动 lorekeeper 前端")
     ap.add_argument("--install", action="store_true", help="先执行 npm install")
     args = ap.parse_args()
 

@@ -60,7 +60,7 @@ export function Sidebar({
   return (
     <aside className="sidebar" data-open={open}>
       <div className="brand">
-        <div className="brand-title">kb-agent</div>
+        <div className="brand-title">lorekeeper</div>
         <div className="brand-sub">游戏内容知识库问答</div>
       </div>
 

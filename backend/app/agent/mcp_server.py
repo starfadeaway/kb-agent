@@ -106,7 +106,7 @@ MCP_PARAMS: dict[str, tuple[dict[str, str], list[str]]] = {
     "list_games": ({}, []),
 }
 
-SERVER_NAME = "kb-agent"
+SERVER_NAME = "lorekeeper"
 
 
 #: MCP host 看到的工具描述。刻意比 Agent 内部 prompt 更短 ——
@@ -298,7 +298,7 @@ def main() -> None:
 
     game = sys.argv[1] if len(sys.argv) > 1 else "sr"
     ctx = _TC.build(game)
-    print(f"kb-agent MCP server 启动（stdio），工具：{list(MCP_TOOLS)}", file=sys.stderr)
+    print(f"lorekeeper MCP server 启动（stdio），工具：{list(MCP_TOOLS)}", file=sys.stderr)
     asyncio.run(serve_stdio(ctx))
 
 

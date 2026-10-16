@@ -1,4 +1,4 @@
-# kb-agent · 游戏内容知识库问答 Agent
+# lorekeeper · 游戏内容知识库问答 Agent
 
 > **一句话**：三库 1401 页 / 10843 chunk 的垂直知识库问答系统。手写 ReAct Agent +
 > 混合检索（BM25 ∥ 向量 → RRF → Cross-Encoder 重排），6 组单变量消融实验（A–F），
@@ -267,7 +267,7 @@ _TABLE = {
 
 ```powershell
 # 1. 依赖（Python 3.13）
-cd kb-agent
+cd lorekeeper
 D:\Python3135\python.exe -m venv .venv
 .venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 
@@ -375,7 +375,7 @@ Percona 虽然下放了但不是官方能力，面试时解释"为什么不用�
 运行：
 
 ```powershell
-cd kb-agent\backend
+cd lorekeeper\backend
 ..\.venv\Scripts\python.exe scripts\run_eval.py --experiment A --top-k 3
 ..\.venv\Scripts\python.exe scripts\exp_b.py --steps B1,B2,B3                  # 实验 B
 ..\.venv\Scripts\python.exe scripts\exp_d.py --models Qwen/Qwen3-Embedding-0.6B # 实验 D

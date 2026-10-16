@@ -138,7 +138,7 @@ export default function App() {
           <button className="icon-btn" onClick={() => setDrawerOpen((v) => !v)} aria-label="菜单">
             ☰
           </button>
-          <span className="brand-title">kb-agent</span>
+          <span className="brand-title">lorekeeper</span>
           <span style={{ flex: 1 }} />
           <button
             className="icon-btn"

@@ -1862,7 +1862,7 @@ aggregate 按 n=14 算   paired_test 按 n=15 算
 ## 复现方式
 
 ```powershell
-cd kb-agent\backend
+cd lorekeeper\backend
 
 # 实验 A（默认 top_k=3，裁剪 20）
 ..\.venv\Scripts\python.exe scripts\run_eval.py --experiment A --top-k 3

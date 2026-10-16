@@ -40,8 +40,8 @@ function installStorage(initial: Record<string, string> = {}, throwOn?: 'get' | 
   return s
 }
 
-const THEME_KEY = 'kb-agent.theme'
-const BG_OPACITY_KEY = 'kb-agent.bg-opacity'
+const THEME_KEY = 'lorekeeper.theme'
+const BG_OPACITY_KEY = 'lorekeeper.bg-opacity'
 
 describe('readStoredTheme', () => {
   beforeEach(() => {

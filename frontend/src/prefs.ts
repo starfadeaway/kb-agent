@@ -11,9 +11,9 @@
 
 export type Theme = 'light' | 'dark'
 
-const THEME_KEY = 'kb-agent.theme'
-const BG_KEY = 'kb-agent.bg'
-const BG_OPACITY_KEY = 'kb-agent.bg-opacity'
+const THEME_KEY = 'lorekeeper.theme'
+const BG_KEY = 'lorekeeper.bg'
+const BG_OPACITY_KEY = 'lorekeeper.bg-opacity'
 
 /** 安全读写：隐私模式 / 配额满 / 禁用存储时都不能让应用崩掉 */
 function safeGet(key: string): string | null {

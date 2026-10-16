@@ -24,7 +24,7 @@ if str(BACKEND) not in sys.path:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="启动 kb-agent 后端")
+    ap = argparse.ArgumentParser(description="启动 lorekeeper 后端")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--reload", action="store_true", help="改代码自动重启，开发用")

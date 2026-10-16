@@ -33,7 +33,7 @@ from app.agent.tools import ToolContext  # noqa: E402
 async def _run() -> None:
     # ⚠️ stdout 只能留给协议。这里任何 print 都会破坏 JSON-RPC 帧。
     game = sys.argv[1] if len(sys.argv) > 1 else None
-    print(f"[kb-agent-mcp] 启动 game={game}", file=sys.stderr, flush=True)
+    print(f"[lorekeeper-mcp] 启动 game={game}", file=sys.stderr, flush=True)
 
     from app.agent.mcp_server import MCP_TOOLS, serve_stdio
     from app.core.config import get_settings
@@ -45,7 +45,7 @@ async def _run() -> None:
         store=None,
         game=game or settings.game_primary,
     )
-    print(f"[kb-agent-mcp] 工具：{list(MCP_TOOLS)}", file=sys.stderr, flush=True)
+    print(f"[lorekeeper-mcp] 工具：{list(MCP_TOOLS)}", file=sys.stderr, flush=True)
     await serve_stdio(ctx)
 
 
